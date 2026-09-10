@@ -1,23 +1,5 @@
 import 'package:flutter/material.dart';
-
-// نموذج بيانات المستخدم
-class AppUser {
-  String id;
-  String name;
-  String pin;
-  bool isAdmin;
-  bool showInLogin;
-  Map<String, bool> permissions;
-
-  AppUser({
-    required this.id,
-    required this.name,
-    required this.pin,
-    this.isAdmin = false,
-    this.showInLogin = true,
-    required this.permissions,
-  });
-}
+import 'db_helper.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -27,83 +9,24 @@ class UsersScreen extends StatefulWidget {
 }
 
 class _UsersScreenState extends State<UsersScreen> {
-  // قائمة الأقسام/الأزرار الـ 12 في الشاشة الرئيسية
-  final List<String> allModules = [
-    'نقطة البيع',
-    'المشتريات',
-    'المخزن',
-    'العملاء',
-    'الموردين',
-    'التقارير',
-    'إعدادات النظام',
-    'إدارة المستخدمين',
-    'إغلاق الصندوق / الوردية',
-    'التقرير المالي',
-    'السندات',
-    'الصندوق',
-  ];
-
-  // قائمة المستخدمين الافتراضية
-  late List<AppUser> users;
+  List<AppUser> users = [];
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    users = [
-      AppUser(
-        id: '1',
-        name: 'المدير العام',
-        pin: '1234',
-        isAdmin: true,
-        showInLogin: true,
-        permissions: {for (var m in allModules) m: true}, // كامل الوصول
-      ),
-      AppUser(
-        id: '2',
-        name: 'الكاشير',
-        pin: '0000',
-        isAdmin: false,
-        showInLogin: true,
-        permissions: {
-          'نقطة البيع': true,
-          'إغلاق الصندوق / الوردية': true,
-          'المشتريات': false,
-          'المخزن': false,
-          'العملاء': false,
-          'الموردين': false,
-          'التقارير': false,
-          'إعدادات النظام': false,
-          'إدارة المستخدمين': false,
-          'التقرير المالي': false,
-          'السندات': false,
-          'الصندوق': false,
-        },
-      ),
-      AppUser(
-        id: '3',
-        name: 'المحاسب',
-        pin: '1111',
-        isAdmin: false,
-        showInLogin: true,
-        permissions: {
-          'نقطة البيع': false,
-          'المشتريات': true,
-          'المخزن': true,
-          'العملاء': true,
-          'الموردين': true,
-          'التقارير': true,
-          'إعدادات النظام': false,
-          'إدارة المستخدمين': false,
-          'إغلاق الصندوق / الوردية': true,
-          'التقرير المالي': true,
-          'السندات': true,
-          'الصندوق': true,
-        },
-      ),
-    ];
+    _loadUsers();
   }
 
-  // نافذة إضافة أو تعديل مستخدم
+  Future<void> _loadUsers() async {
+    setState(() => isLoading = true);
+    final data = await DBHelper.getAllUsers();
+    setState(() {
+      users = data;
+      isLoading = false;
+    });
+  }
+
   void _showUserDialog({AppUser? user}) {
     final isEditing = user != null;
     final nameController = TextEditingController(text: isEditing ? user.name : '');
@@ -111,14 +34,9 @@ class _UsersScreenState extends State<UsersScreen> {
     bool showInLogin = isEditing ? user.showInLogin : true;
     final bool isAdmin = isEditing ? user.isAdmin : false;
 
-    // تهيئة جدول الصلاحيات للنافذة
     Map<String, bool> permissions = {};
-    for (var module in allModules) {
-      if (isEditing) {
-        permissions[module] = user.permissions[module] ?? false;
-      } else {
-        permissions[module] = false;
-      }
+    for (var module in DBHelper.allModules) {
+      permissions[module] = isEditing ? (user.permissions[module] ?? false) : false;
     }
 
     showDialog(
@@ -128,81 +46,54 @@ class _UsersScreenState extends State<UsersScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(
-                isEditing ? 'تعديل بيانات: ${user.name}' : 'إضافة مستخدم جديد',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+              title: Text(isEditing ? 'تعديل بيانات: ${user.name}' : 'إضافة مستخدم جديد'),
               content: SizedBox(
                 width: double.maxFinite,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TextField(
                         controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'اسم المستخدم',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.person),
-                        ),
+                        decoration: const InputDecoration(labelText: 'اسم المستخدم', border: OutlineInputBorder()),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       TextField(
                         controller: pinController,
                         keyboardType: TextInputType.number,
                         obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'رمز الدخول (PIN)',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.lock),
-                        ),
+                        decoration: const InputDecoration(labelText: 'رمز الدخول (PIN)', border: OutlineInputBorder()),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('الظهور في شاشة تسجيل الدخول', style: TextStyle(fontSize: 14)),
-                        subtitle: const Text('عند التفعيل يظهر اسمه بداخل قائمة خيارات الدخول'),
+                        title: const Text('الظهور في تسجيل الدخول'),
                         value: showInLogin,
-                        onChanged: (val) {
-                          setDialogState(() {
-                            showInLogin = val;
-                          });
-                        },
+                        onChanged: (val) => setDialogState(() => showInLogin = val),
                       ),
                       const Divider(),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'صلاحيات الوصول للأقسام:',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
+                          const Text('الصلاحيات:', style: TextStyle(fontWeight: FontWeight.bold)),
                           if (!isAdmin)
                             TextButton(
                               onPressed: () {
                                 setDialogState(() {
                                   bool allChecked = permissions.values.every((e) => e);
-                                  permissions.updateAll((key, value) => !allChecked);
+                                  permissions.updateAll((k, v) => !allChecked);
                                 });
                               },
                               child: Text(permissions.values.every((e) => e) ? 'إلغاء الكل' : 'تحديد الكل'),
                             ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      // قائمة الصلاحيات الـ 12
-                      ...allModules.map((module) {
+                      ...DBHelper.allModules.map((module) {
                         return CheckboxListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(module, style: const TextStyle(fontSize: 14)),
+                          title: Text(module),
                           value: isAdmin ? true : (permissions[module] ?? false),
-                          enabled: !isAdmin, // المدير يملك الكل دائماً
-                          onChanged: (bool? value) {
-                            setDialogState(() {
-                              permissions[module] = value ?? false;
-                            });
+                          enabled: !isAdmin,
+                          onChanged: (val) {
+                            setDialogState(() => permissions[module] = val ?? false);
                           },
                         );
                       }),
@@ -211,53 +102,26 @@ class _UsersScreenState extends State<UsersScreen> {
                 ),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
-                ),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrange,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () {
-                    if (nameController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('يرجى إدخال اسم المستخدم')),
-                      );
-                      return;
-                    }
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+                  onPressed: () async {
+                    if (nameController.text.trim().isEmpty) return;
 
-                    setState(() {
-                      if (isEditing) {
-                        user.name = nameController.text.trim();
-                        user.pin = pinController.text.trim();
-                        user.showInLogin = showInLogin;
-                        if (!user.isAdmin) {
-                          user.permissions = permissions;
-                        }
-                      } else {
-                        users.add(
-                          AppUser(
-                            id: DateTime.now().millisecondsSinceEpoch.toString(),
-                            name: nameController.text.trim(),
-                            pin: pinController.text.trim(),
-                            isAdmin: false,
-                            showInLogin: showInLogin,
-                            permissions: permissions,
-                          ),
-                        );
-                      }
-                    });
-
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(isEditing ? 'تم حفظ التعديلات بنجاح' : 'تم إضافة المستخدم بنجاح'),
-                      ),
+                    AppUser updatedUser = AppUser(
+                      id: isEditing ? user.id : DateTime.now().millisecondsSinceEpoch.toString(),
+                      name: nameController.text.trim(),
+                      pin: pinController.text.trim(),
+                      isAdmin: isAdmin,
+                      showInLogin: showInLogin,
+                      permissions: isAdmin ? {for (var m in DBHelper.allModules) m: true} : permissions,
                     );
+
+                    await DBHelper.saveUser(updatedUser);
+                    if (mounted) Navigator.pop(context);
+                    _loadUsers();
                   },
-                  child: Text(isEditing ? 'حفظ' : 'إضافة'),
+                  child: const Text('حفظ'),
                 ),
               ],
             );
@@ -267,12 +131,9 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  // حذف مستخدم
   void _deleteUser(AppUser user) {
     if (user.isAdmin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا يمكن حذف حساب المدير الرئيسي!')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا يمكن حذف المدير الرئيسي!')));
       return;
     }
 
@@ -282,20 +143,13 @@ class _UsersScreenState extends State<UsersScreen> {
         title: const Text('تأكيد الحذف'),
         content: Text('هل أنت أؤكد حذف المستخدم "${user.name}"؟'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () {
-              setState(() {
-                users.removeWhere((u) => u.id == user.id);
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم حذف المستخدم بنجاح')),
-              );
+            onPressed: () async {
+              await DBHelper.deleteUser(user.id);
+              if (mounted) Navigator.pop(context);
+              _loadUsers();
             },
             child: const Text('حذف'),
           ),
@@ -307,130 +161,40 @@ class _UsersScreenState extends State<UsersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('إدارة المستخدمين والصلاحيات'),
-        backgroundColor: Colors.deepOrange,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: users.length,
-        itemBuilder: (context, index) {
-          final user = users[index];
-          final activePermissionsCount = user.isAdmin
-              ? allModules.length
-              : user.permissions.values.where((v) => v).length;
-
-          return Card(
-            elevation: 2,
-            margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: user.isAdmin ? Colors.deepOrange : Colors.indigo,
-                        foregroundColor: Colors.white,
-                        child: Icon(user.isAdmin ? Icons.admin_panel_settings : Icons.person),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  user.name,
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                ),
-                                if (user.isAdmin) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.deepOrange.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Text(
-                                      'مدير النظام',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.deepOrange,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              user.isAdmin
-                                  ? 'صلاحية كاملة لكل أجزاء النظام'
-                                  : 'الصلاحيات المتاحة: $activePermissionsCount من ${allModules.length}',
-                              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        tooltip: 'تعديل البيانات والصلاحيات',
-                        onPressed: () => _showUserDialog(user: user),
-                      ),
-                      if (!user.isAdmin)
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          tooltip: 'حذف',
-                          onPressed: () => _deleteUser(user),
-                        ),
-                    ],
+      appBar: AppBar(title: const Text('إدارة المستخدمين والصلاحيات'), backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: users.length,
+              itemBuilder: (context, index) {
+                final user = users[index];
+                return Card(
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: user.isAdmin ? Colors.deepOrange : Colors.indigo,
+                      foregroundColor: Colors.white,
+                      child: Icon(user.isAdmin ? Icons.admin_panel_settings : Icons.person),
+                    ),
+                    title: Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(user.showInLogin ? 'يظهر في تسجيل الدخول' : 'مخفي من تسجيل الدخول'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _showUserDialog(user: user)),
+                        if (!user.isAdmin)
+                          IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteUser(user)),
+                      ],
+                    ),
                   ),
-                  const Divider(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            user.showInLogin ? Icons.visibility : Icons.visibility_off,
-                            size: 18,
-                            color: user.showInLogin ? Colors.green : Colors.grey,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            user.showInLogin ? 'يظهر في شاشة تسجيل الدخول' : 'مخفي من شاشة تسجيل الدخول',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: user.showInLogin ? Colors.green.shade800 : Colors.grey.shade700,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        'رمز (PIN): ****',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.deepOrange,
         foregroundColor: Colors.white,
         onPressed: () => _showUserDialog(),
-        icon: const Icon(Icons.add),
-        label: const Text('إضافة مستخدم'),
+        child: const Icon(Icons.add),
       ),
     );
   }
