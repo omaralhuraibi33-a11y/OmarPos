@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class vouchersscreen extends StatelessWidget {
-  const PosScreen({super.key});
+  const vouchersscreen({super.key});
 
   @override
   Widget build(BuildContext context) {
