@@ -6,17 +6,8 @@ class PosScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('نقطة البيع'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
-      body: const Center(
-        child: Text(
-          'شاشة قيد التطوير',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-      ),
+      appBar: AppBar(title: const Text('نقطة البيع'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      body: const Center(child: Text('شاشة نقطة البيع', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
     );
   }
 }
