@@ -25,7 +25,8 @@ jobs:
         channel: 'stable'
 
     - name: Generate Flutter Android Project
-      run: flutter create --org com.omarpos.master --platforms=android .
+      run: flutter create --org com.omarpos.master --project-name omar_pos.master --platforms=android .
+      
 
     - name: Set Android Min SDK Version
       run: |
