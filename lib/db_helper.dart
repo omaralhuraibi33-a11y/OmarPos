@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+// ==================== نموذج المستخدم ====================
 class AppUser {
   String id;
   String name;
@@ -42,6 +43,48 @@ class AppUser {
   }
 }
 
+// ==================== نموذج العميل ====================
+class Customer {
+  String id;
+  String name;
+  String phone;
+  String address;
+  double balance; // موجب = عليه دين، سالب = له مبلغ
+  String notes;
+
+  Customer({
+    required this.id,
+    required this.name,
+    required this.phone,
+    this.address = '',
+    this.balance = 0.0,
+    this.notes = '',
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'phone': phone,
+      'address': address,
+      'balance': balance,
+      'notes': notes,
+    };
+  }
+
+  factory Customer.fromMap(Map<String, dynamic> map) {
+    return Customer(
+      id: map['id'],
+      name: map['name'],
+      phone: map['phone'],
+      address: map['address'] ?? '',
+      balance: (map['balance'] as num).toDouble(),
+      notes: map['notes'] ?? '',
+    );
+  }
+}
+
+// ==================== مدير قاعدة البيانات ====================
 class DBHelper {
   static Database? _db;
 
@@ -72,8 +115,9 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 1,
+      version: 2, // رفع الإصدار لإضافة جدول العملاء
       onCreate: (db, version) async {
+        // إنشاء جدول المستخدمين
         await db.execute('''
           CREATE TABLE users(
             id TEXT PRIMARY KEY,
@@ -85,7 +129,19 @@ class DBHelper {
           )
         ''');
 
-        // إضافة المستخدمين الافتراضيين الموحدين
+        // إنشاء جدول العملاء
+        await db.execute('''
+          CREATE TABLE customers(
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            phone TEXT,
+            address TEXT,
+            balance REAL,
+            notes TEXT
+          )
+        ''');
+
+        // إضافة المستخدمين الافتراضيين
         final allPerms = {for (var m in allModules) m: true};
         final cashierPerms = {
           for (var m in allModules) m: (m == 'نقطة البيع' || m == 'إغلاق الصندوق / الوردية')
@@ -99,32 +155,62 @@ class DBHelper {
         await db.insert('users', AppUser(id: '3', name: 'كاشير 2', pin: '0000', isAdmin: false, showInLogin: true, permissions: cashierPerms).toMap());
         await db.insert('users', AppUser(id: '4', name: 'مشرف', pin: '1111', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
       },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('''
+            CREATE TABLE customers(
+              id TEXT PRIMARY KEY,
+              name TEXT,
+              phone TEXT,
+              address TEXT,
+              balance REAL,
+              notes TEXT
+            )
+          ''');
+        }
+      },
     );
   }
 
-  // جلب كل المستخدمين
+  // ==================== عمليات المستخدمين ====================
+
   static Future<List<AppUser>> getAllUsers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('users');
     return maps.map((m) => AppUser.fromMap(m)).toList();
   }
 
-  // جلب المستخدمين المسموح بظهورهم في شاشة تسجيل الدخول
   static Future<List<AppUser>> getLoginUsers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('users', where: 'showInLogin = ?', whereArgs: [1]);
     return maps.map((m) => AppUser.fromMap(m)).toList();
   }
 
-  // إضافة/حفظ مستخدم
   static Future<void> saveUser(AppUser user) async {
     final db = await database;
     await db.insert('users', user.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  // حذف مستخدم
   static Future<void> deleteUser(String id) async {
     final db = await database;
     await db.delete('users', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ==================== عمليات العملاء ====================
+
+  static Future<List<Customer>> getAllCustomers() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('customers');
+    return maps.map((m) => Customer.fromMap(m)).toList();
+  }
+
+  static Future<void> saveCustomer(Customer customer) async {
+    final db = await database;
+    await db.insert('customers', customer.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteCustomer(String id) async {
+    final db = await database;
+    await db.delete('customers', where: 'id = ?', whereArgs: [id]);
   }
 }
