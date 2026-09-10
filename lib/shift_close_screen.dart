@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class shiftclosescreen extends StatelessWidget {
-  const PosScreen({super.key});
+  const shiftclosescreen({super.key});
 
   @override
   Widget build(BuildContext context) {
