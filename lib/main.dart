@@ -29,28 +29,34 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _usernameController =
-      TextEditingController(text: 'مدير النظام');
+  // قائمة المستخدمين المتاحين في النظام
+  final List<String> _users = ['مدير النظام', 'كاشير 1', 'كاشير 2', 'المشرف'];
+  late String _selectedUser;
+
   final TextEditingController _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _selectedUser = _users[0]; // المستخدم الافتراضي
+  }
+
   void _login() {
-    final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (username == 'مدير النظام' && password == '1234') {
+    if (password == '1234') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم تسجيل الدخول بنجاح! مرحباً مدير النظام'),
+        SnackBar(
+          content: Text('تم تسجيل الدخول بنجاح! مرحباً $_selectedUser'),
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
-      // ملاحظة: سنربط الانتقال إلى النافذة التالية هنا بعد إعدادها
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('اسم المستخدم أو كلمة المرور غير صحيحة (التجريبي: 1234)'),
+          content: Text('كلمة المرور غير صحيحة (التجريبي: 1234)'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 2),
         ),
@@ -64,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: Colors.grey.shade100,
       body: Stack(
         children: [
-          // 1. كلمة OmarPos خلفية مائية في منتصف الشاشة
+          // خلفية مائية باسم OmarPos
           Center(
             child: Opacity(
               opacity: 0.06,
@@ -79,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
 
-          // 2. كارت نموذج تسجيل الدخول
+          // كارت نموذج تسجيل الدخول
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
@@ -93,7 +99,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // أيقونة الشعار
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -107,8 +112,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // اسم النظام
                       const Text(
                         'OmarPos',
                         style: TextStyle(
@@ -123,10 +126,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 30),
 
-                      // حقل اسم المستخدم
-                      TextField(
-                        controller: _usernameController,
-                        textAlign: TextAlign.right,
+                      // قائمة منسدلة لاختيار المستخدم
+                      DropdownButtonFormField<String>(
+                        value: _selectedUser,
                         decoration: InputDecoration(
                           labelText: 'اسم المستخدم',
                           prefixIcon: const Icon(Icons.person_outline),
@@ -134,6 +136,22 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
+                        items: _users.map((String user) {
+                          return DropdownMenuItem<String>(
+                            value: user,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(user),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          if (newValue != null) {
+                            setState(() {
+                              _selectedUser = newValue;
+                            });
+                          }
+                        },
                       ),
                       const SizedBox(height: 16),
 
@@ -144,7 +162,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         textAlign: TextAlign.right,
                         decoration: InputDecoration(
                           labelText: 'كلمة المرور',
-                          hintText: '1234',
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             icon: Icon(
