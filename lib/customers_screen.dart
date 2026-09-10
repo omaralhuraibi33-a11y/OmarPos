@@ -1,4 +1,4 @@
-import 'package0/flutter/material.dart'; // تم تصحيحها لـ package:flutter
+import 'package/flutter/material.dart'; // تم تصحيحها لـ package:flutter
 import 'package:flutter/material.dart';
 
 class CustomersScreen extends StatelessWidget {
