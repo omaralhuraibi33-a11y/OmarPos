@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class suppliersscreen extends StatelessWidget {
-  const PosScreen({super.key});
+  const suppliersscreen({super.key});
 
   @override
   Widget build(BuildContext context) {
