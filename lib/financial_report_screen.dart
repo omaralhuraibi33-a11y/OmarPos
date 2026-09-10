@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class financialreportscreen extends StatelessWidget {
-  const PosScreen({super.key});
+  const financialreportscreen({super.key});
 
   @override
   Widget build(BuildContext context) {
