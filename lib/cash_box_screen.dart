@@ -1,4 +1,3 @@
-import 'package0/flutter/material.dart'; // سطر مصحح تماماً
 import 'package:flutter/material.dart';
 
 class CashBoxScreen extends StatelessWidget {
