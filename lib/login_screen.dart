@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'db_helper.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -9,35 +10,39 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final List<String> _users = ['مدير النظام', 'كاشير 1', 'كاشير 2', 'المشرف'];
-  late String _selectedUser;
-
-  final TextEditingController _passwordController = TextEditingController();
-  bool _isPasswordVisible = false;
+  List<AppUser> loginUsers = [];
+  AppUser? selectedUser;
+  final TextEditingController pinController = TextEditingController();
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _selectedUser = _users[0];
+    _loadLoginUsers();
+  }
+
+  Future<void> _loadLoginUsers() async {
+    final users = await DBHelper.getLoginUsers();
+    setState(() {
+      loginUsers = users;
+      if (users.isNotEmpty) selectedUser = users.first;
+      isLoading = false;
+    });
   }
 
   void _login() {
-    final password = _passwordController.text.trim();
+    if (selectedUser == null) return;
 
-    if (password == '1234') {
+    if (pinController.text == selectedUser!.pin) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => HomeScreen(userName: _selectedUser),
+          builder: (context) => HomeScreen(currentUser: selectedUser!),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('كلمة المرور غير صحيحة (التجريبي: 1234)'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 2),
-        ),
+        const SnackBar(content: Text('رمز الدخول (PIN) غير صحيح!')),
       );
     }
   }
@@ -45,142 +50,38 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      body: Stack(
-        children: [
-          Center(
-            child: Opacity(
-              opacity: 0.06,
-              child: Text(
-                'OmarPos',
-                style: TextStyle(
-                  fontSize: 100,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.indigo.shade900,
-                ),
-              ),
-            ),
-          ),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Card(
-                elevation: 6,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(28.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.indigo.shade50,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.storefront,
-                          size: 50,
-                          color: Colors.indigo,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'OmarPos',
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.indigo,
-                        ),
-                      ),
-                      const Text(
-                        'النظام الرئيسي - تسجيل الدخول',
-                        style: TextStyle(color: Colors.grey, fontSize: 13),
-                      ),
-                      const SizedBox(height: 30),
-                      DropdownButtonFormField<String>(
-                        value: _selectedUser,
-                        decoration: InputDecoration(
-                          labelText: 'اسم المستخدم',
-                          prefixIcon: const Icon(Icons.person_outline),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        items: _users.map((String user) {
-                          return DropdownMenuItem<String>(
-                            value: user,
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(user),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          if (newValue != null) {
-                            setState(() {
-                              _selectedUser = newValue;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _passwordController,
-                        obscureText: !_isPasswordVisible,
-                        textAlign: TextAlign.right,
-                        decoration: InputDecoration(
-                          labelText: 'كلمة المرور',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _isPasswordVisible
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _isPasswordVisible = !_isPasswordVisible;
-                              });
-                            },
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: _login,
-                          child: const Text(
-                            'تسجيل الدخول',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+      appBar: AppBar(title: const Text('تسجيل الدخول'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  DropdownButtonFormField<AppUser>(
+                    value: selectedUser,
+                    decoration: const InputDecoration(labelText: 'اختر المستخدم', border: OutlineInputBorder()),
+                    items: loginUsers.map((u) {
+                      return DropdownMenuItem(value: u, child: Text(u.name));
+                    }).toList(),
+                    onChanged: (val) => setState(() => selectedUser = val),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: pinController,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'رمز الدخول (PIN)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size.fromHeight(50)),
+                    onPressed: _login,
+                    child: const Text('دخول', style: TextStyle(fontSize: 18)),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
-      ),
     );
   }
 }
