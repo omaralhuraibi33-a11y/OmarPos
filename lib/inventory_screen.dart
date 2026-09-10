@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class inventoryscreen extends StatelessWidget {
-  const PosScreen({super.key});
+  const inventoryscreen({super.key});
 
   @override
   Widget build(BuildContext context) {
