@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'db_helper.dart';
 import 'login_screen.dart';
 
 import 'pos_screen.dart';
@@ -15,9 +16,9 @@ import 'vouchers_screen.dart';
 import 'cash_box_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  final String userName;
+  final AppUser currentUser;
 
-  const HomeScreen({super.key, required this.userName});
+  const HomeScreen({super.key, required this.currentUser});
 
   @override
   Widget build(BuildContext context) {
@@ -36,14 +37,23 @@ class HomeScreen extends StatelessWidget {
       {'title': 'الصندوق', 'icon': Icons.savings, 'color': Colors.brown, 'page': const CashBoxScreen()},
     ];
 
-    void navigateToScreen(Widget screen) {
+    void navigateToScreen(String title, Widget screen) {
+      bool hasPermission = currentUser.isAdmin || (currentUser.permissions[title] ?? false);
+
+      if (!hasPermission) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('عفواً، لا تملك صلاحية الوصول لقسم: $title'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => Directionality(
-            textDirection: TextDirection.rtl,
-            child: screen,
-          ),
+          builder: (context) => Directionality(textDirection: TextDirection.rtl, child: screen),
         ),
       );
     }
@@ -51,126 +61,63 @@ class HomeScreen extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.grey.shade100,
         appBar: AppBar(
           backgroundColor: Colors.indigo,
           foregroundColor: Colors.white,
-          elevation: 4,
-          automaticallyImplyLeading: false,
-          title: Row(
-            children: [
-              PopupMenuButton<Widget>(
-                icon: const Icon(Icons.menu, color: Colors.white, size: 28),
-                tooltip: 'قائمة الأقسام',
-                onSelected: (page) => navigateToScreen(page),
-                itemBuilder: (BuildContext context) {
-                  return modules.map((module) {
-                    return PopupMenuItem<Widget>(
-                      value: module['page'] as Widget,
-                      child: Row(
-                        children: [
-                          Icon(module['icon'] as IconData, color: module['color'] as Color, size: 20),
-                          const SizedBox(width: 10),
-                          Text(module['title'] as String),
-                        ],
-                      ),
-                    );
-                  }).toList();
-                },
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'الصفحة الرئيسية',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
+          title: Text('الصفحة الرئيسية (${currentUser.name})'),
           actions: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: Row(
-                children: [
-                  const Icon(Icons.account_circle, size: 22),
-                  const SizedBox(width: 6),
-                  Text(
-                    userName,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(Icons.logout, size: 20),
-                    tooltip: 'تسجيل الخروج',
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const Directionality(
-                            textDirection: TextDirection.rtl,
-                            child: LoginScreen(),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                );
+              },
+            )
           ],
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: GridView.builder(
-            itemCount: modules.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              childAspectRatio: 1.1,
-            ),
-            itemBuilder: (context, index) {
-              final item = modules[index];
-              return Card(
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () => navigateToScreen(item['page'] as Widget),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: (item['color'] as Color).withOpacity(0.12),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            item['icon'] as IconData,
-                            size: 34,
-                            color: item['color'] as Color,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          item['title'] as String,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
+        body: GridView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: modules.length,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            childAspectRatio: 1.1,
           ),
+          itemBuilder: (context, index) {
+            final item = modules[index];
+            bool hasAccess = currentUser.isAdmin || (currentUser.permissions[item['title']] ?? false);
+
+            return Card(
+              elevation: hasAccess ? 3 : 1,
+              color: hasAccess ? Colors.white : Colors.grey.shade200,
+              child: InkWell(
+                onTap: () => navigateToScreen(item['title'], item['page']),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      item['icon'],
+                      size: 36,
+                      color: hasAccess ? item['color'] : Colors.grey,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      item['title'],
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: hasAccess ? Colors.black87 : Colors.grey,
+                      ),
+                    ),
+                    if (!hasAccess)
+                      const Icon(Icons.lock, size: 16, color: Colors.grey),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
