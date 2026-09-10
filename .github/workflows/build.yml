@@ -24,12 +24,12 @@ jobs:
       with:
         channel: 'stable'
  
-    - name: Generate Flutter Android Project
+        - name: Generate Flutter Android Project
       run: |
-        cp -r lib lib_backup
+        if [ -d "lib" ]; then cp -r lib lib_backup; fi
         flutter create --org com.omarpos.master --project-name omar_pos --platforms=android .
-        rm -rf lib
-        mv lib_backup lib
+        if [ -d "lib_backup" ]; then rm -rf lib && mv lib_backup lib; fi
+        
 
       
 
