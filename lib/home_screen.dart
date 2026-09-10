@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
 
-// استدعاء الشاشات الفرعية المستقلة
 import 'pos_screen.dart';
 import 'purchases_screen.dart';
 import 'inventory_screen.dart';
@@ -22,7 +21,6 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ربط كل زر بالصفحة الخاصة به
     final List<Map<String, dynamic>> modules = [
       {'title': 'نقطة البيع', 'icon': Icons.point_of_sale, 'color': Colors.blue, 'page': const PosScreen()},
       {'title': 'المشتريات', 'icon': Icons.shopping_cart, 'color': Colors.orange, 'page': const PurchasesScreen()},
@@ -34,7 +32,7 @@ class HomeScreen extends StatelessWidget {
       {'title': 'إدارة المستخدمين', 'icon': Icons.admin_panel_settings, 'color': Colors.deepOrange, 'page': const UsersScreen()},
       {'title': 'إغلاق الصندوق / الوردية', 'icon': Icons.lock_clock, 'color': Colors.red, 'page': const ShiftCloseScreen()},
       {'title': 'التقرير المالي', 'icon': Icons.account_balance_wallet, 'color': Colors.lightGreen, 'page': const FinancialReportScreen()},
-      {'title': 'السندات', 'icon': Icons.receipt_long, 'color': Colors.amber.shade800, 'page': const VouchersScreen()},
+      {'title': 'السندات', 'icon': Icons.receipt_long, 'color': Colors.amber, 'page': const VouchersScreen()},
       {'title': 'الصندوق', 'icon': Icons.savings, 'color': Colors.brown, 'page': const CashBoxScreen()},
     ];
 
