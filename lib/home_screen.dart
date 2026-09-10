@@ -1,6 +1,19 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
 
+import 'pos_screen.dart';
+import 'purchases_screen.dart';
+import 'inventory_screen.dart';
+import 'customers_screen.dart';
+import 'suppliers_screen.dart';
+import 'reports_screen.dart';
+import 'settings_screen.dart';
+import 'users_screen.dart';
+import 'shift_close_screen.dart';
+import 'financial_report_screen.dart';
+import 'vouchers_screen.dart';
+import 'cash_box_screen.dart';
+
 class HomeScreen extends StatelessWidget {
   final String userName;
 
@@ -9,25 +22,28 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<Map<String, dynamic>> modules = [
-      {'title': 'نقطة البيع', 'icon': Icons.point_of_sale, 'color': Colors.blue},
-      {'title': 'المشتريات', 'icon': Icons.shopping_cart, 'color': Colors.orange},
-      {'title': 'المخزن', 'icon': Icons.inventory_2, 'color': Colors.teal},
-      {'title': 'العملاء', 'icon': Icons.people, 'color': Colors.purple},
-      {'title': 'الموردين', 'icon': Icons.local_shipping, 'color': Colors.indigo},
-      {'title': 'التقارير', 'icon': Icons.bar_chart, 'color': Colors.green},
-      {'title': 'إعدادات النظام', 'icon': Icons.settings, 'color': Colors.blueGrey},
-      {'title': 'إدارة المستخدمين', 'icon': Icons.admin_panel_settings, 'color': Colors.deepOrange},
-      {'title': 'إغلاق الصندوق / الوردية', 'icon': Icons.lock_clock, 'color': Colors.red},
-      {'title': 'التقرير المالي', 'icon': Icons.account_balance_wallet, 'color': Colors.lightGreen},
-      {'title': 'السندات', 'icon': Icons.receipt_long, 'color': Colors.amber.shade800},
-      {'title': 'الصندوق', 'icon': Icons.savings, 'color': Colors.brown},
+      {'title': 'نقطة البيع', 'icon': Icons.point_of_sale, 'color': Colors.blue, 'page': const PosScreen()},
+      {'title': 'المشتريات', 'icon': Icons.shopping_cart, 'color': Colors.orange, 'page': const PurchasesScreen()},
+      {'title': 'المخزن', 'icon': Icons.inventory_2, 'color': Colors.teal, 'page': const InventoryScreen()},
+      {'title': 'العملاء', 'icon': Icons.people, 'color': Colors.purple, 'page': const CustomersScreen()},
+      {'title': 'الموردين', 'icon': Icons.local_shipping, 'color': Colors.indigo, 'page': const SuppliersScreen()},
+      {'title': 'التقارير', 'icon': Icons.bar_chart, 'color': Colors.green, 'page': const ReportsScreen()},
+      {'title': 'إعدادات النظام', 'icon': Icons.settings, 'color': Colors.blueGrey, 'page': const SettingsScreen()},
+      {'title': 'إدارة المستخدمين', 'icon': Icons.admin_panel_settings, 'color': Colors.deepOrange, 'page': const UsersScreen()},
+      {'title': 'إغلاق الصندوق / الوردية', 'icon': Icons.lock_clock, 'color': Colors.red, 'page': const ShiftCloseScreen()},
+      {'title': 'التقرير المالي', 'icon': Icons.account_balance_wallet, 'color': Colors.lightGreen, 'page': const FinancialReportScreen()},
+      {'title': 'السندات', 'icon': Icons.receipt_long, 'color': Colors.amber, 'page': const VouchersScreen()},
+      {'title': 'الصندوق', 'icon': Icons.savings, 'color': Colors.brown, 'page': const CashBoxScreen()},
     ];
 
-    void onModuleClick(String title) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('جاري فتح قسم: $title'),
-          duration: const Duration(seconds: 1),
+    void navigateToScreen(Widget screen) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: screen,
+          ),
         ),
       );
     }
@@ -43,19 +59,19 @@ class HomeScreen extends StatelessWidget {
           automaticallyImplyLeading: false,
           title: Row(
             children: [
-              PopupMenuButton<String>(
+              PopupMenuButton<Widget>(
                 icon: const Icon(Icons.menu, color: Colors.white, size: 28),
                 tooltip: 'قائمة الأقسام',
-                onSelected: (value) => onModuleClick(value),
+                onSelected: (page) => navigateToScreen(page),
                 itemBuilder: (BuildContext context) {
                   return modules.map((module) {
-                    return PopupMenuItem<String>(
-                      value: module['title'],
+                    return PopupMenuItem<Widget>(
+                      value: module['page'] as Widget,
                       child: Row(
                         children: [
-                          Icon(module['icon'], color: module['color'], size: 20),
+                          Icon(module['icon'] as IconData, color: module['color'] as Color, size: 20),
                           const SizedBox(width: 10),
-                          Text(module['title']),
+                          Text(module['title'] as String),
                         ],
                       ),
                     );
@@ -78,10 +94,7 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     userName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(width: 4),
                   IconButton(
@@ -123,7 +136,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(16),
-                  onTap: () => onModuleClick(item['title']),
+                  onTap: () => navigateToScreen(item['page'] as Widget),
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: Column(
