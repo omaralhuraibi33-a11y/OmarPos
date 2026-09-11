@@ -26,9 +26,12 @@ class PurchasesScreen extends StatefulWidget {
 
 class _PurchasesScreenState extends State<PurchasesScreen> {
   List<Product> _allProducts = [];
+  List<Supplier> _suppliers = []; // قائمة الموردين
+  Supplier? _selectedSupplier; // المورد المختار (null يعبر عن مورد نقدي)
+
   final List<PurchaseItem> _purchaseItems = [];
 
-  final TextEditingController _supplierController = TextEditingController(text: 'مورد عام');
+  final TextEditingController _supplierController = TextEditingController(text: 'مورد نقدي');
   final TextEditingController _invoiceDiscountController = TextEditingController(text: '0.0');
 
   bool _isLoading = true;
@@ -36,14 +39,17 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProducts();
+    _loadData();
   }
 
-  Future<void> _loadProducts() async {
+  // تحميل المنتجات والموردين
+  Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final prods = await DBHelper.getAllProducts();
+    final sups = await DBHelper.getAllSuppliers();
     setState(() {
       _allProducts = prods;
+      _suppliers = sups;
       _isLoading = false;
     });
   }
@@ -55,9 +61,66 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _resetInvoice() {
     setState(() {
       _purchaseItems.clear();
-      _supplierController.text = 'مورد عام';
+      _selectedSupplier = null;
+      _supplierController.text = 'مورد نقدي';
       _invoiceDiscountController.text = '0.0';
     });
+  }
+
+  // نافذة اختيار مورد من القائمة
+  void _showSelectSupplierDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('اختر المورد'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              // الخيار الافتراضي: مورد نقدي
+              ListTile(
+                leading: const Icon(Icons.payments, color: Colors.green),
+                title: const Text('مورد نقدي', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('دفع نقدي مباشر (بدون تسجيل آجل)'),
+                onTap: () {
+                  setState(() {
+                    _selectedSupplier = null;
+                    _supplierController.text = 'مورد نقدي';
+                  });
+                  Navigator.pop(ctx);
+                },
+              ),
+              const Divider(),
+              if (_suppliers.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text('لا يوجد موردين مسجلين حالياً', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                ),
+              // قائمة الموردين المسجلين
+              ..._suppliers.map((sup) => ListTile(
+                leading: const Icon(Icons.business, color: Colors.blue),
+                title: Text(sup.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('الرصيد له: ${sup.balance.toStringAsFixed(2)}'),
+                onTap: () {
+                  setState(() {
+                    _selectedSupplier = sup;
+                    _supplierController.text = sup.name;
+                  });
+                  Navigator.pop(ctx);
+                },
+              )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddItemDialog() {
@@ -151,23 +214,35 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return;
     }
 
-    // زيادة كميات الأصناف في قاعدة البيانات + تحديث سعر الشراء الجديد
+    // 1. زيادة كميات الأصناف في قاعدة البيانات + تحديث سعر الشراء الجديد
     for (var item in _purchaseItems) {
       await DBHelper.updateProductStock(item.product.id, item.quantity);
 
-      // تحديث سعر الشراء للصنف إذا تغير
       if (item.purchasePrice != item.product.purchasePrice) {
         item.product.purchasePrice = item.purchasePrice;
         await DBHelper.saveProduct(item.product);
       }
     }
 
+    // 2. إذا تم اختيار مورد مسجل (ليس نقدي)، نُسجل الفاتورة في كشف حسابه
+    if (_selectedSupplier != null) {
+      final now = DateTime.now();
+      final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      await DBHelper.addSupplierTransaction(
+        supplierId: _selectedSupplier!.id,
+        type: 'فاتورة مشتريات',
+        credit: _finalTotal,
+        debit: 0.0,
+        date: dateStr,
+      );
+    }
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حفظ فاتورة المشتريات وتحديث كميات المخزن بنجاح! الإجمالي: $_finalTotal')),
+        SnackBar(content: Text('تم حفظ الفاتورة وتحديث المخزن بنجاح! الإجمالي: $_finalTotal')),
       );
       _resetInvoice();
-      _loadProducts();
+      _loadData();
     }
   }
 
@@ -182,7 +257,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // رأس الفاتورة: المورد والخصم
+                // رأس الفاتورة: اختيار المورد والخصم
                 Container(
                   color: Colors.blue.shade50,
                   padding: const EdgeInsets.all(12),
@@ -192,11 +267,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         flex: 2,
                         child: TextField(
                           controller: _supplierController,
-                          decoration: const InputDecoration(
-                            labelText: 'اسم المورد',
-                            prefixIcon: Icon(Icons.business),
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          readOnly: true,
+                          onTap: _showSelectSupplierDialog,
+                          decoration: InputDecoration(
+                            labelText: 'المورد',
+                            prefixIcon: const Icon(Icons.business),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.arrow_drop_down_circle, color: Colors.blue),
+                              onPressed: _showSelectSupplierDialog,
+                              tooltip: 'اختيار مورد',
+                            ),
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
                         ),
                       ),
