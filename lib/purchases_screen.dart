@@ -26,8 +26,8 @@ class PurchasesScreen extends StatefulWidget {
 
 class _PurchasesScreenState extends State<PurchasesScreen> {
   List<Product> _allProducts = [];
-  List<Supplier> _suppliers = []; // قائمة الموردين
-  Supplier? _selectedSupplier; // المورد المختار (null يعبر عن مورد نقدي)
+  List<Supplier> _suppliers = [];
+  Supplier? _selectedSupplier;
 
   final List<PurchaseItem> _purchaseItems = [];
 
@@ -42,7 +42,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _loadData();
   }
 
-  // تحميل المنتجات والموردين
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final prods = await DBHelper.getAllProducts();
@@ -67,7 +66,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     });
   }
 
-  // نافذة اختيار مورد من القائمة
   void _showSelectSupplierDialog() {
     showDialog(
       context: context,
@@ -78,7 +76,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           child: ListView(
             shrinkWrap: true,
             children: [
-              // الخيار الافتراضي: مورد نقدي
               ListTile(
                 leading: const Icon(Icons.payments, color: Colors.green),
                 title: const Text('مورد نقدي', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -97,7 +94,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   padding: EdgeInsets.all(8.0),
                   child: Text('لا يوجد موردين مسجلين حالياً', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                 ),
-              // قائمة الموردين المسجلين
               ..._suppliers.map((sup) => ListTile(
                 leading: const Icon(Icons.business, color: Colors.blue),
                 title: Text(sup.name, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -214,7 +210,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return;
     }
 
-    // 1. زيادة كميات الأصناف في قاعدة البيانات + تحديث سعر الشراء الجديد
     for (var item in _purchaseItems) {
       await DBHelper.updateProductStock(item.product.id, item.quantity);
 
@@ -224,16 +219,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       }
     }
 
-    // 2. إذا تم اختيار مورد مسجل (ليس نقدي)، نُسجل الفاتورة في كشف حسابه
     if (_selectedSupplier != null) {
-      final now = DateTime.now();
-      final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
       await DBHelper.addSupplierTransaction(
         supplierId: _selectedSupplier!.id,
         type: 'فاتورة مشتريات',
         credit: _finalTotal,
         debit: 0.0,
-        date: dateStr,
       );
     }
 
@@ -257,7 +248,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // رأس الفاتورة: اختيار المورد والخصم
                 Container(
                   color: Colors.blue.shade50,
                   padding: const EdgeInsets.all(12),
@@ -300,7 +290,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   ),
                 ),
 
-                // جدول الأصناف المضافة
                 Expanded(
                   child: _purchaseItems.isEmpty
                       ? Center(
@@ -340,7 +329,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         ),
                 ),
 
-                // المجموع والشريط السفلي
                 Container(
                   padding: const EdgeInsets.all(12),
                   color: Colors.grey.shade200,
