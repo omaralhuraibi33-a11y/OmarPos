@@ -26,24 +26,40 @@ class PurchasesScreen extends StatefulWidget {
 
 class _PurchasesScreenState extends State<PurchasesScreen> {
   List<Product> _allProducts = [];
-  final List<PurchaseItem> _purchaseItems = [];
+  List<Supplier> _allSuppliers = [];
+  Supplier? _selectedSupplier;
 
-  final TextEditingController _supplierController = TextEditingController(text: 'مورد عام');
+  final List<PurchaseItem> _purchaseItems = [];
   final TextEditingController _invoiceDiscountController = TextEditingController(text: '0.0');
+
+  // المورد النقدي الافتراضي
+  final Supplier _cashSupplier = Supplier(
+    id: '0',
+    name: 'مورد نقدي (كاش)',
+    phone: '',
+    notes: 'مورد نقدي افتراضي',
+    balance: 0.0,
+  );
 
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadProducts();
+    _loadData();
   }
 
-  Future<void> _loadProducts() async {
+  Future<void> _loadData() async {
     setState(() => _isLoading = true);
+
     final prods = await DBHelper.getAllProducts();
+    final sups = await DBHelper.getAllSuppliers();
+
     setState(() {
       _allProducts = prods;
+      // دمج المورد النقدي مع قائمة الموردين المسجلين
+      _allSuppliers = [_cashSupplier, ...sups];
+      _selectedSupplier = _cashSupplier; // الضبط على المورد النقدي كافتراضي
       _isLoading = false;
     });
   }
@@ -55,7 +71,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _resetInvoice() {
     setState(() {
       _purchaseItems.clear();
-      _supplierController.text = 'مورد عام';
+      _selectedSupplier = _cashSupplier;
       _invoiceDiscountController.text = '0.0';
     });
   }
@@ -151,23 +167,38 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return;
     }
 
-    // زيادة كميات الأصناف في قاعدة البيانات + تحديث سعر الشراء الجديد
+    // 1. زيادة كميات الأصناف في المخزن + تحديث سعر الشراء الجديد
     for (var item in _purchaseItems) {
       await DBHelper.updateProductStock(item.product.id, item.quantity);
 
-      // تحديث سعر الشراء للصنف إذا تغير
       if (item.purchasePrice != item.product.purchasePrice) {
         item.product.purchasePrice = item.purchasePrice;
         await DBHelper.saveProduct(item.product);
       }
     }
 
+    // 2. ترحيل الفاتورة لحساب المورد إذا لم يكن "مورد نقدي"
+    if (_selectedSupplier != null && _selectedSupplier!.id != '0') {
+      await DBHelper.addSupplierTransaction(
+        supplierId: _selectedSupplier!.id,
+        type: 'فاتورة مشتريات',
+        credit: _finalTotal, // زيادة حساب المورد (دائن)
+        debit: 0.0,
+      );
+    }
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حفظ فاتورة المشتريات وتحديث كميات المخزن بنجاح! الإجمالي: $_finalTotal')),
+        SnackBar(
+          content: Text(
+            'تم حفظ فاتورة المشتريات وتحديث المخزن' +
+                (_selectedSupplier!.id != '0' ? ' وحساب المورد (${_selectedSupplier!.name})' : '') +
+                ' بنجاح! الإجمالي: $_finalTotal',
+          ),
+        ),
       );
       _resetInvoice();
-      _loadProducts();
+      _loadData();
     }
   }
 
@@ -182,7 +213,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // رأس الفاتورة: المورد والخصم
+                // رأس الفاتورة: اختيار المورد والخصم
                 Container(
                   color: Colors.blue.shade50,
                   padding: const EdgeInsets.all(12),
@@ -190,14 +221,28 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     children: [
                       Expanded(
                         flex: 2,
-                        child: TextField(
-                          controller: _supplierController,
+                        child: DropdownButtonFormField<Supplier>(
+                          value: _selectedSupplier,
                           decoration: const InputDecoration(
-                            labelText: 'اسم المورد',
+                            labelText: 'المورد',
                             prefixIcon: Icon(Icons.business),
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
+                          items: _allSuppliers.map((s) {
+                            return DropdownMenuItem<Supplier>(
+                              value: s,
+                              child: Text(
+                                s.name,
+                                overflow: TextSpanOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _selectedSupplier = val);
+                            }
+                          },
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -236,7 +281,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                               margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               child: ListTile(
                                 title: Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.purchasePrice} | خصم الصنف: ${item.discount}'),
+                                subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.purchasePrice} | خصم: ${item.discount}'),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -290,7 +335,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                               style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
                               onPressed: _resetInvoice,
                               icon: const Icon(Icons.refresh),
-                              label: const Text('فاتورة جديدة'),
+                              label: const Text('جديدة'),
                             ),
                           ),
                           const SizedBox(width: 8),
