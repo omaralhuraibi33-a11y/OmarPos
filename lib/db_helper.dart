@@ -205,47 +205,6 @@ class Product {
   }
 }
 
-// ==================== نموذج الطابعة ====================
-class PrinterModel {
-  String id;
-  String name;
-  String type; // مطبخ / زبون
-  String connectionType; // بلوتوث / واي فاي
-  String paperSize; // 80mm / 58mm
-  bool autoPrint;
-
-  PrinterModel({
-    required this.id,
-    required this.name,
-    required this.type,
-    required this.connectionType,
-    required this.paperSize,
-    this.autoPrint = false,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'name': name,
-      'type': type,
-      'connectionType': connectionType,
-      'paperSize': paperSize,
-      'autoPrint': autoPrint ? 1 : 0,
-    };
-  }
-
-  factory PrinterModel.fromMap(Map<String, dynamic> map) {
-    return PrinterModel(
-      id: map['id'],
-      name: map['name'],
-      type: map['type'],
-      connectionType: map['connectionType'],
-      paperSize: map['paperSize'],
-      autoPrint: map['autoPrint'] == 1,
-    );
-  }
-}
-
 // ==================== مدير قاعدة البيانات ====================
 class DBHelper {
   static Database? _db;
@@ -277,7 +236,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 5, // التحديث للنسخة 5 لدعم جداول الإعدادات والطابعات والصناديق
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -345,7 +304,6 @@ class DBHelper {
           )
         ''');
 
-        // جداول الإعدادات الجديدة
         await db.execute('''
           CREATE TABLE settings(
             key TEXT PRIMARY KEY,
@@ -570,11 +528,13 @@ class DBHelper {
     );
   }
 
+  // أضيف هنا المعامل date الاختياري لحل خطأ شاشة المشتريات
   static Future<void> addSupplierTransaction({
     required String supplierId,
     required String type,
     required double credit,
     required double debit,
+    String? date,
   }) async {
     final db = await database;
     final supList = await db.query('suppliers', where: 'id = ?', whereArgs: [supplierId]);
@@ -589,14 +549,14 @@ class DBHelper {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'supplierId': supplierId,
       'type': type,
-      'date': DateTime.now().toString().split('.')[0],
+      'date': date ?? DateTime.now().toString().split('.')[0],
       'credit': credit,
       'debit': debit,
       'runningBalance': newBalance,
     });
   }
 
-  // ==================== عمليات المجموعات (Categories) ====================
+  // ==================== عمليات المجموعات والأصناف ====================
   static Future<List<Category>> getAllCategories() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('categories');
@@ -619,7 +579,6 @@ class DBHelper {
     await db.delete('categories', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ==================== عمليات الأصناف (Products) ====================
   static Future<List<Product>> getAllProducts() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('products');
@@ -647,7 +606,7 @@ class DBHelper {
     await db.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [deltaQuantity, id]);
   }
 
-  // ==================== إعدادات النظام العامـة ====================
+  // ==================== إعدادات النظام ====================
   static Future<void> saveSetting(String key, String value) async {
     final db = await database;
     await db.insert(
@@ -666,51 +625,7 @@ class DBHelper {
     return defaultValue;
   }
 
-  // ==================== إدارة الطابعات ====================
-  static Future<List<PrinterModel>> getAllPrinters() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('printers');
-    return maps.map((m) => PrinterModel.fromMap(m)).toList();
-  }
-
-  static Future<void> savePrinter(PrinterModel printer) async {
-    final db = await database;
-    await db.insert('printers', printer.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  static Future<void> deletePrinter(String id) async {
-    final db = await database;
-    await db.delete('printers', where: 'id = ?', whereArgs: [id]);
-  }
-
-  // ==================== ملاحظات التحضير السريعة ====================
-  static Future<List<String>> getPrepNotes() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('prep_notes');
-    if (maps.isEmpty) {
-      final defaults = ['بدون شطة', 'زيادة بهارات', 'سفري', 'محلي'];
-      for (var note in defaults) {
-        await addPrepNote(note);
-      }
-      return defaults;
-    }
-    return maps.map((m) => m['note'] as String).toList();
-  }
-
-  static Future<void> addPrepNote(String note) async {
-    final db = await database;
-    await db.insert('prep_notes', {
-      'id': '${DateTime.now().millisecondsSinceEpoch}_${note.hashCode}',
-      'note': note,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
-  }
-
-  static Future<void> deletePrepNote(String note) async {
-    final db = await database;
-    await db.delete('prep_notes', where: 'note = ?', whereArgs: [note]);
-  }
-
-  // ==================== إدارة طرق الدفع ====================
+  // ==================== طرق الدفع ====================
   static Future<List<String>> getPaymentMethods() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('payment_methods');
@@ -730,40 +645,7 @@ class DBHelper {
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
-  static Future<void> deletePaymentMethod(String name) async {
-    final db = await database;
-    await db.delete('payment_methods', where: 'name = ?', whereArgs: [name]);
-  }
-
-  // ==================== إدارة الصناديق ====================
-  static Future<List<String>> getCashBoxes() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('cash_boxes');
-    if (maps.isEmpty) {
-      await addCashBox('الصندوق الرئيسي', isMain: true);
-      await addCashBox('صندوق المبيعات', isMain: false);
-      return ['الصندوق الرئيسي', 'صندوق المبيعات'];
-    }
-    return maps.map((m) => m['name'] as String).toList();
-  }
-
-  static Future<void> addCashBox(String name, {bool isMain = false}) async {
-    final db = await database;
-    await db.insert('cash_boxes', {
-      'id': '${DateTime.now().millisecondsSinceEpoch}_${name.hashCode}',
-      'name': name,
-      'isMain': isMain ? 1 : 0,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
-  }
-
-  static Future<void> deleteCashBox(String name) async {
-    final db = await database;
-    await db.delete('cash_boxes', where: 'name = ?', whereArgs: [name]);
-  }
-
-  // ==================== مسح البيانات الحساسة ====================
-
-  // 1) حذف كافة الحسابات (عملاء + موردين + حركات مالية)
+  // ==================== مسح البيانات ====================
   static Future<void> clearAllAccountsData() async {
     final db = await database;
     await db.delete('suppliers');
@@ -771,14 +653,12 @@ class DBHelper {
     await db.delete('customers');
   }
 
-  // 2) حذف كل المجموعات والأصناف
   static Future<void> clearCategoriesAndProducts() async {
     final db = await database;
     await db.delete('products');
     await db.delete('categories');
   }
 
-  // 3) حذف الأصناف فقط
   static Future<void> clearProductsOnly() async {
     final db = await database;
     await db.delete('products');
