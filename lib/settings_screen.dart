@@ -4,14 +4,14 @@ import 'db_helper.dart';
 // ============================================================================
 // 1. الشاشة الرئيسية للإعدادات (تحوي الـ 9 أزرار الطولية)
 // ============================================================================
-class SettingsMainScreen extends StatefulWidget {
-  const SettingsMainScreen({Key? key}) : super(key: key);
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({Key? key}) : super(key: key);
 
   @override
-  State<SettingsMainScreen> createState() => _SettingsMainScreenState();
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsMainScreenState extends State<SettingsMainScreen> {
+class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDarkMode = true;
 
   Future<void> _saveAllSettings() async {
