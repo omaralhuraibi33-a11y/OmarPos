@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'db_helper.dart';
 
 // ============================================================================
-// 1. الشاشة الرئيسية للإعدادات (تحوي الـ 9 أزرار الطولية)
+// 1. الشاشة الرئيسية للإعدادات
 // ============================================================================
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -26,7 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: _isDarkMode ? ThemeData.dark() : ThemeData.light(),
+      data: _isDarkMode ? ThemeData.dark().copyWith(scaffoldBackgroundColor: Colors.black) : ThemeData.light().copyWith(primaryColor: Colors.blue),
       child: Scaffold(
         appBar: AppBar(
           title: const Text('إعدادات النظام'),
@@ -176,12 +176,17 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   void _showPrinterDialog({Map<String, dynamic>? printerToEdit, int? editIndex}) {
     final nameCtrl = TextEditingController(text: printerToEdit?['name'] ?? '');
     final ipCtrl = TextEditingController(text: printerToEdit?['ip'] ?? '');
+    final macCtrl = TextEditingController(text: printerToEdit?['mac'] ?? '');
     String connection = printerToEdit?['connection'] ?? 'بلوتوث';
     String usage = printerToEdit?['usage'] ?? 'زبون';
     String paperSize = printerToEdit?['paperSize'] ?? '80';
-    String selectedBtDevice = printerToEdit?['btDevice'] ?? '';
 
-    List<String> pairedBtDevices = ['BT-Printer-01 (AA:BB:CC)', 'POS-Thermal-58 (12:34:56)', 'RP-80-Printer (99:88:77)'];
+    // قائمة أجهزة البلوتوث المقترنة بالجهاز للاختيار منها
+    final List<Map<String, String>> pairedBtDevices = [
+      {'name': 'BT-Printer-01', 'mac': 'AA:BB:CC:11:22:33'},
+      {'name': 'POS-Thermal-58', 'mac': '12:34:56:78:90:AB'},
+      {'name': 'RP-80-Printer', 'mac': '99:88:77:66:55:44'},
+    ];
 
     showDialog(
       context: context,
@@ -206,19 +211,53 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     items: ['بلوتوث', 'واي فاي'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                     onChanged: (val) => setDlgState(() => connection = val!),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   if (connection == 'بلوتوث') ...[
-                    DropdownButtonFormField<String>(
-                      value: selectedBtDevice.isNotEmpty && pairedBtDevices.contains(selectedBtDevice) ? selectedBtDevice : null,
-                      hint: const Text('اختر طابعة من أجهزة الجوال المقترنة'),
-                      decoration: const InputDecoration(labelText: 'الطابعات المقترنة بالجهاز'),
-                      items: pairedBtDevices.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: (val) {
-                        setDlgState(() {
-                          selectedBtDevice = val!;
-                          if (nameCtrl.text.isEmpty) nameCtrl.text = val.split(' ').first;
-                        });
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        minimumSize: const Size.fromHeight(45),
+                      ),
+                      icon: const Icon(Icons.bluetooth_searching, color: Colors.white),
+                      label: const Text('بحث عن طابعات بلوتوث', style: TextStyle(color: Colors.white)),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (btCtx) => AlertDialog(
+                            title: const Text('أجهزة البلوتوث المقترنة بالجهاز'),
+                            content: SizedBox(
+                              width: double.maxFinite,
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: pairedBtDevices.length,
+                                itemBuilder: (c, idx) {
+                                  final dev = pairedBtDevices[idx];
+                                  return ListTile(
+                                    leading: const Icon(Icons.print, color: Colors.blue),
+                                    title: Text(dev['name']!),
+                                    subtitle: Text('MAC: ${dev['mac']}'),
+                                    onTap: () {
+                                      setDlgState(() {
+                                        nameCtrl.text = dev['name']!;
+                                        macCtrl.text = dev['mac']!;
+                                      });
+                                      Navigator.pop(btCtx);
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
                       },
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: macCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'عنوان MAC للطابعة',
+                        prefixIcon: Icon(Icons.fingerprint),
+                      ),
                     ),
                   ] else ...[
                     TextField(
@@ -229,7 +268,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'اسم الطابعة (تلقائي/تعديل)'),
+                    decoration: const InputDecoration(labelText: 'اسم الطابعة'),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
@@ -250,7 +289,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     'connection': connection,
                     'usage': usage,
                     'paperSize': paperSize,
-                    'btDevice': selectedBtDevice,
+                    'mac': macCtrl.text.trim(),
                     'ip': ipCtrl.text.trim(),
                   };
                   setState(() {
@@ -344,7 +383,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                           color: isSelected ? Colors.blue : Colors.grey,
                         ),
                         title: Text('${p['name']} (${p['usage']})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('الاتصال: ${p['connection']} | المقاس: ${p['paperSize']}mm'),
+                        subtitle: Text(p['connection'] == 'بلوتوث'
+                            ? 'الاتصال: بلوتوث | MAC: ${p['mac']} | المقاس: ${p['paperSize']}mm'
+                            : 'الاتصال: واي فاي | IP: ${p['ip']} | المقاس: ${p['paperSize']}mm'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -487,11 +528,11 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: !widget.isDarkMode ? Colors.blue : Colors.grey.shade800,
+                    backgroundColor: Colors.blue, // لون الوضع الفاتح الأزرق
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   onPressed: () => widget.onThemeChanged(false),
-                  icon: const Icon(Icons.light_mode, color: Colors.yellow),
+                  icon: const Icon(Icons.light_mode, color: Colors.white),
                   label: const Text('الوضع الفاتح', style: TextStyle(color: Colors.white)),
                 ),
               ),
@@ -499,7 +540,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.isDarkMode ? Colors.blue : Colors.grey.shade800,
+                    backgroundColor: Colors.black, // لون الوضع الداكن الأسود
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                   onPressed: () => widget.onThemeChanged(true),
@@ -523,6 +564,21 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
             items: ['صغير', 'وسط', 'كبير'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
             onChanged: (val) => setState(() => _posItemSize = val!),
           ),
+          const SizedBox(height: 30),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم حفظ إعدادات المظهر بنجاح'), backgroundColor: Colors.green),
+              );
+            },
+            icon: const Icon(Icons.save, color: Colors.white),
+            label: const Text('حفظ الإعدادات', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );
@@ -540,9 +596,11 @@ class StoreDataScreen extends StatefulWidget {
 }
 
 class _StoreDataScreenState extends State<StoreDataScreen> {
-  final _nameCtrl = TextEditingController(text: 'مذاق سبأ');
-  final _phoneCtrl = TextEditingController(text: '770000000');
-  final _addressCtrl = TextEditingController(text: 'تعز - قدس');
+  // الحقول فارغة افتراضياً
+  final _nameCtrl = TextEditingController(text: '');
+  final _phoneCtrl = TextEditingController(text: '');
+  final _addressCtrl = TextEditingController(text: '');
+  String? _selectedImagePath;
 
   @override
   Widget build(BuildContext context) {
@@ -554,10 +612,12 @@ class _StoreDataScreenState extends State<StoreDataScreen> {
           Center(
             child: Stack(
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 50,
                   backgroundColor: Colors.blueGrey,
-                  child: Icon(Icons.storefront, size: 50, color: Colors.white),
+                  child: _selectedImagePath == null
+                      ? const Icon(Icons.storefront, size: 50, color: Colors.white)
+                      : const Icon(Icons.image, size: 50, color: Colors.greenAccent),
                 ),
                 Positioned(
                   bottom: 0,
@@ -568,7 +628,13 @@ class _StoreDataScreenState extends State<StoreDataScreen> {
                     child: IconButton(
                       icon: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تغيير الشعار')));
+                        // محاكاة فتح معرض الصور لاختيار الشعار
+                        setState(() {
+                          _selectedImagePath = '/storage/emulated/0/Pictures/logo.png';
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تم فتح ملفات الصور واختيار الشعار بنجاح')),
+                        );
                       },
                     ),
                   ),
@@ -584,7 +650,10 @@ class _StoreDataScreenState extends State<StoreDataScreen> {
           TextField(controller: _addressCtrl, decoration: const InputDecoration(labelText: 'العنوان', prefixIcon: Icon(Icons.location_on))),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ بيانات المتجر بنجاح')));
+              Navigator.pop(context);
+            },
             child: const Text('حفظ بيانات المتجر'),
           )
         ],
@@ -772,7 +841,10 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اختيار مجلد جديد')));
+                      // محاكاة دخول ملفات الجهاز لاختيار مجلد الحفظ
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم فتح ملفات الجهاز واختيار المجلد بنجاح')),
+                      );
                     },
                     icon: const Icon(Icons.folder_open),
                     label: const Text('تغيير مجلد الحفظ'),
@@ -781,10 +853,14 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, padding: const EdgeInsets.symmetric(vertical: 12)),
             onPressed: () {
+              final newBackup = 'backup_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}.db';
+              setState(() {
+                _availableBackups.insert(0, newBackup);
+              });
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('تم إنشاء نسخة احتياطية بنجاح في: $_backupFolderPath')),
               );
@@ -792,36 +868,65 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
             icon: const Icon(Icons.cloud_upload, color: Colors.white),
             label: const Text('إنشاء نسخة احتياطية الآن', style: TextStyle(color: Colors.white)),
           ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, padding: const EdgeInsets.symmetric(vertical: 12)),
+            onPressed: () {
+              // زر الذهاب لملفات الجهاز لاختيار ملف الاستعادة
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم فتح ملفات الجهاز.. اختر ملف الاستعادة (.db)')),
+              );
+            },
+            icon: const Icon(Icons.restore_page, color: Colors.white),
+            label: const Text('استعادة نسخة احتياطية من الجهاز', style: TextStyle(color: Colors.white)),
+          ),
           const Divider(height: 30),
-          const Text('استعادة نسخة احتياطية من المجلد:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('النسخ الاحتياطية المحفوظة سابقةً:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 10),
           ..._availableBackups.map(
             (fileName) => Card(
               child: ListTile(
                 leading: const Icon(Icons.storage, color: Colors.cyan),
                 title: Text(fileName),
-                trailing: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('تأكيد الاستعادة'),
-                        content: Text('هل أنت أيد من استعادة النسخة ($fileName)؟ سيتم استبدال البيانات الحالية.'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت استعادة النسخة بنجاح!')));
-                            },
-                            child: const Text('استعادة'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.restore, color: Colors.teal),
+                      tooltip: 'استعادة',
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('تأكيد الاستعادة'),
+                            content: Text('هل أنت أكيد من استعادة النسخة ($fileName)؟ سيتم استبدال البيانات الحالية.'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت استعادة النسخة بنجاح!')));
+                                },
+                                child: const Text('استعادة'),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    );
-                  },
-                  child: const Text('استعادة', style: TextStyle(color: Colors.white)),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      tooltip: 'حذف النسخة',
+                      onPressed: () {
+                        setState(() {
+                          _availableBackups.remove(fileName);
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تم حذف النسخة الاحتياطية')),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -843,7 +948,13 @@ class PaymentMethodsScreen extends StatefulWidget {
 }
 
 class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
-  final List<String> _methods = ['نقدي', 'آجل'];
+  // خيارات اختيار طرق الدفع المطلوبة
+  final Map<String, bool> _paymentOptions = {
+    'نقدي': true,
+    'آجل': true,
+    'شبكة / بطاقة': false,
+    'تحويل بنكي / محفظة': false,
+  };
 
   void _addPaymentMethod() {
     final ctrl = TextEditingController();
@@ -851,13 +962,13 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('إضافة طريقة دفع جديدة'),
-        content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'طريقة الدفع (مثال: شبكة / تحويل)')),
+        content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'طريقة الدفع')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           ElevatedButton(
             onPressed: () {
               if (ctrl.text.trim().isNotEmpty) {
-                setState(() => _methods.add(ctrl.text.trim()));
+                setState(() => _paymentOptions[ctrl.text.trim()] = true);
                 Navigator.pop(ctx);
               }
             },
@@ -875,21 +986,29 @@ class _PaymentMethodsScreenState extends State<PaymentMethodsScreen> {
         title: const Text('إدارة طرق الدفع'),
         actions: [IconButton(icon: const Icon(Icons.add), onPressed: _addPaymentMethod)],
       ),
-      body: ListView.builder(
+      body: ListView(
         padding: const EdgeInsets.all(12),
-        itemCount: _methods.length,
-        itemBuilder: (ctx, i) => Card(
-          child: ListTile(
-            leading: const Icon(Icons.payment, color: Colors.green),
-            title: Text(_methods[i]),
-            trailing: _methods[i] == 'نقدي' || _methods[i] == 'آجل'
-                ? const Chip(label: Text('افتراضي'))
-                : IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => setState(() => _methods.removeAt(i)),
-                  ),
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Text('حدد طرق الدفع المتاحة للاستخدام:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           ),
-        ),
+          ..._paymentOptions.keys.map(
+            (method) => Card(
+              child: CheckboxListTile(
+                secondary: const Icon(Icons.payment, color: Colors.green),
+                title: Text(method, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(_paymentOptions[method]! ? 'مفعلة' : 'معطلة'),
+                value: _paymentOptions[method],
+                onChanged: (bool? val) {
+                  setState(() {
+                    _paymentOptions[method] = val ?? false;
+                  });
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
