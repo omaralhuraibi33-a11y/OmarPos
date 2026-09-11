@@ -84,13 +84,50 @@ class Customer {
   }
 }
 
+// ==================== نموذج المورد ====================
+class Supplier {
+  String id;
+  String name;
+  String phone;
+  String notes;
+  double balance;
+
+  Supplier({
+    required this.id,
+    required this.name,
+    this.phone = '',
+    this.notes = '',
+    this.balance = 0.0,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'phone': phone,
+      'notes': notes,
+      'balance': balance,
+    };
+  }
+
+  factory Supplier.fromMap(Map<String, dynamic> map) {
+    return Supplier(
+      id: map['id'],
+      name: map['name'],
+      phone: map['phone'] ?? '',
+      notes: map['notes'] ?? '',
+      balance: (map['balance'] as num).toDouble(),
+    );
+  }
+}
+
 // ==================== نموذج المجموعة (التصنيف) ====================
 class Category {
   String id;
   String name;
-  String colorHex; // كود اللون
-  bool isKitchenPrint; // طباعة للمطبخ
-  bool isActive; // نشط في نقطة البيع
+  String colorHex;
+  bool isKitchenPrint;
+  bool isActive;
 
   Category({
     required this.id,
@@ -197,7 +234,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 3, // التحديث للنسخة 3
+      version: 4, // التحديث للنسخة 4 لدعم جدول الموردين
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -240,6 +277,28 @@ class DBHelper {
             sellPrice REAL,
             quantity REAL,
             isActive INTEGER
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE suppliers(
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            phone TEXT,
+            notes TEXT,
+            balance REAL
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE supplier_transactions(
+            id TEXT PRIMARY KEY,
+            supplierId TEXT,
+            type TEXT,
+            date TEXT,
+            credit REAL,
+            debit REAL,
+            runningBalance REAL
           )
         ''');
 
@@ -292,6 +351,29 @@ class DBHelper {
             )
           ''');
         }
+        if (oldVersion < 4) {
+          await db.execute('''
+            CREATE TABLE suppliers(
+              id TEXT PRIMARY KEY,
+              name TEXT,
+              phone TEXT,
+              notes TEXT,
+              balance REAL
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE supplier_transactions(
+              id TEXT PRIMARY KEY,
+              supplierId TEXT,
+              type TEXT,
+              date TEXT,
+              credit REAL,
+              debit REAL,
+              runningBalance REAL
+            )
+          ''');
+        }
       },
     );
   }
@@ -333,6 +415,60 @@ class DBHelper {
   static Future<void> deleteCustomer(String id) async {
     final db = await database;
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ==================== الموردين وحساباتهم ====================
+  static Future<List<Supplier>> getAllSuppliers() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('suppliers');
+    return maps.map((m) => Supplier.fromMap(m)).toList();
+  }
+
+  static Future<void> saveSupplier(Supplier supplier) async {
+    final db = await database;
+    await db.insert('suppliers', supplier.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteSupplier(String id) async {
+    final db = await database;
+    await db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
+    await db.delete('supplier_transactions', where: 'supplierId = ?', whereArgs: [id]);
+  }
+
+  static Future<List<Map<String, dynamic>>> getSupplierStatement(String supplierId) async {
+    final db = await database;
+    return await db.query(
+      'supplier_transactions',
+      where: 'supplierId = ?',
+      whereArgs: [supplierId],
+      orderBy: 'date DESC',
+    );
+  }
+
+  static Future<void> addSupplierTransaction({
+    required String supplierId,
+    required String type,
+    required double credit,
+    required double debit,
+  }) async {
+    final db = await database;
+    final supList = await db.query('suppliers', where: 'id = ?', whereArgs: [supplierId]);
+    if (supList.isEmpty) return;
+
+    double currentBalance = (supList.first['balance'] as num).toDouble();
+    double newBalance = currentBalance + credit - debit;
+
+    await db.update('suppliers', {'balance': newBalance}, where: 'id = ?', whereArgs: [supplierId]);
+
+    await db.insert('supplier_transactions', {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'supplierId': supplierId,
+      'type': type,
+      'date': DateTime.now().toString().split('.')[0],
+      'credit': credit,
+      'debit': debit,
+      'runningBalance': newBalance,
+    });
   }
 
   // ==================== عمليات المجموعات (Categories) ====================
@@ -381,7 +517,7 @@ class DBHelper {
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
 
-  // تحديث كمية الصنف (سيتم استخدامها في البيع والمشتريات)
+  // تحديث كمية الصنف (في البيع والمشتريات)
   static Future<void> updateProductStock(String id, double deltaQuantity) async {
     final db = await database;
     await db.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [deltaQuantity, id]);
