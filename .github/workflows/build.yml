@@ -37,7 +37,8 @@ jobs:
         sed -i 's/minSdkVersion .*/minSdkVersion 21/g' android/app/build.gradle || true
 
     - name: Get Dependencies
-      run: flutter pub get
+      run: flutter pub upgrade
+      
 
     - name: Build Release APK
       run: flutter build apk --release --no-tree-shake-icons
