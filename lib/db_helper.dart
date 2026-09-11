@@ -49,7 +49,7 @@ class Customer {
   String name;
   String phone;
   String address;
-  double balance; // موجب = عليه دين، سالب = له مبلغ
+  double balance;
   String notes;
 
   Customer({
@@ -80,6 +80,88 @@ class Customer {
       address: map['address'] ?? '',
       balance: (map['balance'] as num).toDouble(),
       notes: map['notes'] ?? '',
+    );
+  }
+}
+
+// ==================== نموذج المجموعة (التصنيف) ====================
+class Category {
+  String id;
+  String name;
+  String colorHex; // كود اللون
+  bool isKitchenPrint; // طباعة للمطبخ
+  bool isActive; // نشط في نقطة البيع
+
+  Category({
+    required this.id,
+    required this.name,
+    this.colorHex = '0xFF2196F3',
+    this.isKitchenPrint = false,
+    this.isActive = true,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'colorHex': colorHex,
+      'isKitchenPrint': isKitchenPrint ? 1 : 0,
+      'isActive': isActive ? 1 : 0,
+    };
+  }
+
+  factory Category.fromMap(Map<String, dynamic> map) {
+    return Category(
+      id: map['id'],
+      name: map['name'],
+      colorHex: map['colorHex'] ?? '0xFF2196F3',
+      isKitchenPrint: map['isKitchenPrint'] == 1,
+      isActive: map['isActive'] == 1,
+    );
+  }
+}
+
+// ==================== نموذج الصنف (المنتج) ====================
+class Product {
+  String id;
+  String name;
+  String categoryId;
+  double purchasePrice;
+  double sellPrice;
+  double quantity;
+  bool isActive;
+
+  Product({
+    required this.id,
+    required this.name,
+    required this.categoryId,
+    this.purchasePrice = 0.0,
+    this.sellPrice = 0.0,
+    this.quantity = 0.0,
+    this.isActive = true,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'categoryId': categoryId,
+      'purchasePrice': purchasePrice,
+      'sellPrice': sellPrice,
+      'quantity': quantity,
+      'isActive': isActive ? 1 : 0,
+    };
+  }
+
+  factory Product.fromMap(Map<String, dynamic> map) {
+    return Product(
+      id: map['id'],
+      name: map['name'],
+      categoryId: map['categoryId'] ?? '',
+      purchasePrice: (map['purchasePrice'] as num).toDouble(),
+      sellPrice: (map['sellPrice'] as num).toDouble(),
+      quantity: (map['quantity'] as num).toDouble(),
+      isActive: map['isActive'] == 1,
     );
   }
 }
@@ -115,9 +197,8 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 2, // رفع الإصدار لإضافة جدول العملاء
+      version: 3, // التحديث للنسخة 3
       onCreate: (db, version) async {
-        // إنشاء جدول المستخدمين
         await db.execute('''
           CREATE TABLE users(
             id TEXT PRIMARY KEY,
@@ -129,7 +210,6 @@ class DBHelper {
           )
         ''');
 
-        // إنشاء جدول العملاء
         await db.execute('''
           CREATE TABLE customers(
             id TEXT PRIMARY KEY,
@@ -141,7 +221,28 @@ class DBHelper {
           )
         ''');
 
-        // إضافة المستخدمين الافتراضيين
+        await db.execute('''
+          CREATE TABLE categories(
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            colorHex TEXT,
+            isKitchenPrint INTEGER,
+            isActive INTEGER
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE products(
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            categoryId TEXT,
+            purchasePrice REAL,
+            sellPrice REAL,
+            quantity REAL,
+            isActive INTEGER
+          )
+        ''');
+
         final allPerms = {for (var m in allModules) m: true};
         final cashierPerms = {
           for (var m in allModules) m: (m == 'نقطة البيع' || m == 'إغلاق الصندوق / الوردية')
@@ -168,12 +269,34 @@ class DBHelper {
             )
           ''');
         }
+        if (oldVersion < 3) {
+          await db.execute('''
+            CREATE TABLE categories(
+              id TEXT PRIMARY KEY,
+              name TEXT,
+              colorHex TEXT,
+              isKitchenPrint INTEGER,
+              isActive INTEGER
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE products(
+              id TEXT PRIMARY KEY,
+              name TEXT,
+              categoryId TEXT,
+              purchasePrice REAL,
+              sellPrice REAL,
+              quantity REAL,
+              isActive INTEGER
+            )
+          ''');
+        }
       },
     );
   }
 
-  // ==================== عمليات المستخدمين ====================
-
+  // ==================== المستخدمين والعملاء ====================
   static Future<List<AppUser>> getAllUsers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('users');
@@ -196,8 +319,6 @@ class DBHelper {
     await db.delete('users', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ==================== عمليات العملاء ====================
-
   static Future<List<Customer>> getAllCustomers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('customers');
@@ -212,5 +333,57 @@ class DBHelper {
   static Future<void> deleteCustomer(String id) async {
     final db = await database;
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ==================== عمليات المجموعات (Categories) ====================
+  static Future<List<Category>> getAllCategories() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('categories');
+    return maps.map((m) => Category.fromMap(m)).toList();
+  }
+
+  static Future<List<Category>> getActivePOSCategories() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('categories', where: 'isActive = ?', whereArgs: [1]);
+    return maps.map((m) => Category.fromMap(m)).toList();
+  }
+
+  static Future<void> saveCategory(Category category) async {
+    final db = await database;
+    await db.insert('categories', category.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteCategory(String id) async {
+    final db = await database;
+    await db.delete('categories', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ==================== عمليات الأصناف (Products) ====================
+  static Future<List<Product>> getAllProducts() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('products');
+    return maps.map((m) => Product.fromMap(m)).toList();
+  }
+
+  static Future<List<Product>> getActivePOSProducts() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('products', where: 'isActive = ?', whereArgs: [1]);
+    return maps.map((m) => Product.fromMap(m)).toList();
+  }
+
+  static Future<void> saveProduct(Product product) async {
+    final db = await database;
+    await db.insert('products', product.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteProduct(String id) async {
+    final db = await database;
+    await db.delete('products', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // تحديث كمية الصنف (سيتم استخدامها في البيع والمشتريات)
+  static Future<void> updateProductStock(String id, double deltaQuantity) async {
+    final db = await database;
+    await db.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [deltaQuantity, id]);
   }
 }
