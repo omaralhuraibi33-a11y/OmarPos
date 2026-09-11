@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 // ==================== نموذج المستخدم ====================
@@ -203,6 +205,47 @@ class Product {
   }
 }
 
+// ==================== نموذج الطابعة ====================
+class PrinterModel {
+  String id;
+  String name;
+  String type; // مطبخ / زبون
+  String connectionType; // بلوتوث / واي فاي
+  String paperSize; // 80mm / 58mm
+  bool autoPrint;
+
+  PrinterModel({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.connectionType,
+    required this.paperSize,
+    this.autoPrint = false,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'type': type,
+      'connectionType': connectionType,
+      'paperSize': paperSize,
+      'autoPrint': autoPrint ? 1 : 0,
+    };
+  }
+
+  factory PrinterModel.fromMap(Map<String, dynamic> map) {
+    return PrinterModel(
+      id: map['id'],
+      name: map['name'],
+      type: map['type'],
+      connectionType: map['connectionType'],
+      paperSize: map['paperSize'],
+      autoPrint: map['autoPrint'] == 1,
+    );
+  }
+}
+
 // ==================== مدير قاعدة البيانات ====================
 class DBHelper {
   static Database? _db;
@@ -223,7 +266,7 @@ class DBHelper {
   ];
 
   static Future<Database> get database async {
-    if (_db != null) return _db!;
+    if (_db != null && _db!.isOpen) return _db!;
     _db = await _initDB();
     return _db!;
   }
@@ -234,7 +277,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 4, // التحديث للنسخة 4 لدعم جدول الموردين
+      version: 5, // التحديث للنسخة 5 لدعم جداول الإعدادات والطابعات والصناديق
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -299,6 +342,47 @@ class DBHelper {
             credit REAL,
             debit REAL,
             runningBalance REAL
+          )
+        ''');
+
+        // جداول الإعدادات الجديدة
+        await db.execute('''
+          CREATE TABLE settings(
+            key TEXT PRIMARY KEY,
+            value TEXT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE printers(
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            type TEXT,
+            connectionType TEXT,
+            paperSize TEXT,
+            autoPrint INTEGER
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE prep_notes(
+            id TEXT PRIMARY KEY,
+            note TEXT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE payment_methods(
+            id TEXT PRIMARY KEY,
+            name TEXT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE cash_boxes(
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            isMain INTEGER
           )
         ''');
 
@@ -371,6 +455,47 @@ class DBHelper {
               credit REAL,
               debit REAL,
               runningBalance REAL
+            )
+          ''');
+        }
+        if (oldVersion < 5) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS settings(
+              key TEXT PRIMARY KEY,
+              value TEXT
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS printers(
+              id TEXT PRIMARY KEY,
+              name TEXT,
+              type TEXT,
+              connectionType TEXT,
+              paperSize TEXT,
+              autoPrint INTEGER
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS prep_notes(
+              id TEXT PRIMARY KEY,
+              note TEXT
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS payment_methods(
+              id TEXT PRIMARY KEY,
+              name TEXT
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS cash_boxes(
+              id TEXT PRIMARY KEY,
+              name TEXT,
+              isMain INTEGER
             )
           ''');
         }
@@ -517,9 +642,188 @@ class DBHelper {
     await db.delete('products', where: 'id = ?', whereArgs: [id]);
   }
 
-  // تحديث كمية الصنف (في البيع والمشتريات)
   static Future<void> updateProductStock(String id, double deltaQuantity) async {
     final db = await database;
     await db.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [deltaQuantity, id]);
+  }
+
+  // ==================== إعدادات النظام العامـة ====================
+  static Future<void> saveSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<String?> getSetting(String key, {String? defaultValue}) async {
+    final db = await database;
+    final res = await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    if (res.isNotEmpty) {
+      return res.first['value'] as String?;
+    }
+    return defaultValue;
+  }
+
+  // ==================== إدارة الطابعات ====================
+  static Future<List<PrinterModel>> getAllPrinters() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('printers');
+    return maps.map((m) => PrinterModel.fromMap(m)).toList();
+  }
+
+  static Future<void> savePrinter(PrinterModel printer) async {
+    final db = await database;
+    await db.insert('printers', printer.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deletePrinter(String id) async {
+    final db = await database;
+    await db.delete('printers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ==================== ملاحظات التحضير السريعة ====================
+  static Future<List<String>> getPrepNotes() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('prep_notes');
+    if (maps.isEmpty) {
+      final defaults = ['بدون شطة', 'زيادة بهارات', 'سفري', 'محلي'];
+      for (var note in defaults) {
+        await addPrepNote(note);
+      }
+      return defaults;
+    }
+    return maps.map((m) => m['note'] as String).toList();
+  }
+
+  static Future<void> addPrepNote(String note) async {
+    final db = await database;
+    await db.insert('prep_notes', {
+      'id': '${DateTime.now().millisecondsSinceEpoch}_${note.hashCode}',
+      'note': note,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  static Future<void> deletePrepNote(String note) async {
+    final db = await database;
+    await db.delete('prep_notes', where: 'note = ?', whereArgs: [note]);
+  }
+
+  // ==================== إدارة طرق الدفع ====================
+  static Future<List<String>> getPaymentMethods() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('payment_methods');
+    if (maps.isEmpty) {
+      await addPaymentMethod('نقدي');
+      await addPaymentMethod('آجل');
+      return ['نقدي', 'آجل'];
+    }
+    return maps.map((m) => m['name'] as String).toList();
+  }
+
+  static Future<void> addPaymentMethod(String name) async {
+    final db = await database;
+    await db.insert('payment_methods', {
+      'id': '${DateTime.now().millisecondsSinceEpoch}_${name.hashCode}',
+      'name': name,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  static Future<void> deletePaymentMethod(String name) async {
+    final db = await database;
+    await db.delete('payment_methods', where: 'name = ?', whereArgs: [name]);
+  }
+
+  // ==================== إدارة الصناديق ====================
+  static Future<List<String>> getCashBoxes() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('cash_boxes');
+    if (maps.isEmpty) {
+      await addCashBox('الصندوق الرئيسي', isMain: true);
+      await addCashBox('صندوق المبيعات', isMain: false);
+      return ['الصندوق الرئيسي', 'صندوق المبيعات'];
+    }
+    return maps.map((m) => m['name'] as String).toList();
+  }
+
+  static Future<void> addCashBox(String name, {bool isMain = false}) async {
+    final db = await database;
+    await db.insert('cash_boxes', {
+      'id': '${DateTime.now().millisecondsSinceEpoch}_${name.hashCode}',
+      'name': name,
+      'isMain': isMain ? 1 : 0,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  static Future<void> deleteCashBox(String name) async {
+    final db = await database;
+    await db.delete('cash_boxes', where: 'name = ?', whereArgs: [name]);
+  }
+
+  // ==================== مسح البيانات الحساسة ====================
+
+  // 1) حذف كافة الحسابات (عملاء + موردين + حركات مالية)
+  static Future<void> clearAllAccountsData() async {
+    final db = await database;
+    await db.delete('suppliers');
+    await db.delete('supplier_transactions');
+    await db.delete('customers');
+  }
+
+  // 2) حذف كل المجموعات والأصناف
+  static Future<void> clearCategoriesAndProducts() async {
+    final db = await database;
+    await db.delete('products');
+    await db.delete('categories');
+  }
+
+  // 3) حذف الأصناف فقط
+  static Future<void> clearProductsOnly() async {
+    final db = await database;
+    await db.delete('products');
+  }
+
+  // ==================== النسخ الاحتياطي والاستعادة ====================
+  static Future<void> closeDatabase() async {
+    if (_db != null && _db!.isOpen) {
+      await _db!.close();
+      _db = null;
+    }
+  }
+
+  static Future<String> createBackup() async {
+    final dbPath = await getDatabasesPath();
+    final pathName = join(dbPath, 'omar_pos.db');
+
+    final appDocDir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+    final backupDir = Directory('${appDocDir.path}/Backups');
+    if (!await backupDir.exists()) {
+      await backupDir.create(recursive: true);
+    }
+
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final backupPath = '${backupDir.path}/backup_$timestamp.db';
+
+    final dbFile = File(pathName);
+    if (await dbFile.exists()) {
+      await dbFile.copy(backupPath);
+      return backupPath;
+    } else {
+      throw Exception("ملف قاعدة البيانات غير موجود");
+    }
+  }
+
+  static Future<void> restoreBackup(String backupFilePath) async {
+    final dbPath = await getDatabasesPath();
+    final pathName = join(dbPath, 'omar_pos.db');
+
+    final backupFile = File(backupFilePath);
+    if (await backupFile.exists()) {
+      await closeDatabase();
+      await backupFile.copy(pathName);
+    } else {
+      throw Exception("ملف النسخة الاحتياطية غير صالح");
+    }
   }
 }
