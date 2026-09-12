@@ -86,6 +86,108 @@ class Customer {
   }
 }
 
+// ==================== نموذج حركة العميل ====================
+class CustomerTransaction {
+  String id;
+  String customerId;
+  String type; // 'سند قبض' أو 'سند صرف' أو 'فاتورة'
+  String date;
+  double credit; // له (دائن)
+  double debit;  // عليه (مدين)
+  double runningBalance;
+  String? notes;
+
+  CustomerTransaction({
+    required this.id,
+    required this.customerId,
+    required this.type,
+    required this.date,
+    this.credit = 0.0,
+    this.debit = 0.0,
+    required this.runningBalance,
+    this.notes,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'customerId': customerId,
+      'type': type,
+      'date': date,
+      'credit': credit,
+      'debit': debit,
+      'runningBalance': runningBalance,
+      'notes': notes ?? '',
+    };
+  }
+
+  factory CustomerTransaction.fromMap(Map<String, dynamic> map) {
+    return CustomerTransaction(
+      id: map['id'],
+      customerId: map['customerId'],
+      type: map['type'],
+      date: map['date'],
+      credit: (map['credit'] as num).toDouble(),
+      debit: (map['debit'] as num).toDouble(),
+      runningBalance: (map['runningBalance'] as num).toDouble(),
+      notes: map['notes'],
+    );
+  }
+}
+
+// ==================== نموذج السندات والمصروفات ====================
+class Voucher {
+  String id;
+  String voucherType; // 'receipt' (قبض) أو 'payment' (صرف) أو 'expense' (مصروف)
+  String targetType;  // 'customer' أو 'supplier' أو 'general'
+  String? targetId;   // معرف العميل أو المورد
+  String? targetName; // اسم الجهة أو اسم المصروف
+  double amount;
+  String date;
+  String paymentMethod;
+  String notes;
+
+  Voucher({
+    required this.id,
+    required this.voucherType,
+    required this.targetType,
+    this.targetId,
+    this.targetName,
+    required this.amount,
+    required this.date,
+    this.paymentMethod = 'نقدي',
+    this.notes = '',
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'voucherType': voucherType,
+      'targetType': targetType,
+      'targetId': targetId,
+      'targetName': targetName,
+      'amount': amount,
+      'date': date,
+      'paymentMethod': paymentMethod,
+      'notes': notes,
+    };
+  }
+
+  factory Voucher.fromMap(Map<String, dynamic> map) {
+    return Voucher(
+      id: map['id'],
+      voucherType: map['voucherType'],
+      targetType: map['targetType'],
+      targetId: map['targetId'],
+      targetName: map['targetName'],
+      amount: (map['amount'] as num).toDouble(),
+      date: map['date'],
+      paymentMethod: map['paymentMethod'] ?? 'نقدي',
+      notes: map['notes'] ?? '',
+    );
+  }
+}
+
 // ==================== نموذج المورد ====================
 class Supplier {
   String id;
@@ -236,7 +338,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -256,6 +358,33 @@ class DBHelper {
             phone TEXT,
             address TEXT,
             balance REAL,
+            notes TEXT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE customer_transactions(
+            id TEXT PRIMARY KEY,
+            customerId TEXT,
+            type TEXT,
+            date TEXT,
+            credit REAL,
+            debit REAL,
+            runningBalance REAL,
+            notes TEXT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE vouchers(
+            id TEXT PRIMARY KEY,
+            voucherType TEXT,
+            targetType TEXT,
+            targetId TEXT,
+            targetName TEXT,
+            amount REAL,
+            date TEXT,
+            paymentMethod TEXT,
             notes TEXT
           )
         ''');
@@ -360,7 +489,7 @@ class DBHelper {
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await db.execute('''
-            CREATE TABLE customers(
+            CREATE TABLE IF NOT EXISTS customers(
               id TEXT PRIMARY KEY,
               name TEXT,
               phone TEXT,
@@ -372,7 +501,7 @@ class DBHelper {
         }
         if (oldVersion < 3) {
           await db.execute('''
-            CREATE TABLE categories(
+            CREATE TABLE IF NOT EXISTS categories(
               id TEXT PRIMARY KEY,
               name TEXT,
               colorHex TEXT,
@@ -382,7 +511,7 @@ class DBHelper {
           ''');
 
           await db.execute('''
-            CREATE TABLE products(
+            CREATE TABLE IF NOT EXISTS products(
               id TEXT PRIMARY KEY,
               name TEXT,
               categoryId TEXT,
@@ -395,7 +524,7 @@ class DBHelper {
         }
         if (oldVersion < 4) {
           await db.execute('''
-            CREATE TABLE suppliers(
+            CREATE TABLE IF NOT EXISTS suppliers(
               id TEXT PRIMARY KEY,
               name TEXT,
               phone TEXT,
@@ -405,7 +534,7 @@ class DBHelper {
           ''');
 
           await db.execute('''
-            CREATE TABLE supplier_transactions(
+            CREATE TABLE IF NOT EXISTS supplier_transactions(
               id TEXT PRIMARY KEY,
               supplierId TEXT,
               type TEXT,
@@ -457,6 +586,34 @@ class DBHelper {
             )
           ''');
         }
+        if (oldVersion < 6) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS customer_transactions(
+              id TEXT PRIMARY KEY,
+              customerId TEXT,
+              type TEXT,
+              date TEXT,
+              credit REAL,
+              debit REAL,
+              runningBalance REAL,
+              notes TEXT
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS vouchers(
+              id TEXT PRIMARY KEY,
+              voucherType TEXT,
+              targetType TEXT,
+              targetId TEXT,
+              targetName TEXT,
+              amount REAL,
+              date TEXT,
+              paymentMethod TEXT,
+              notes TEXT
+            )
+          ''');
+        }
       },
     );
   }
@@ -498,6 +655,108 @@ class DBHelper {
   static Future<void> deleteCustomer(String id) async {
     final db = await database;
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+    await db.delete('customer_transactions', where: 'customerId = ?', whereArgs: [id]);
+  }
+
+  // ==================== حركات وسندات العملاء ====================
+  static Future<List<CustomerTransaction>> getCustomerTransactions(String customerId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'customer_transactions',
+      where: 'customerId = ?',
+      whereArgs: [customerId],
+      orderBy: 'date DESC',
+    );
+    return maps.map((m) => CustomerTransaction.fromMap(m)).toList();
+  }
+
+  static Future<void> addCustomerTransaction({
+    required String customerId,
+    required String type,
+    required double credit,
+    required double debit,
+    String? date,
+    String? notes,
+  }) async {
+    final db = await database;
+    final cust = await db.query('customers', where: 'id = ?', whereArgs: [customerId]);
+    if (cust.isEmpty) return;
+
+    double currentBalance = (cust.first['balance'] as num).toDouble();
+    // الرصيد الموجب = دين على العميل. القبض (credit) ينقص الدين، والصرف/البيع (debit) يزيد الدين.
+    double newBalance = currentBalance + debit - credit;
+
+    await db.update('customers', {'balance': newBalance}, where: 'id = ?', whereArgs: [customerId]);
+
+    await db.insert('customer_transactions', {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'customerId': customerId,
+      'type': type,
+      'date': date ?? DateTime.now().toString().split('.')[0],
+      'credit': credit,
+      'debit': debit,
+      'runningBalance': newBalance,
+      'notes': notes ?? '',
+    });
+  }
+
+  // ==================== إدارة السندات (قبض / صرف / مصروفات) ====================
+  static Future<void> addVoucher(Voucher voucher) async {
+    final db = await database;
+
+    // 1. حفظ السند
+    await db.insert('vouchers', voucher.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+
+    // 2. معالجة التأثير المالي بحسب نوع السند والجهة
+    if (voucher.targetType == 'customer' && voucher.targetId != null) {
+      if (voucher.voucherType == 'receipt') {
+        // سند قبض من عميل -> تسديد دين (دائن)
+        await addCustomerTransaction(
+          customerId: voucher.targetId!,
+          type: 'سند قبض',
+          credit: voucher.amount,
+          debit: 0.0,
+          date: voucher.date,
+          notes: voucher.notes,
+        );
+      } else if (voucher.voucherType == 'payment') {
+        // سند صرف لعميل -> إرجاع مالي أو زيادة دين (مدين)
+        await addCustomerTransaction(
+          customerId: voucher.targetId!,
+          type: 'سند صرف',
+          credit: 0.0,
+          debit: voucher.amount,
+          date: voucher.date,
+          notes: voucher.notes,
+        );
+      }
+    } else if (voucher.targetType == 'supplier' && voucher.targetId != null) {
+      if (voucher.voucherType == 'payment') {
+        // سند صرف لمورد -> تسديد مستحقات المورد
+        await addSupplierTransaction(
+          supplierId: voucher.targetId!,
+          type: 'سند صرف',
+          credit: 0.0,
+          debit: voucher.amount,
+          date: voucher.date,
+        );
+      } else if (voucher.voucherType == 'receipt') {
+        // سند قبض من مورد
+        await addSupplierTransaction(
+          supplierId: voucher.targetId!,
+          type: 'سند قبض',
+          credit: voucher.amount,
+          debit: 0.0,
+          date: voucher.date,
+        );
+      }
+    }
+  }
+
+  static Future<List<Voucher>> getAllVouchers() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('vouchers', orderBy: 'date DESC');
+    return maps.map((m) => Voucher.fromMap(m)).toList();
   }
 
   // ==================== الموردين وحساباتهم ====================
@@ -528,7 +787,6 @@ class DBHelper {
     );
   }
 
-  // أضيف هنا المعامل date الاختياري لحل خطأ شاشة المشتريات
   static Future<void> addSupplierTransaction({
     required String supplierId,
     required String type,
@@ -651,6 +909,8 @@ class DBHelper {
     await db.delete('suppliers');
     await db.delete('supplier_transactions');
     await db.delete('customers');
+    await db.delete('customer_transactions');
+    await db.delete('vouchers');
   }
 
   static Future<void> clearCategoriesAndProducts() async {
