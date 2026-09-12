@@ -17,12 +17,19 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   void _showPrinterDialog({Map<String, dynamic>? printerToEdit, int? editIndex}) {
     final nameCtrl = TextEditingController(text: printerToEdit?['name'] ?? '');
     final ipCtrl = TextEditingController(text: printerToEdit?['ip'] ?? '');
+    final macCtrl = TextEditingController(text: printerToEdit?['macAddress'] ?? '');
+    
     String connection = printerToEdit?['connection'] ?? 'بلوتوث';
     String usage = printerToEdit?['usage'] ?? 'زبون';
     String paperSize = printerToEdit?['paperSize'] ?? '80';
     String selectedBtDevice = printerToEdit?['btDevice'] ?? '';
 
-    List<String> pairedBtDevices = ['BT-Printer-01 (AA:BB:CC)', 'POS-Thermal-58 (12:34:56)', 'RP-80-Printer (99:88:77)'];
+    // قائمة الأجهزة المقترنة مع عناوين MAC الخاصة بها
+    List<Map<String, String>> pairedBtDevices = [
+      {'name': 'BT-Printer-01', 'mac': '00:11:22:33:44:55'},
+      {'name': 'POS-Thermal-58', 'mac': 'AA:BB:CC:DD:EE:FF'},
+      {'name': 'RP-80-Printer', 'mac': '99:88:77:66:55:44'},
+    ];
 
     showDialog(
       context: context,
@@ -47,19 +54,75 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     items: ['بلوتوث', 'واي فاي'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                     onChanged: (val) => setDlgState(() => connection = val!),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
+                  
+                  // الإضافات الخاصة بالبلوتوث
                   if (connection == 'بلوتوث') ...[
-                    DropdownButtonFormField<String>(
-                      value: selectedBtDevice.isNotEmpty && pairedBtDevices.contains(selectedBtDevice) ? selectedBtDevice : null,
-                      hint: const Text('اختر طابعة من أجهزة الجوال المقترنة'),
-                      decoration: const InputDecoration(labelText: 'الطابعات المقترنة بالجهاز'),
-                      items: pairedBtDevices.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: (val) {
-                        setDlgState(() {
-                          selectedBtDevice = val!;
-                          if (nameCtrl.text.isEmpty) nameCtrl.text = val.split(' ').first;
-                        });
-                      },
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigo,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.bluetooth_searching),
+                        label: const Text('البحث عن الأجهزة المقترنة (Bluetooth)'),
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            builder: (bContext) {
+                              return Container(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'اختر طابعة من أجهزة البلوتوث المقترنة:',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    ),
+                                    const Divider(),
+                                    Expanded(
+                                      child: ListView.builder(
+                                        shrinkWrap: true,
+                                        itemCount: pairedBtDevices.length,
+                                        itemBuilder: (context, idx) {
+                                          final dev = pairedBtDevices[idx];
+                                          return ListTile(
+                                            leading: const Icon(Icons.print, color: Colors.blue),
+                                            title: Text(dev['name']!),
+                                            subtitle: Text('MAC: ${dev['mac']}'),
+                                            onTap: () {
+                                              setDlgState(() {
+                                                selectedBtDevice = dev['name']!;
+                                                macCtrl.text = dev['mac']!;
+                                                if (nameCtrl.text.isEmpty) {
+                                                  nameCtrl.text = dev['name']!;
+                                                }
+                                              });
+                                              Navigator.pop(bContext);
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: macCtrl,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'عنوان MAC للبلوتوث (ينضاف تلقائياً)',
+                        prefixIcon: Icon(Icons.pin, color: Colors.indigo),
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ] else ...[
                     TextField(
@@ -92,6 +155,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     'usage': usage,
                     'paperSize': paperSize,
                     'btDevice': selectedBtDevice,
+                    'macAddress': macCtrl.text.trim(),
                     'ip': ipCtrl.text.trim(),
                   };
                   setState(() {
@@ -185,7 +249,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                           color: isSelected ? Colors.blue : Colors.grey,
                         ),
                         title: Text('${p['name']} (${p['usage']})', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('الاتصال: ${p['connection']} | المقاس: ${p['paperSize']}mm'),
+                        subtitle: Text(
+                          p['connection'] == 'بلوتوث'
+                              ? 'الاتصال: بلوتوث (${p['macAddress']}) | المقاس: ${p['paperSize']}mm'
+                              : 'الاتصال: IP (${p['ip']}) | المقاس: ${p['paperSize']}mm',
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
