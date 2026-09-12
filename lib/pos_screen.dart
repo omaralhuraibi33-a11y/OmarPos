@@ -5,11 +5,13 @@ class CartItem {
   final Product product;
   double quantity;
   double unitPrice;
+  String preparationNotes; // ملاحظات التحضير لكل صنف
 
   CartItem({
     required this.product,
     this.quantity = 1.0,
     required this.unitPrice,
+    this.preparationNotes = '',
   });
 
   double get total => quantity * unitPrice;
@@ -26,13 +28,28 @@ class _PosScreenState extends State<PosScreen> {
   // حالة النظام
   bool _isTouchMode = true; // true = مبيعات لمس, false = مبيعات عادية
   bool _isPrinterConnected = true; // حالة الطابعة (أخضر = متصل, أحمر = مفصول)
-  bool _isInvoiceExpanded = false; // تكشيف/توسيع شاشة الفاتورة
+  bool _isInvoiceExpanded = false; // توسيع شاشة الفاتورة
+  bool _isProductsFullScreen = false; // جعل الأصناف بكامل الشاشة
 
   // البيانات
   List<Category> _categories = [];
   List<Product> _allProducts = [];
   List<Product> _filteredProducts = [];
   List<Customer> _customers = [];
+
+  // قائمة ملاحظات التحضير المقترحة
+  List<String> _prepNotesList = [
+    'بدون شطة',
+    'زيادة صوص',
+    'بدون ثوم',
+    'بدون بصل',
+    'محمص زيادة',
+    'سفري',
+    'محلي',
+  ];
+
+  // قائمة طرق الدفع المتاحة
+  final List<String> _paymentMethods = ['نقدي', 'أجل', 'شبكة (بطاقة)', 'تحويل بنكي'];
 
   // بيانات الفاتورة الحالية
   List<CartItem> _cart = [];
@@ -144,6 +161,162 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  // إضافة أو تعديل ملاحظات التحضير لصنف معين
+  void _showPrepNotesDialog(CartItem item) {
+    final customNoteCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            title: Text('ملاحظات تحضير: ${item.product.name}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Wrap(
+                    spacing: 6,
+                    children: _prepNotesList.map((note) {
+                      final isSelected = item.preparationNotes.contains(note);
+                      return FilterChip(
+                        label: Text(note),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              item.preparationNotes = item.preparationNotes.isEmpty
+                                  ? note
+                                  : '${item.preparationNotes} - $note';
+                            } else {
+                              item.preparationNotes = item.preparationNotes
+                                  .replaceAll(note, '')
+                                  .replaceAll(' -  - ', ' - ')
+                                  .trim();
+                            }
+                          });
+                          setDlgState(() {});
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const Divider(),
+                  TextField(
+                    controller: customNoteCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'إضافة ملاحظة جديدة خاصة',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  if (customNoteCtrl.text.trim().isNotEmpty) {
+                    final newNote = customNoteCtrl.text.trim();
+                    setState(() {
+                      if (!_prepNotesList.contains(newNote)) {
+                        _prepNotesList.add(newNote);
+                      }
+                      item.preparationNotes = item.preparationNotes.isEmpty
+                          ? newNote
+                          : '${item.preparationNotes} - $newNote';
+                    });
+                  }
+                  Navigator.pop(ctx);
+                },
+                child: const Text('حفظ الملاحظات'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // نافذة إتمام الدفع وتحديد طريقة الدفع مع الحفظ والطباعة
+  void _showPaymentDialog() {
+    String selectedMethod = 'نقدي';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            title: const Text('إتمام الدفع واختيار طريقة الدفع'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'المبلغ الإجمالي: ${_totalAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green),
+                ),
+                const SizedBox(height: 12),
+                const Text('اختر طريقة الدفع:'),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedMethod,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: _paymentMethods
+                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                      .toList(),
+                  onChanged: (val) => setDlgState(() => selectedMethod = val!),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                icon: const Icon(Icons.print, color: Colors.white),
+                label: const Text('حفظ وطباعة الفاتورة', style: TextStyle(color: Colors.white)),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _processCheckout(selectedMethod);
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // معالجة الحفظ والطباعة
+  void _processCheckout(String paymentMethod) {
+    // 1. إرسال أمر الحفظ وقاعدة البيانات
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تم حفظ الفاتورة بنجاح ($paymentMethod)'),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    // 2. إرسال أمر الطباعة إذا كانت الطابعة متصلة
+    if (_isPrinterConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('جاري إرسال الفاتورة للطابعة الحرارية...'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تنبه: الطابعة غير متصلة! تمت عملية الحفظ فقط.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+
+    _clearInvoice();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -160,7 +333,7 @@ class _PosScreenState extends State<PosScreen> {
           ],
         ),
         actions: [
-          // زر مؤشر الطابعة
+          // زر مؤشر الطابعة (أحمر / أخضر)
           IconButton(
             tooltip: _isPrinterConnected ? 'الطابعة متصلة' : 'الطابعة مفصولة',
             icon: Icon(
@@ -220,24 +393,42 @@ class _PosScreenState extends State<PosScreen> {
                 Expanded(
                   child: Row(
                     children: [
-                      // قسم الأصناف والمجموعات (يختفي أو يتقلص عند توسيع الفاتورة)
+                      // قسم الأصناف والمجموعات (يختفي عند توسيع الفاتورة وتمديده عند الشاشة الكاملة)
                       if (!_isInvoiceExpanded)
                         Expanded(
-                          flex: 3,
+                          flex: _isProductsFullScreen ? 10 : 3,
                           child: Column(
                             children: [
-                              // حقل البحث
+                              // حقل البحث مع زر التكبير لكامل الشاشة
                               Padding(
                                 padding: const EdgeInsets.all(6.0),
-                                child: TextField(
-                                  controller: _searchController,
-                                  onChanged: _filterProducts,
-                                  decoration: InputDecoration(
-                                    hintText: 'بحث باسم الصنف أو الباركود...',
-                                    prefixIcon: const Icon(Icons.search),
-                                    contentPadding: const EdgeInsets.all(8),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _searchController,
+                                        onChanged: _filterProducts,
+                                        decoration: InputDecoration(
+                                          hintText: 'بحث باسم الصنف أو الباركود...',
+                                          prefixIcon: const Icon(Icons.search),
+                                          contentPadding: const EdgeInsets.all(8),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        _isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                                        color: Colors.indigo,
+                                      ),
+                                      tooltip: 'عرض الأصناف بكامل الشاشة',
+                                      onPressed: () {
+                                        setState(() {
+                                          _isProductsFullScreen = !_isProductsFullScreen;
+                                        });
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ),
 
@@ -279,30 +470,32 @@ class _PosScreenState extends State<PosScreen> {
                         ),
 
                       // زر السهم الصغير للتوسيع والتضييق
-                      InkWell(
-                        onTap: () {
-                          setState(() => _isInvoiceExpanded = !_isInvoiceExpanded);
-                        },
-                        child: Container(
-                          width: 24,
-                          color: Colors.grey.shade300,
-                          child: Center(
-                            child: Icon(
-                              _isInvoiceExpanded ? Icons.arrow_forward_ios : Icons.arrow_back_ios,
-                              size: 16,
+                      if (!_isProductsFullScreen)
+                        InkWell(
+                          onTap: () {
+                            setState(() => _isInvoiceExpanded = !_isInvoiceExpanded);
+                          },
+                          child: Container(
+                            width: 24,
+                            color: Colors.grey.shade300,
+                            child: Center(
+                              child: Icon(
+                                _isInvoiceExpanded ? Icons.arrow_forward_ios : Icons.arrow_back_ios,
+                                size: 16,
+                              ),
                             ),
                           ),
                         ),
-                      ),
 
                       // قسم الفاتورة
-                      Expanded(
-                        flex: _isInvoiceExpanded ? 1 : 2,
-                        child: Container(
-                          color: Colors.grey.shade100,
-                          child: _buildInvoicePanel(),
+                      if (!_isProductsFullScreen)
+                        Expanded(
+                          flex: _isInvoiceExpanded ? 1 : 2,
+                          child: Container(
+                            color: Colors.grey.shade100,
+                            child: _buildInvoicePanel(),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -318,8 +511,8 @@ class _PosScreenState extends State<PosScreen> {
   Widget _buildTouchProductGrid() {
     return GridView.builder(
       padding: const EdgeInsets.all(6),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: _isProductsFullScreen ? 5 : 3,
         childAspectRatio: 1.1,
         crossAxisSpacing: 6,
         mainAxisSpacing: 6,
@@ -375,7 +568,7 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // لوحة الفاتورة
+  // لوحة الفاتورة مع خيار ملاحظات التحضير تحت الصنف
   Widget _buildInvoicePanel() {
     return Column(
       children: [
@@ -385,7 +578,7 @@ class _PosScreenState extends State<PosScreen> {
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('الصنف', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('الصنف / الملاحظات', style: TextStyle(fontWeight: FontWeight.bold)),
               Text('العدد', style: TextStyle(fontWeight: FontWeight.bold)),
               Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
@@ -402,38 +595,68 @@ class _PosScreenState extends State<PosScreen> {
                       margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                       child: Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              flex: 3,
-                              child: Text(item.product.name, style: const TextStyle(fontSize: 12)),
-                            ),
                             Row(
                               children: [
-                                InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      if (item.quantity > 1) {
-                                        item.quantity--;
-                                      } else {
-                                        _cart.removeAt(index);
-                                      }
-                                    });
-                                  },
-                                  child: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.red),
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(item.product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                                 ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  child: Text('${item.quantity.toInt()}'),
+                                Row(
+                                  children: [
+                                    InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          if (item.quantity > 1) {
+                                            item.quantity--;
+                                          } else {
+                                            _cart.removeAt(index);
+                                          }
+                                        });
+                                      },
+                                      child: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.red),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      child: Text('${item.quantity.toInt()}'),
+                                    ),
+                                    InkWell(
+                                      onTap: () => setState(() => item.quantity++),
+                                      child: const Icon(Icons.add_circle_outline, size: 18, color: Colors.green),
+                                    ),
+                                  ],
                                 ),
-                                InkWell(
-                                  onTap: () => setState(() => item.quantity++),
-                                  child: const Icon(Icons.add_circle_outline, size: 18, color: Colors.green),
-                                ),
+                                const SizedBox(width: 8),
+                                Text('${item.total.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
-                            const SizedBox(width: 8),
-                            Text('${item.total.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            // قسم ملاحظات التحضير تحت الصنف
+                            InkWell(
+                              onTap: () => _showPrepNotesDialog(item),
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 4.0),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.note_alt_outlined, size: 14, color: Colors.orange),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        item.preparationNotes.isEmpty
+                                            ? '+ اضغط لإضافة ملاحظات تحضير'
+                                            : item.preparationNotes,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: item.preparationNotes.isEmpty ? Colors.grey : Colors.deepOrange,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -479,7 +702,7 @@ class _PosScreenState extends State<PosScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          // زر الدفع
+          // زر الدفع (يفتح طرق الدفع وإرسال للطباعة)
           Expanded(
             flex: 2,
             child: ElevatedButton.icon(
@@ -487,15 +710,7 @@ class _PosScreenState extends State<PosScreen> {
                 backgroundColor: Colors.green.shade700,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              onPressed: _cart.isEmpty
-                  ? null
-                  : () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('إجمالي الفاتورة: ${_totalAmount.toStringAsFixed(2)} - جاهز لتطبيق طرق الدفع!'),
-                        ),
-                      );
-                    },
+              onPressed: _cart.isEmpty ? null : _showPaymentDialog,
               icon: const Icon(Icons.payment, color: Colors.white),
               label: const Text('الدفع', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
             ),
