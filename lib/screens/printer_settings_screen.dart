@@ -50,7 +50,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // الإضافات الخاصة بالبلوتوث الفعلية من النظام
+                  // جلب الأجهزة المقترنة الفعلية من بلوتوث النظام
                   if (connection == 'بلوتوث') ...[
                     SizedBox(
                       width: double.infinity,
@@ -62,8 +62,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         icon: const Icon(Icons.bluetooth_searching),
                         label: const Text('البحث عن الأجهزة المقترنة (Bluetooth)'),
                         onPressed: () async {
-                          // جلب الأجهزة المقترنة حقيقياً من الجوال
-                          final List<BluetoothInfo> pairedBtDevices = await PrintBluetoothThermal.pairedBluetooth;
+                          // التصحيح الأساسي هنا: pairedBluetooths مع حرف s في النهاية
+                          final List<BluetoothInfo> pairedBtDevices = await PrintBluetoothThermal.pairedBluetooths;
                           
                           if (!context.mounted) return;
 
