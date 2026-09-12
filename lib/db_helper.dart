@@ -921,4 +921,99 @@ class DBHelper {
       throw Exception("ملف النسخة الاحتياطية غير صالح");
     }
   }
+
+  // ==================== دوال التقرير المالي الجاهزة ====================
+
+  /// إجمالي المبيعات (الفواتير من نوع sale)
+  static Future<double> getTotalSales() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT SUM(totalAmount) as total FROM invoices WHERE invoiceType = 'sale'",
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// تكلفة المبيعات (حساب الكمية × سعر الشراء لجميع المنتجات)
+  static Future<double> getSalesCost() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT SUM(quantity * purchasePrice) as total FROM products",
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// إجمالي المشتريات (الفواتير من نوع purchase إن وجدت)
+  static Future<double> getTotalPurchases() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT SUM(totalAmount) as total FROM invoices WHERE invoiceType = 'purchase'",
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// إجمالي الإيرادات (السندات العامة المقبوضة)
+  static Future<double> getTotalRevenues() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM vouchers WHERE voucherType = 'receipt' AND targetType = 'general'",
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// إجمالي المصروفات (السندات من نوع expense)
+  static Future<double> getTotalExpenses() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM vouchers WHERE voucherType = 'expense'",
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// إجمالي الباقي للموردين
+  static Future<double> getSuppliersTotalBalance() async {
+    final db = await database;
+    final result = await db.rawQuery("SELECT SUM(balance) as total FROM suppliers");
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// إجمالي الباقي على العملاء
+  static Future<double> getCustomersTotalBalance() async {
+    final db = await database;
+    final result = await db.rawQuery("SELECT SUM(balance) as total FROM customers");
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// إجمالي الصندوق الرئيسي (المقبوضات - المصروفات ومدفوعات السندات)
+  static Future<double> getMainVaultBalance() async {
+    final db = await database;
+    final receipts = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM vouchers WHERE voucherType = 'receipt'",
+    );
+    final payments = await db.rawQuery(
+      "SELECT SUM(amount) as total FROM vouchers WHERE voucherType IN ('payment', 'expense')",
+    );
+
+    double totalReceipts = (receipts.first['total'] as num?)?.toDouble() ?? 0.0;
+    double totalPayments = (payments.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    return totalReceipts - totalPayments;
+  }
+
+  /// إجمالي مردود المبيعات
+  static Future<double> getSalesReturnsTotal() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT SUM(totalAmount) as total FROM invoices WHERE invoiceType = 'return'",
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// إجمالي مردود المشتريات
+  static Future<double> getPurchasesReturnsTotal() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT SUM(totalAmount) as total FROM invoices WHERE invoiceType = 'purchase_return'",
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
 }
