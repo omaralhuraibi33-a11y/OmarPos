@@ -10,3 +10,13 @@ import 'screens/cash_box_settings_screen.dart';
 import 'screens/backup_settings_screen.dart';
 import 'screens/payment_methods_screen.dart';
 import 'screens/wipe_data_screen.dart';
+
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  // باقي كود الشاشة...
