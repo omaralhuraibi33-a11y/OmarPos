@@ -31,7 +31,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   final List<PurchaseItem> _purchaseItems = [];
 
-  final TextEditingController _supplierController = TextEditingController(text: 'مورد نقدي');
+  final TextEditingController _supplierController = TextEditingController(text: 'اختيار مورد (آجل افتراضياً)');
   final TextEditingController _invoiceDiscountController = TextEditingController(text: '0.0');
 
   bool _isLoading = true;
@@ -61,7 +61,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     setState(() {
       _purchaseItems.clear();
       _selectedSupplier = null;
-      _supplierController.text = 'مورد نقدي';
+      _supplierController.text = 'اختيار مورد (آجل افتراضياً)';
       _invoiceDiscountController.text = '0.0';
     });
   }
@@ -70,20 +70,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('اختر المورد'),
+        title: const Text('اختر المورد (الحساب الآجل)'),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView(
             shrinkWrap: true,
             children: [
               ListTile(
-                leading: const Icon(Icons.payments, color: Colors.green),
-                title: const Text('مورد نقدي', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('دفع نقدي مباشر (بدون تسجيل آجل)'),
+                leading: const Icon(Icons.person_pin, color: Colors.orange),
+                title: const Text('مشتريات نقدية عابرة', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('تسجيل حساب عام للمشتريات السريعة'),
                 onTap: () {
                   setState(() {
                     _selectedSupplier = null;
-                    _supplierController.text = 'مورد نقدي';
+                    _supplierController.text = 'مشتريات نقدية عابرة (آجل)';
                   });
                   Navigator.pop(ctx);
                 },
@@ -97,7 +97,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               ..._suppliers.map((sup) => ListTile(
                 leading: const Icon(Icons.business, color: Colors.blue),
                 title: Text(sup.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('الرصيد له: ${sup.balance.toStringAsFixed(2)}'),
+                subtitle: Text('الرصيد المستحق له: ${sup.balance.toStringAsFixed(2)}'),
                 onTap: () {
                   setState(() {
                     _selectedSupplier = sup;
@@ -210,6 +210,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return;
     }
 
+    // 1. تحديث كميات المخزن وأسعار الشراء
     for (var item in _purchaseItems) {
       await DBHelper.updateProductStock(item.product.id, item.quantity);
 
@@ -219,22 +220,97 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       }
     }
 
+    // 2. إثبات استحقاق الفاتورة بالكامل على المورد (آجل تلقائياً)
     if (_selectedSupplier != null) {
       await DBHelper.addSupplierTransaction(
         supplierId: _selectedSupplier!.id,
-        type: 'فاتورة مشتريات',
-        credit: _finalTotal,
+        type: 'فاتورة مشتريات (آجل)',
+        credit: _finalTotal, // دائن لصالح المورد
         debit: 0.0,
       );
     }
 
+    // 3. عرض نافذة خيار إصدار "سند صرف" سديد فوري
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حفظ الفاتورة وتحديث المخزن بنجاح! الإجمالي: $_finalTotal')),
-      );
-      _resetInvoice();
-      _loadData();
+      _showPaymentVoucherDialog();
     }
+  }
+
+  // نافذة إصدار سند صرف اختياري
+  void _showPaymentVoucherDialog() {
+    String paymentSource = 'الصندوق الرئيسي (نقدي)';
+    final paidAmountController = TextEditingController(text: _finalTotal.toStringAsFixed(2));
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          title: const Text('تم تثبيت الفاتورة (آجل) بنجاح'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('هل تريد تحرير "سند صرف" وسداد المبلغ أو جزء منه الآن؟'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: paidAmountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'المبلغ المدفوع بالسند',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: paymentSource,
+                decoration: const InputDecoration(labelText: 'طريقة الصرف / الخزينة', border: OutlineInputBorder()),
+                items: ['الصندوق الرئيسي (نقدي)', 'البنك / الحساب البنكي', 'شبكة / محفظة']
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (val) => setDlgState(() => paymentSource = val!),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _finishInvoiceProcess('تم حفظ الفاتورة كـ (آجل) بدون سداد مقدماً.');
+              },
+              child: const Text('إبقاء الفاتورة آجل بالكامل'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              icon: const Icon(Icons.receipt_long, color: Colors.white),
+              label: const Text('إصدار سند الصرف', style: TextStyle(color: Colors.white)),
+              onPressed: () async {
+                final paid = double.tryParse(paidAmountController.text.trim()) ?? 0.0;
+                if (paid > 0 && _selectedSupplier != null) {
+                  // تسجيل سند الصرف وخصم الحساب من المورد
+                  await DBHelper.addSupplierTransaction(
+                    supplierId: _selectedSupplier!.id,
+                    type: 'سند صرف ($paymentSource)',
+                    credit: 0.0,
+                    debit: paid, // مدين لصالح المورد لخفص دينه
+                  );
+                }
+                Navigator.pop(ctx);
+                _finishInvoiceProcess('تم حفظ الفاتورة وتوليد سند الصرف بقيمة $paid بنجاح!');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _finishInvoiceProcess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
+    );
+    _resetInvoice();
+    _loadData();
   }
 
   @override
@@ -260,7 +336,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           readOnly: true,
                           onTap: _showSelectSupplierDialog,
                           decoration: InputDecoration(
-                            labelText: 'المورد',
+                            labelText: 'المورد (آجل تلقائياً)',
                             prefixIcon: const Icon(Icons.business),
                             suffixIcon: IconButton(
                               icon: const Icon(Icons.arrow_drop_down_circle, color: Colors.blue),
