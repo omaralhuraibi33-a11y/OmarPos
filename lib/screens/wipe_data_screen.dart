@@ -8,7 +8,7 @@ class WipeDataScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد مسح $target'),
-        content: Text('هل أنت تأكد من مسح $target؟ هذه العملية لا يمكن التراجع عنها.'),
+        content: Text('هل أنت متأكد من $target؟ هذه العملية لا يمكن التراجع عنها.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           ElevatedButton(
@@ -16,10 +16,10 @@ class WipeDataScreen extends StatelessWidget {
             onPressed: () {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('تم مسح $target بنجاح')),
+                SnackBar(content: Text('تم $target بنجاح')),
               );
             },
-            child: const Text('مسح نهائي', style: TextStyle(color: Colors.white)),
+            child: const Text('تأكيد المسح', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -33,22 +33,46 @@ class WipeDataScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ListTile(
-            leading: const Icon(Icons.inventory_2, color: Colors.red),
-            title: const Text('مسح جميع المنتجات والمجموعات'),
-            onTap: () => _confirmWipe(context, 'المنتجات والمجموعات'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.category, color: Colors.red),
+              title: const Text(
+                'مسح جميع المجموعات والأصناف',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () => _confirmWipe(context, 'مسح جميع المجموعات والأصناف'),
+            ),
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.receipt, color: Colors.red),
-            title: const Text('مسح جميع فواتير المبيعات والسجلات'),
-            onTap: () => _confirmWipe(context, 'الفواتير والسجلات'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.inventory_2, color: Colors.red),
+              title: const Text(
+                'مسح جميع الأصناف',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () => _confirmWipe(context, 'مسح جميع الأصناف'),
+            ),
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.people, color: Colors.red),
-            title: const Text('مسح بيانات العملاء والموردين'),
-            onTap: () => _confirmWipe(context, 'العملاء والموردين'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.history_edu, color: Colors.red),
+              title: const Text(
+                'مسح جميع السجلات',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () => _confirmWipe(context, 'مسح جميع السجلات'),
+            ),
+          ),
+          Card(
+            color: Colors.red.shade50,
+            child: ListTile(
+              leading: const Icon(Icons.restore_from_trash, color: Colors.red, size: 30),
+              title: const Text(
+                'تصفير كامل لكل النظام',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+              ),
+              onTap: () => _confirmWipe(context, 'تصفير كامل لكل النظام'),
+            ),
           ),
         ],
       ),
