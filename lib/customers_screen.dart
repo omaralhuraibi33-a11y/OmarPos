@@ -94,7 +94,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           contentPadding: EdgeInsets.zero,
                           title: Text(tx.type,
                               style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(tx.date ?? ''),
+                          subtitle: Text(tx.date),
                           trailing: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,
