@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
   const PrinterSettingsScreen({Key? key}) : super(key: key);
@@ -23,13 +24,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     String usage = printerToEdit?['usage'] ?? 'زبون';
     String paperSize = printerToEdit?['paperSize'] ?? '80';
     String selectedBtDevice = printerToEdit?['btDevice'] ?? '';
-
-    // قائمة الأجهزة المقترنة مع عناوين MAC الخاصة بها
-    List<Map<String, String>> pairedBtDevices = [
-      {'name': 'BT-Printer-01', 'mac': '00:11:22:33:44:55'},
-      {'name': 'POS-Thermal-58', 'mac': 'AA:BB:CC:DD:EE:FF'},
-      {'name': 'RP-80-Printer', 'mac': '99:88:77:66:55:44'},
-    ];
 
     showDialog(
       context: context,
@@ -56,7 +50,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // الإضافات الخاصة بالبلوتوث
+                  // الإضافات الخاصة بالبلوتوث الفعلية من النظام
                   if (connection == 'بلوتوث') ...[
                     SizedBox(
                       width: double.infinity,
@@ -67,7 +61,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         ),
                         icon: const Icon(Icons.bluetooth_searching),
                         label: const Text('البحث عن الأجهزة المقترنة (Bluetooth)'),
-                        onPressed: () {
+                        onPressed: () async {
+                          // جلب الأجهزة المقترنة حقيقياً من الجوال
+                          final List<BluetoothInfo> pairedBtDevices = await PrintBluetoothThermal.pairedBluetooth;
+                          
+                          if (!context.mounted) return;
+
                           showModalBottomSheet(
                             context: context,
                             builder: (bContext) {
@@ -82,30 +81,35 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                     ),
                                     const Divider(),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        shrinkWrap: true,
-                                        itemCount: pairedBtDevices.length,
-                                        itemBuilder: (context, idx) {
-                                          final dev = pairedBtDevices[idx];
-                                          return ListTile(
-                                            leading: const Icon(Icons.print, color: Colors.blue),
-                                            title: Text(dev['name']!),
-                                            subtitle: Text('MAC: ${dev['mac']}'),
-                                            onTap: () {
-                                              setDlgState(() {
-                                                selectedBtDevice = dev['name']!;
-                                                macCtrl.text = dev['mac']!;
-                                                if (nameCtrl.text.isEmpty) {
-                                                  nameCtrl.text = dev['name']!;
-                                                }
-                                              });
-                                              Navigator.pop(bContext);
-                                            },
-                                          );
-                                        },
-                                      ),
-                                    ),
+                                    pairedBtDevices.isEmpty
+                                        ? const Padding(
+                                            padding: EdgeInsets.all(16.0),
+                                            child: Text('لم يتم العثور على أجهزة بلوتوث مقترنة بالجوال.'),
+                                          )
+                                        : Expanded(
+                                            child: ListView.builder(
+                                              shrinkWrap: true,
+                                              itemCount: pairedBtDevices.length,
+                                              itemBuilder: (context, idx) {
+                                                final dev = pairedBtDevices[idx];
+                                                return ListTile(
+                                                  leading: const Icon(Icons.print, color: Colors.blue),
+                                                  title: Text(dev.name),
+                                                  subtitle: Text('MAC: ${dev.macAdress}'),
+                                                  onTap: () {
+                                                    setDlgState(() {
+                                                      selectedBtDevice = dev.name;
+                                                      macCtrl.text = dev.macAdress;
+                                                      if (nameCtrl.text.isEmpty) {
+                                                        nameCtrl.text = dev.name;
+                                                      }
+                                                    });
+                                                    Navigator.pop(bContext);
+                                                  },
+                                                );
+                                              },
+                                            ),
+                                          ),
                                   ],
                                 ),
                               );
