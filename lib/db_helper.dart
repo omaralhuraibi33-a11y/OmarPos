@@ -45,6 +45,55 @@ class AppUser {
   }
 }
 
+// ==================== نموذج الفاتورة ====================
+class Invoice {
+  String id;
+  String invoiceType; // 'sale' (بيع) أو 'return' (مرتجع)
+  String paymentType; // 'cash' (نقدي) أو 'credit' (آجل)
+  double totalAmount;
+  String date;
+  String? customerId;
+  String? customerName;
+  String notes;
+
+  Invoice({
+    required this.id,
+    required this.invoiceType,
+    required this.paymentType,
+    required this.totalAmount,
+    required this.date,
+    this.customerId,
+    this.customerName,
+    this.notes = '',
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'invoiceType': invoiceType,
+      'paymentType': paymentType,
+      'totalAmount': totalAmount,
+      'date': date,
+      'customerId': customerId,
+      'customerName': customerName,
+      'notes': notes,
+    };
+  }
+
+  factory Invoice.fromMap(Map<String, dynamic> map) {
+    return Invoice(
+      id: map['id'],
+      invoiceType: map['invoiceType'] ?? 'sale',
+      paymentType: map['paymentType'] ?? 'cash',
+      totalAmount: (map['totalAmount'] as num).toDouble(),
+      date: map['date'],
+      customerId: map['customerId'],
+      customerName: map['customerName'],
+      notes: map['notes'] ?? '',
+    );
+  }
+}
+
 // ==================== نموذج العميل ====================
 class Customer {
   String id;
@@ -338,7 +387,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -348,6 +397,19 @@ class DBHelper {
             isAdmin INTEGER,
             showInLogin INTEGER,
             permissions TEXT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE invoices(
+            id TEXT PRIMARY KEY,
+            invoiceType TEXT,
+            paymentType TEXT,
+            totalAmount REAL,
+            date TEXT,
+            customerId TEXT,
+            customerName TEXT,
+            notes TEXT
           )
         ''');
 
@@ -487,135 +549,34 @@ class DBHelper {
         await db.insert('users', AppUser(id: '4', name: 'مشرف', pin: '1111', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
+        if (oldVersion < 7) {
           await db.execute('''
-            CREATE TABLE IF NOT EXISTS customers(
+            CREATE TABLE IF NOT EXISTS invoices(
               id TEXT PRIMARY KEY,
-              name TEXT,
-              phone TEXT,
-              address TEXT,
-              balance REAL,
-              notes TEXT
-            )
-          ''');
-        }
-        if (oldVersion < 3) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS categories(
-              id TEXT PRIMARY KEY,
-              name TEXT,
-              colorHex TEXT,
-              isKitchenPrint INTEGER,
-              isActive INTEGER
-            )
-          ''');
-
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS products(
-              id TEXT PRIMARY KEY,
-              name TEXT,
-              categoryId TEXT,
-              purchasePrice REAL,
-              sellPrice REAL,
-              quantity REAL,
-              isActive INTEGER
-            )
-          ''');
-        }
-        if (oldVersion < 4) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS suppliers(
-              id TEXT PRIMARY KEY,
-              name TEXT,
-              phone TEXT,
-              notes TEXT,
-              balance REAL
-            )
-          ''');
-
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS supplier_transactions(
-              id TEXT PRIMARY KEY,
-              supplierId TEXT,
-              type TEXT,
+              invoiceType TEXT,
+              paymentType TEXT,
+              totalAmount REAL,
               date TEXT,
-              credit REAL,
-              debit REAL,
-              runningBalance REAL
-            )
-          ''');
-        }
-        if (oldVersion < 5) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS settings(
-              key TEXT PRIMARY KEY,
-              value TEXT
-            )
-          ''');
-
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS printers(
-              id TEXT PRIMARY KEY,
-              name TEXT,
-              type TEXT,
-              connectionType TEXT,
-              paperSize TEXT,
-              autoPrint INTEGER
-            )
-          ''');
-
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS prep_notes(
-              id TEXT PRIMARY KEY,
-              note TEXT
-            )
-          ''');
-
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS payment_methods(
-              id TEXT PRIMARY KEY,
-              name TEXT
-            )
-          ''');
-
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS cash_boxes(
-              id TEXT PRIMARY KEY,
-              name TEXT,
-              isMain INTEGER
-            )
-          ''');
-        }
-        if (oldVersion < 6) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS customer_transactions(
-              id TEXT PRIMARY KEY,
               customerId TEXT,
-              type TEXT,
-              date TEXT,
-              credit REAL,
-              debit REAL,
-              runningBalance REAL,
-              notes TEXT
-            )
-          ''');
-
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS vouchers(
-              id TEXT PRIMARY KEY,
-              voucherType TEXT,
-              targetType TEXT,
-              targetId TEXT,
-              targetName TEXT,
-              amount REAL,
-              date TEXT,
-              paymentMethod TEXT,
+              customerName TEXT,
               notes TEXT
             )
           ''');
         }
       },
     );
+  }
+
+  // ==================== الفواتير ====================
+  static Future<List<Invoice>> getAllInvoices() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('invoices', orderBy: 'date DESC');
+    return maps.map((m) => Invoice.fromMap(m)).toList();
+  }
+
+  static Future<void> saveInvoice(Invoice invoice) async {
+    final db = await database;
+    await db.insert('invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // ==================== المستخدمين والعملاء ====================
@@ -683,7 +644,6 @@ class DBHelper {
     if (cust.isEmpty) return;
 
     double currentBalance = (cust.first['balance'] as num).toDouble();
-    // الرصيد الموجب = دين على العميل. القبض (credit) ينقص الدين، والصرف/البيع (debit) يزيد الدين.
     double newBalance = currentBalance + debit - credit;
 
     await db.update('customers', {'balance': newBalance}, where: 'id = ?', whereArgs: [customerId]);
@@ -704,13 +664,10 @@ class DBHelper {
   static Future<void> addVoucher(Voucher voucher) async {
     final db = await database;
 
-    // 1. حفظ السند
     await db.insert('vouchers', voucher.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
 
-    // 2. معالجة التأثير المالي بحسب نوع السند والجهة
     if (voucher.targetType == 'customer' && voucher.targetId != null) {
       if (voucher.voucherType == 'receipt') {
-        // سند قبض من عميل -> تسديد دين (دائن)
         await addCustomerTransaction(
           customerId: voucher.targetId!,
           type: 'سند قبض',
@@ -720,7 +677,6 @@ class DBHelper {
           notes: voucher.notes,
         );
       } else if (voucher.voucherType == 'payment') {
-        // سند صرف لعميل -> إرجاع مالي أو زيادة دين (مدين)
         await addCustomerTransaction(
           customerId: voucher.targetId!,
           type: 'سند صرف',
@@ -732,7 +688,6 @@ class DBHelper {
       }
     } else if (voucher.targetType == 'supplier' && voucher.targetId != null) {
       if (voucher.voucherType == 'payment') {
-        // سند صرف لمورد -> تسديد مستحقات المورد
         await addSupplierTransaction(
           supplierId: voucher.targetId!,
           type: 'سند صرف',
@@ -741,7 +696,6 @@ class DBHelper {
           date: voucher.date,
         );
       } else if (voucher.voucherType == 'receipt') {
-        // سند قبض من مورد
         await addSupplierTransaction(
           supplierId: voucher.targetId!,
           type: 'سند قبض',
@@ -906,6 +860,7 @@ class DBHelper {
   // ==================== مسح البيانات ====================
   static Future<void> clearAllAccountsData() async {
     final db = await database;
+    await db.delete('invoices');
     await db.delete('suppliers');
     await db.delete('supplier_transactions');
     await db.delete('customers');
