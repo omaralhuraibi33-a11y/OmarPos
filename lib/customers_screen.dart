@@ -42,6 +42,87 @@ class _CustomersScreenState extends State<CustomersScreen> {
     });
   }
 
+  void _showCustomerStatement(Customer customer) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => FutureBuilder<List<CustomerTransaction>>(
+        future: DBHelper.getCustomerTransactions(customer.id),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const AlertDialog(
+              content: SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            );
+          }
+
+          final transactions = snapshot.data ?? [];
+
+          return AlertDialog(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('كشف حساب: ${customer.name}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const SizedBox(height: 4),
+                Text(
+                  'الرصيد الحالي: ${customer.balance.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: customer.balance > 0 ? Colors.red : Colors.green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: transactions.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Text('لا توجد حركات مسجلة لهذا العميل حتى الآن',
+                          textAlign: TextAlign.center),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: transactions.length,
+                      separatorBuilder: (_, __) => const Divider(),
+                      itemBuilder: (ctx, index) {
+                        final tx = transactions[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(tx.type,
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(tx.date ?? ''),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (tx.debit > 0)
+                                Text('مدين (عليه): ${tx.debit.toStringAsFixed(2)}',
+                                    style: const TextStyle(color: Colors.red, fontSize: 12)),
+                              if (tx.credit > 0)
+                                Text('دائن (له): ${tx.credit.toStringAsFixed(2)}',
+                                    style: const TextStyle(color: Colors.green, fontSize: 12)),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إغلاق'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   void _showCustomerDialog({Customer? customer}) {
     final isEditing = customer != null;
     final nameController = TextEditingController(text: customer?.name ?? '');
@@ -218,6 +299,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                         fontSize: 15,
                                       ),
                                     ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.receipt_long,
+                                        size: 20, color: Colors.teal),
+                                    tooltip: 'كشف حساب',
+                                    onPressed: () => _showCustomerStatement(c),
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.edit,
