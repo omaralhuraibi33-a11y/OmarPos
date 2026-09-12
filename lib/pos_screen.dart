@@ -27,9 +27,10 @@ class PosScreen extends StatefulWidget {
 class _PosScreenState extends State<PosScreen> {
   // حالة النظام
   bool _isTouchMode = true; // true = مبيعات لمس, false = مبيعات عادية
-  bool _isPrinterConnected = true; // حالة الطابعة (أخضر = متصل, أحمر = مفصول)
+  bool _isPrinterConnected = true; // حالة الطابعة
   bool _isInvoiceExpanded = false; // توسيع شاشة الفاتورة
   bool _isProductsFullScreen = false; // جعل الأصناف بكامل الشاشة
+  bool _isReturnMode = false; // true = وضع مرتجع مبيعات, false = بيع عادي
 
   // البيانات
   List<Category> _categories = [];
@@ -38,7 +39,7 @@ class _PosScreenState extends State<PosScreen> {
   List<Customer> _customers = [];
 
   // قائمة ملاحظات التحضير المقترحة
-  List<String> _prepNotesList = [
+  final List<String> _prepNotesList = [
     'بدون شطة',
     'زيادة صوص',
     'بدون ثوم',
@@ -172,7 +173,7 @@ class _PosScreenState extends State<PosScreen> {
             title: Text('ملاحظات تحضير: ${item.product.name}'),
             content: SingleChildScrollView(
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: minMode,
                 children: [
                   Wrap(
                     spacing: 6,
@@ -235,7 +236,9 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // نافذة إتمام الدفع وتحديد طريقة الدفع مع الحفظ والطباعة
+  MainAxisSize get minMode => MainAxisSize.min;
+
+  // نافذة إتمام الدفع أو إرجاع المبلغ
   void _showPaymentDialog() {
     String selectedMethod = 'نقدي';
 
@@ -244,17 +247,21 @@ class _PosScreenState extends State<PosScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) {
           return AlertDialog(
-            title: const Text('إتمام الدفع واختيار طريقة الدفع'),
+            title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع واختيار طريقة الدفع'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'المبلغ الإجمالي: ${_totalAmount.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: _isReturnMode ? Colors.orange.shade800 : Colors.green,
+                  ),
                 ),
                 const SizedBox(height: 12),
-                const Text('اختر طريقة الدفع:'),
+                Text(_isReturnMode ? 'طريقة إعادة المبلغ:' : 'اختر طريقة الدفع:'),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   value: selectedMethod,
@@ -272,9 +279,14 @@ class _PosScreenState extends State<PosScreen> {
                 child: const Text('إلغاء'),
               ),
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green,
+                ),
                 icon: const Icon(Icons.print, color: Colors.white),
-                label: const Text('حفظ وطباعة الفاتورة', style: TextStyle(color: Colors.white)),
+                label: Text(
+                  _isReturnMode ? 'حفظ وطباعة المرتجع' : 'حفظ وطباعة الفاتورة',
+                  style: const TextStyle(color: Colors.white),
+                ),
                 onPressed: () {
                   Navigator.pop(ctx);
                   _processCheckout(selectedMethod);
@@ -287,53 +299,52 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // معالجة الحفظ والطباعة
+  // معالجة الحفظ والطباعة (دعم البيع والمرتجع)
   void _processCheckout(String paymentMethod) {
-    // 1. إرسال أمر الحفظ وقاعدة البيانات
+    final actionName = _isReturnMode ? 'مرتجع المبيعات' : 'الفاتورة';
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('تم حفظ الفاتورة بنجاح ($paymentMethod)'),
-        backgroundColor: Colors.green,
+        content: Text('تم حفظ $actionName بنجاح ($paymentMethod)'),
+        backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green,
       ),
     );
 
-    // 2. إرسال أمر الطباعة إذا كانت الطابعة متصلة
     if (_isPrinterConnected) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('جاري إرسال الفاتورة للطابعة الحرارية...'),
+        SnackBar(
+          content: Text('جاري إرسال $actionName للطابعة الحرارية...'),
           backgroundColor: Colors.blue,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تنبه: الطابعة غير متصلة! تمت عملية الحفظ فقط.'),
-          backgroundColor: Colors.orange,
         ),
       );
     }
 
     _clearInvoice();
+    if (_isReturnMode) {
+      setState(() => _isReturnMode = false); // العودة التلقائية للبيع
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: _isReturnMode ? Colors.orange.shade800 : null,
         title: Row(
           children: [
-            // تبديل النمط (لمس / عادية)
-            Text(_isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية'),
-            Switch(
-              value: _isTouchMode,
-              onChanged: (val) => setState(() => _isTouchMode = val),
-              activeColor: Colors.white,
-            ),
+            Text(_isReturnMode
+                ? 'مرتجع مبيعات'
+                : (_isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية')),
+            const SizedBox(width: 8),
+            if (!_isReturnMode)
+              Switch(
+                value: _isTouchMode,
+                onChanged: (val) => setState(() => _isTouchMode = val),
+                activeColor: Colors.white,
+              ),
           ],
         ),
         actions: [
-          // زر مؤشر الطابعة (أحمر / أخضر)
           IconButton(
             tooltip: _isPrinterConnected ? 'الطابعة متصلة' : 'الطابعة مفصولة',
             icon: Icon(
@@ -342,22 +353,18 @@ class _PosScreenState extends State<PosScreen> {
             ),
             onPressed: () {
               setState(() => _isPrinterConnected = !_isPrinterConnected);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(_isPrinterConnected ? 'تم الاتصال بالطابعة' : 'الطابعة غير متصلة!'),
-                  duration: const Duration(seconds: 1),
-                ),
-              );
             },
           ),
-          // زر المرتجع
-          IconButton(
-            tooltip: 'مرتجع مبيعات',
-            icon: const Icon(Icons.assignment_return, color: Colors.orangeAccent),
+          // زر التبديل بين وضع البيع والمرتجع
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            icon: Icon(_isReturnMode ? Icons.shopping_cart : Icons.assignment_return),
+            label: Text(_isReturnMode ? 'وضع البيع' : 'مرتجع'),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('شاشة المرتجعات قيد التطوير')),
-              );
+              setState(() {
+                _isReturnMode = !_isReturnMode;
+                _clearInvoice();
+              });
             },
           ),
         ],
@@ -366,18 +373,35 @@ class _PosScreenState extends State<PosScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // شريط العميل الأعلى
+                // شريط العميل والوضع
                 Container(
-                  color: Colors.blue.shade50,
+                  color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Row(
                     children: [
-                      const Icon(Icons.account_circle, color: Colors.blue),
+                      Icon(
+                        _isReturnMode ? Icons.assignment_return : Icons.account_circle,
+                        color: _isReturnMode ? Colors.orange.shade800 : Colors.blue,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'العميل: $_selectedCustomerName',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
+                      if (_isReturnMode) ...[
+                        const SizedBox(width: 15),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade800,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'وضع المرتجع مفعل',
+                            style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
                       const Spacer(),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
@@ -389,17 +413,15 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
 
-                // محتوى الصفحة الرئيسي (المنتجات + الفاتورة)
+                // محتوى الصفحة الرئيسي
                 Expanded(
                   child: Row(
                     children: [
-                      // قسم الأصناف والمجموعات (يختفي عند توسيع الفاتورة وتمديده عند الشاشة الكاملة)
                       if (!_isInvoiceExpanded)
                         Expanded(
                           flex: _isProductsFullScreen ? 10 : 3,
                           child: Column(
                             children: [
-                              // حقل البحث مع زر التكبير لكامل الشاشة
                               Padding(
                                 padding: const EdgeInsets.all(6.0),
                                 child: Row(
@@ -421,7 +443,6 @@ class _PosScreenState extends State<PosScreen> {
                                         _isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
                                         color: Colors.indigo,
                                       ),
-                                      tooltip: 'عرض الأصناف بكامل الشاشة',
                                       onPressed: () {
                                         setState(() {
                                           _isProductsFullScreen = !_isProductsFullScreen;
@@ -432,7 +453,6 @@ class _PosScreenState extends State<PosScreen> {
                                 ),
                               ),
 
-                              // شريط المجموعات (في نمط اللمس)
                               if (_isTouchMode)
                                 Container(
                                   height: 45,
@@ -461,7 +481,6 @@ class _PosScreenState extends State<PosScreen> {
                                   ),
                                 ),
 
-                              // عرض الأصناف (Grid للـ Touch أو List للعادي)
                               Expanded(
                                 child: _isTouchMode ? _buildTouchProductGrid() : _buildStandardProductList(),
                               ),
@@ -469,7 +488,6 @@ class _PosScreenState extends State<PosScreen> {
                           ),
                         ),
 
-                      // زر السهم الصغير للتوسيع والتضييق
                       if (!_isProductsFullScreen)
                         InkWell(
                           onTap: () {
@@ -487,7 +505,6 @@ class _PosScreenState extends State<PosScreen> {
                           ),
                         ),
 
-                      // قسم الفاتورة
                       if (!_isProductsFullScreen)
                         Expanded(
                           flex: _isInvoiceExpanded ? 1 : 2,
@@ -500,14 +517,13 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
 
-                // الشريط السفلي (الأزرار الأساسية)
+                // الشريط السفلي
                 _buildBottomBar(),
               ],
             ),
     );
   }
 
-  // شبكة أصناف اللمس
   Widget _buildTouchProductGrid() {
     return GridView.builder(
       padding: const EdgeInsets.all(6),
@@ -524,7 +540,7 @@ class _PosScreenState extends State<PosScreen> {
           onTap: () => _addToCart(prod),
           child: Card(
             elevation: 2,
-            color: Colors.white,
+            color: _isReturnMode ? Colors.orange.shade50 : Colors.white,
             child: Padding(
               padding: const EdgeInsets.all(6.0),
               child: Column(
@@ -539,7 +555,10 @@ class _PosScreenState extends State<PosScreen> {
                   const SizedBox(height: 4),
                   Text(
                     '${prod.sellPrice}',
-                    style: TextStyle(color: Colors.green.shade800, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: _isReturnMode ? Colors.orange.shade900 : Colors.green.shade800,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -550,7 +569,6 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // قائمة الأصناف العادية
   Widget _buildStandardProductList() {
     return ListView.builder(
       itemCount: _filteredProducts.length,
@@ -560,7 +578,10 @@ class _PosScreenState extends State<PosScreen> {
           title: Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text('السعر: ${prod.sellPrice} | الكمية: ${prod.quantity}'),
           trailing: IconButton(
-            icon: const Icon(Icons.add_shopping_cart, color: Colors.blue),
+            icon: Icon(
+              _isReturnMode ? Icons.remove_shopping_cart : Icons.add_shopping_cart,
+              color: _isReturnMode ? Colors.orange.shade800 : Colors.blue,
+            ),
             onPressed: () => _addToCart(prod),
           ),
         );
@@ -568,25 +589,25 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // لوحة الفاتورة مع خيار ملاحظات التحضير تحت الصنف
   Widget _buildInvoicePanel() {
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          color: Colors.blueGrey.shade100,
-          child: const Row(
+          color: _isReturnMode ? Colors.orange.shade200 : Colors.blueGrey.shade100,
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('الصنف / الملاحظات', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('العدد', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(_isReturnMode ? 'الصنف المراد إرجاعه' : 'الصنف / الملاحظات',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Text('العدد', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),
         Expanded(
           child: _cart.isEmpty
-              ? const Center(child: Text('الفاتورة فارغة'))
+              ? Center(child: Text(_isReturnMode ? 'قائمة المرتجع فارغة' : 'الفاتورة فارغة'))
               : ListView.builder(
                   itemCount: _cart.length,
                   itemBuilder: (ctx, index) {
@@ -602,7 +623,8 @@ class _PosScreenState extends State<PosScreen> {
                               children: [
                                 Expanded(
                                   flex: 3,
-                                  child: Text(item.product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                  child: Text(item.product.name,
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                                 ),
                                 Row(
                                   children: [
@@ -629,34 +651,37 @@ class _PosScreenState extends State<PosScreen> {
                                   ],
                                 ),
                                 const SizedBox(width: 8),
-                                Text('${item.total.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text('${item.total.toStringAsFixed(1)}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
-                            // قسم ملاحظات التحضير تحت الصنف
-                            InkWell(
-                              onTap: () => _showPrepNotesDialog(item),
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 4.0),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.note_alt_outlined, size: 14, color: Colors.orange),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        item.preparationNotes.isEmpty
-                                            ? '+ اضغط لإضافة ملاحظات تحضير'
-                                            : item.preparationNotes,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: item.preparationNotes.isEmpty ? Colors.grey : Colors.deepOrange,
-                                          fontStyle: FontStyle.italic,
+                            if (!_isReturnMode)
+                              InkWell(
+                                onTap: () => _showPrepNotesDialog(item),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 4.0),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.note_alt_outlined, size: 14, color: Colors.orange),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          item.preparationNotes.isEmpty
+                                              ? '+ اضغط لإضافة ملاحظات تحضير'
+                                              : item.preparationNotes,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: item.preparationNotes.isEmpty
+                                                ? Colors.grey
+                                                : Colors.deepOrange,
+                                            fontStyle: FontStyle.italic,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                       ),
@@ -670,10 +695,15 @@ class _PosScreenState extends State<PosScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('الإجمالي العام:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(_isReturnMode ? 'إجمالي المسترجع:' : 'الإجمالي العام:',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               Text(
                 '${_totalAmount.toStringAsFixed(2)}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _isReturnMode ? Colors.orange.shade800 : Colors.blue,
+                ),
               ),
             ],
           ),
@@ -682,14 +712,12 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // الشريط السفلي للأزرار
   Widget _buildBottomBar() {
     return Container(
       padding: const EdgeInsets.all(8),
       color: Colors.white,
       child: Row(
         children: [
-          // زر فاتورة جديدة
           Expanded(
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -698,21 +726,24 @@ class _PosScreenState extends State<PosScreen> {
               ),
               onPressed: _clearInvoice,
               icon: const Icon(Icons.delete_sweep, color: Colors.white),
-              label: const Text('فاتورة جديدة', style: TextStyle(color: Colors.white, fontSize: 15)),
+              label: Text(_isReturnMode ? 'تفريغ المرتجع' : 'فاتورة جديدة',
+                  style: const TextStyle(color: Colors.white, fontSize: 15)),
             ),
           ),
           const SizedBox(width: 10),
-          // زر الدفع (يفتح طرق الدفع وإرسال للطباعة)
           Expanded(
             flex: 2,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade700,
+                backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green.shade700,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
               onPressed: _cart.isEmpty ? null : _showPaymentDialog,
-              icon: const Icon(Icons.payment, color: Colors.white),
-              label: const Text('الدفع', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              icon: Icon(_isReturnMode ? Icons.assignment_return : Icons.payment, color: Colors.white),
+              label: Text(
+                _isReturnMode ? 'إتمام المرتجع' : 'الدفع',
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
         ],
