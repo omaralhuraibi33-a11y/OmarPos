@@ -108,8 +108,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           _buildMainButton(
-            title: '8. طرق الدفع المخصصة',
-            subtitle: 'إضافة/تعديل خيارات الدفع (شبكة، نقد، تحويل...)',
+            title: '8. طرق الدفع المتاحة',
+            subtitle: 'إضافة/تعديل خيارات الدفع (نقدي، أجل، إضافة طرق جديدة)',
             icon: Icons.payment,
             color: Colors.indigo,
             onTap: () => Navigator.push(
@@ -118,7 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           _buildMainButton(
-            title: '9. مسح البيانات والإعادة ضبط المصنع',
+            title: '9. مسح البيانات والتصفير',
             subtitle: 'تصفير المبيعات أو تهيئة النظام بالكامل (منطقة خطرة)',
             icon: Icons.delete_forever,
             color: Colors.red,
