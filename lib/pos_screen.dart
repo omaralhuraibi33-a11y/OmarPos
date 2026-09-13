@@ -18,8 +18,7 @@ class CartItem {
 }
 
 class PosScreen extends StatefulWidget {
-  const PosScreen({Key? key}) : super(Key: key);
-
+  const PosScreen({Key? key}) : super(key: key);
   @override
   State<PosScreen> createState() => _PosScreenState();
 }
