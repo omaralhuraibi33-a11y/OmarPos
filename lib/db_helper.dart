@@ -664,6 +664,7 @@ class DBHelper {
     double totalExpenses = 0.0,
     double transferredToMainVault = 0.0,
     double? expectedCash,
+    double? actualCash, // تم إضافة البرامتر لحل مشكلة shift_close_screen
     int? shiftNumber,
   }) async {
     final db = await database;
