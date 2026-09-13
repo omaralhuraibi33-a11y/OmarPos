@@ -657,12 +657,15 @@ class DBHelper {
     return maxId + 1;
   }
 
+  // دالة إغلاق الوردية المرنة (تستقبل جميع البرامترات المحتملة لتجنب أي تعارض بناء)
   static Future<void> closeShift({
     String? userId,
     String? userName,
     double totalSales = 0.0,
     double totalExpenses = 0.0,
-    double totalReturns = 0.0, // تم إضافة البرامتر المطلوب هنا
+    double totalReturns = 0.0,
+    double totalReceipts = 0.0,
+    double totalPayments = 0.0,
     double transferredToMainVault = 0.0,
     double? expectedCash,
     double? actualCash,
