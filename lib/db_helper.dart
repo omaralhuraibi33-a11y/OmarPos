@@ -581,7 +581,7 @@ class DBHelper {
 
         await db.insert('users', AppUser(id: '1', name: 'المدير العام', pin: '1234', isAdmin: true, showInLogin: true, permissions: allPerms).toMap());
         await db.insert('users', AppUser(id: '2', name: 'كاشير 1', pin: '0000', isAdmin: false, showInLogin: true, permissions: cashierPerms).toMap());
-        await db.insert('users', AppUser(id: '3', name: 'كاشير 2', pin: '0000', isAdmin: false, showInLogin: true, permissions: cashierPerms).toMap());
+        await db.insert('users', AppUser(id: '3', name: 'كاشير 2', pin: '0000', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
         await db.insert('users', AppUser(id: '4', name: 'مشرف', pin: '1111', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
 
         // عميل نقدي افتراضي
@@ -664,7 +664,8 @@ class DBHelper {
     double totalExpenses = 0.0,
     double transferredToMainVault = 0.0,
     double? expectedCash,
-    double? actualCash, // تم إضافة البرامتر لحل مشكلة shift_close_screen
+    double? actualCash,
+    double? difference, // تم إضافة البرامتر لحل الخطأ المستهدف
     int? shiftNumber,
   }) async {
     final db = await database;
