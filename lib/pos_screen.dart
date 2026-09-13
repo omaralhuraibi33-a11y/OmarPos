@@ -5,7 +5,7 @@ class CartItem {
   final Product product;
   double quantity;
   double unitPrice;
-  String preparationNotes; // ملاحظات التحضير لكل صنف
+  String preparationNotes;
 
   CartItem({
     required this.product,
@@ -25,22 +25,19 @@ class PosScreen extends StatefulWidget {
 }
 
 class _PosScreenState extends State<PosScreen> {
-  // حالة النظام
   bool _isTouchMode = true;
   bool _isPrinterConnected = true;
   bool _isInvoiceExpanded = false;
   bool _isProductsFullScreen = false;
   bool _isReturnMode = false;
 
-  // البيانات
   List<Category> _categories = [];
   List<Product> _allProducts = [];
   List<Product> _filteredProducts = [];
   List<Customer> _customers = [];
   List<String> _prepNotesList = [];
-  List<String> _paymentMethods = []; // طرق الدفع المجلوبة من قاعدة البيانات
+  List<String> _paymentMethods = [];
 
-  // بيانات الفاتورة الحالية
   Customer? _selectedCustomer;
   String _selectedCategoryId = 'all';
   final TextEditingController _searchController = TextEditingController();
@@ -60,24 +57,11 @@ class _PosScreenState extends State<PosScreen> {
     final prods = await DBHelper.getActivePOSProducts();
     final custs = await DBHelper.getAllCustomers();
     final notes = await DBHelper.getPreparationNotes();
-    final dbPaymentMethods = await DBHelper.getPaymentMethods(); // جلب طرق الدفع من DB
+    final dbPaymentMethods = await DBHelper.getPaymentMethods();
+    final defaultCust = await DBHelper.getOrCreateDefaultCustomer();
 
-    // البحث عن العميل النقدي الافتراضي أو إنشائه
-    Customer cashCustomer = custs.firstWhere(
-      (c) => c.id == 'cash_customer' || c.name == 'عميل نقدي' || c.name == 'زبون نقدي',
-      orElse: () => Customer(
-        id: 'cash_customer',
-        name: 'عميل نقدي',
-        phone: '000000000',
-        address: 'افتراضي',
-        balance: 0.0,
-        notes: 'عميل نقدي افتراضي',
-      ),
-    );
-
-    if (!custs.any((c) => c.id == cashCustomer.id)) {
-      await DBHelper.saveCustomer(cashCustomer);
-      custs.insert(0, cashCustomer);
+    if (!custs.any((c) => c.id == defaultCust.id)) {
+      custs.insert(0, defaultCust);
     }
 
     setState(() {
@@ -85,20 +69,17 @@ class _PosScreenState extends State<PosScreen> {
       _allProducts = prods;
       _filteredProducts = prods;
       _customers = custs;
-      _selectedCustomer = cashCustomer; // تعيين العميل النقدي كافتراضي
+      _selectedCustomer = custs.firstWhere((c) => c.id == defaultCust.id, orElse: () => defaultCust);
       _prepNotesList = notes.isNotEmpty ? notes : ['بدون شطة', 'زيادة صوص', 'بدون ثوم', 'سفري', 'محلي'];
-      _paymentMethods = dbPaymentMethods.isNotEmpty 
-          ? dbPaymentMethods 
-          : ['نقدي', 'أجل', 'شبكة (بطاقة)', 'تحويل بنكي'];
+      _paymentMethods = dbPaymentMethods.isNotEmpty ? dbPaymentMethods : ['نقدي', 'آجل'];
       _isLoading = false;
     });
   }
 
   bool get _isCashCustomer =>
       _selectedCustomer == null ||
-      _selectedCustomer!.id == 'cash_customer' ||
-      _selectedCustomer!.name == 'عميل نقدي' ||
-      _selectedCustomer!.name == 'زبون نقدي';
+      _selectedCustomer!.id == 'cash_default' ||
+      _selectedCustomer!.name == 'عميل نقدي';
 
   void _filterProducts(String query) {
     setState(() {
@@ -131,17 +112,15 @@ class _PosScreenState extends State<PosScreen> {
   void _clearInvoice() {
     setState(() {
       _cart.clear();
-      // العودة التلقائية للزبون النقدي الافتراضي
       _selectedCustomer = _customers.firstWhere(
-        (c) => c.id == 'cash_customer' || c.name == 'عميل نقدي' || c.name == 'زبون نقدي',
-        orElse: () => _customers.isNotEmpty ? _customers.first : Customer(id: 'cash', name: 'عميل نقدي', phone: '', address: '', balance: 0),
+        (c) => c.id == 'cash_default',
+        orElse: () => Customer(id: 'cash_default', name: 'عميل نقدي', phone: '', address: '', balance: 0.0),
       );
     });
   }
 
   double get _totalAmount => _cart.fold(0.0, (sum, item) => sum + item.total);
 
-  // اختيار العميل
   void _selectCustomerDialog() {
     showDialog(
       context: context,
@@ -154,7 +133,7 @@ class _PosScreenState extends State<PosScreen> {
             itemCount: _customers.length,
             itemBuilder: (context, index) {
               final c = _customers[index];
-              final isCash = c.id == 'cash_customer' || c.name == 'عميل نقدي' || c.name == 'زبون نقدي';
+              final isCash = c.id == 'cash_default';
 
               return ListTile(
                 leading: CircleAvatar(
@@ -162,7 +141,7 @@ class _PosScreenState extends State<PosScreen> {
                   child: Icon(isCash ? Icons.point_of_sale : Icons.person, color: isCash ? Colors.orange.shade900 : Colors.blue),
                 ),
                 title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(isCash ? 'زبون نقدي افتراضي' : 'هاتف: ${c.phone} | الرصيد: ${c.balance.toStringAsFixed(2)}'),
+                subtitle: Text(isCash ? 'عميل نقدي افتراضي' : 'هاتف: ${c.phone} | الرصيد: ${c.balance.toStringAsFixed(2)}'),
                 onTap: () {
                   setState(() {
                     _selectedCustomer = c;
@@ -177,7 +156,6 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // ملاحظات التحضير
   void _showPrepNotesDialog(CartItem item) {
     final customNoteCtrl = TextEditingController();
     showDialog(
@@ -247,7 +225,6 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // نافذة اختيار طريقة الدفع المجلوبة من قاعدة البيانات
   void _showPaymentDialog() {
     String selectedMethod = _isCashCustomer ? 'نقدي' : (_paymentMethods.isNotEmpty ? _paymentMethods.first : 'نقدي');
 
@@ -285,9 +262,7 @@ class _PosScreenState extends State<PosScreen> {
                 DropdownButtonFormField<String>(
                   value: availableMethods.contains(selectedMethod) ? selectedMethod : availableMethods.first,
                   decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'طريقة الدفع'),
-                  items: availableMethods
-                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                      .toList(),
+                  items: availableMethods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
                   onChanged: (val) {
                     if (val != null) setDlgState(() => selectedMethod = val);
                   },
@@ -320,36 +295,32 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // معالجة وتسجيل عملية البيع / المرتجع في كشف الحساب
   Future<void> _processCheckout(String paymentMethod) async {
-    final customerId = _selectedCustomer?.id ?? 'cash_customer';
-    final isCredit = paymentMethod == 'أجل';
+    final now = DateTime.now().toString().split('.')[0];
+    final shiftId = await DBHelper.getCurrentShiftId();
+    final customerId = _selectedCustomer?.id ?? 'cash_default';
+    final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
+    final invoiceType = _isReturnMode ? 'return' : 'sale';
 
-    // تسجيل الحركات في كشف حساب العميل المسجل
-    if (!_isCashCustomer) {
-      if (isCredit) {
-        // الآجل: تسجيل سطر مدين واحد فقط
-        await DBHelper.addCustomerTransaction(
-          customerId: customerId,
-          type: 'فاتورة مبيعات آجل',
-          debit: _totalAmount,
-          credit: 0.0,
-        );
-      } else {
-        // النقدي: تسجيل سطرين (مدين ودائن حاسب)
-        await DBHelper.addCustomerTransaction(
-          customerId: customerId,
-          type: 'فاتورة مبيعات نقدي',
-          debit: _totalAmount,
-          credit: 0.0,
-        );
-        await DBHelper.addCustomerTransaction(
-          customerId: customerId,
-          type: 'سداد فاتورة نقدي',
-          debit: 0.0,
-          credit: _totalAmount,
-        );
-      }
+    // 1. إنشاء وحفظ الفاتورة
+    final invoice = Invoice(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      invoiceType: invoiceType,
+      paymentType: isCredit ? 'credit' : 'cash',
+      totalAmount: _totalAmount,
+      date: now,
+      customerId: customerId,
+      customerName: _selectedCustomer?.name ?? 'عميل نقدي',
+      shiftId: shiftId,
+      isClosed: false,
+    );
+
+    await DBHelper.saveInvoice(invoice);
+
+    // 2. خصم أو زيادة المخزون الأصناف
+    for (var item in _cart) {
+      double stockDelta = _isReturnMode ? item.quantity : -item.quantity;
+      await DBHelper.updateProductStock(item.product.id, stockDelta);
     }
 
     final actionName = _isReturnMode ? 'مرتجع المبيعات' : 'الفاتورة';
@@ -369,6 +340,7 @@ class _PosScreenState extends State<PosScreen> {
       );
     }
 
+    await _loadData();
     _clearInvoice();
     if (_isReturnMode) {
       setState(() => _isReturnMode = false);
@@ -420,7 +392,6 @@ class _PosScreenState extends State<PosScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // شريط العميل المختار
                 Container(
                   color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -445,8 +416,6 @@ class _PosScreenState extends State<PosScreen> {
                     ],
                   ),
                 ),
-
-                // محتوى الاصناف والفاتورة
                 Expanded(
                   child: Row(
                     children: [
@@ -485,8 +454,6 @@ class _PosScreenState extends State<PosScreen> {
                                   ],
                                 ),
                               ),
-
-                              // شريط المجموعات بألوان ووضوح عالي
                               if (_isTouchMode)
                                 Container(
                                   height: 48,
@@ -534,14 +501,12 @@ class _PosScreenState extends State<PosScreen> {
                                     ],
                                   ),
                                 ),
-
                               Expanded(
                                 child: _isTouchMode ? _buildTouchProductGrid() : _buildStandardProductList(),
                               ),
                             ],
                           ),
                         ),
-
                       if (!_isProductsFullScreen)
                         InkWell(
                           onTap: () {
@@ -558,7 +523,6 @@ class _PosScreenState extends State<PosScreen> {
                             ),
                           ),
                         ),
-
                       if (!_isProductsFullScreen)
                         Expanded(
                           flex: _isInvoiceExpanded ? 1 : 2,
@@ -570,14 +534,12 @@ class _PosScreenState extends State<PosScreen> {
                     ],
                   ),
                 ),
-
                 _buildBottomBar(),
               ],
             ),
     );
   }
 
-  // شبكة الأصناف الملونة بالكامل بفرز واضح
   Widget _buildTouchProductGrid() {
     return GridView.builder(
       padding: const EdgeInsets.all(6),
@@ -610,7 +572,7 @@ class _PosScreenState extends State<PosScreen> {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
-                      color: Colors.white, // نص أبيض ناصع
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -645,7 +607,7 @@ class _PosScreenState extends State<PosScreen> {
         final prod = _filteredProducts[index];
         return ListTile(
           title: Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('السعر: ${prod.sellPrice}'),
+          subtitle: Text('السعر: ${prod.sellPrice} | الكمية: ${prod.quantity}'),
           trailing: IconButton(
             icon: Icon(
               _isReturnMode ? Icons.remove_shopping_cart : Icons.add_shopping_cart,
