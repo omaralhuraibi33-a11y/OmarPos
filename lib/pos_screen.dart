@@ -18,7 +18,7 @@ class CartItem {
 }
 
 class PosScreen extends StatefulWidget {
-  const PosScreen({Key? key}) : super(key: key);
+  const PosScreen({Key? key}) : super(Key: key);
 
   @override
   State<PosScreen> createState() => _PosScreenState();
@@ -38,9 +38,7 @@ class _PosScreenState extends State<PosScreen> {
   List<Product> _filteredProducts = [];
   List<Customer> _customers = [];
   List<String> _prepNotesList = [];
-
-  // قائمة طرق الدفع المتاحة
-  final List<String> _paymentMethods = ['نقدي', 'أجل', 'شبكة (بطاقة)', 'تحويل بنكي'];
+  List<String> _paymentMethods = []; // طرق الدفع المجلوبة من قاعدة البيانات
 
   // بيانات الفاتورة الحالية
   Customer? _selectedCustomer;
@@ -62,6 +60,7 @@ class _PosScreenState extends State<PosScreen> {
     final prods = await DBHelper.getActivePOSProducts();
     final custs = await DBHelper.getAllCustomers();
     final notes = await DBHelper.getPreparationNotes();
+    final dbPaymentMethods = await DBHelper.getPaymentMethods(); // جلب طرق الدفع من DB
 
     // البحث عن العميل النقدي الافتراضي أو إنشائه
     Customer cashCustomer = custs.firstWhere(
@@ -86,8 +85,11 @@ class _PosScreenState extends State<PosScreen> {
       _allProducts = prods;
       _filteredProducts = prods;
       _customers = custs;
-      _selectedCustomer = cashCustomer; // تعيين العميل الافتراضي
+      _selectedCustomer = cashCustomer; // تعيين العميل النقدي كافتراضي
       _prepNotesList = notes.isNotEmpty ? notes : ['بدون شطة', 'زيادة صوص', 'بدون ثوم', 'سفري', 'محلي'];
+      _paymentMethods = dbPaymentMethods.isNotEmpty 
+          ? dbPaymentMethods 
+          : ['نقدي', 'أجل', 'شبكة (بطاقة)', 'تحويل بنكي'];
       _isLoading = false;
     });
   }
@@ -129,7 +131,7 @@ class _PosScreenState extends State<PosScreen> {
   void _clearInvoice() {
     setState(() {
       _cart.clear();
-      // إعادة تعيين إلى العميل النقدي الافتراضي
+      // العودة التلقائية للزبون النقدي الافتراضي
       _selectedCustomer = _customers.firstWhere(
         (c) => c.id == 'cash_customer' || c.name == 'عميل نقدي' || c.name == 'زبون نقدي',
         orElse: () => _customers.isNotEmpty ? _customers.first : Customer(id: 'cash', name: 'عميل نقدي', phone: '', address: '', balance: 0),
@@ -245,14 +247,16 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // نافذة اختيار طريقة الدفع
+  // نافذة اختيار طريقة الدفع المجلوبة من قاعدة البيانات
   void _showPaymentDialog() {
-    String selectedMethod = _isCashCustomer ? 'نقدي' : 'نقدي';
+    String selectedMethod = _isCashCustomer ? 'نقدي' : (_paymentMethods.isNotEmpty ? _paymentMethods.first : 'نقدي');
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) {
+          final availableMethods = _isCashCustomer ? ['نقدي'] : _paymentMethods;
+
           return AlertDialog(
             title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع واختيار طريقة الدفع'),
             content: Column(
@@ -268,20 +272,20 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}'),
+                Text('العميل الحالي: ${_selectedCustomer?.name ?? "عميل نقدي"}'),
                 if (_isCashCustomer)
                   const Padding(
-                    padding: EdgeInsets.only(top: 4.0),
+                    padding: EdgeInsets.symmetric(vertical: 6.0),
                     child: Text(
-                      'ملاحظة: العميل النقدي لا يقبل سوى الدفع النقدي.',
-                      style: TextStyle(color: Colors.red, fontSize: 12),
+                      'تنبيه: العميل النقدي لا يقبل سوى الدفع النقدي.',
+                      style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: selectedMethod,
+                  value: availableMethods.contains(selectedMethod) ? selectedMethod : availableMethods.first,
                   decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'طريقة الدفع'),
-                  items: (_isCashCustomer ? ['نقدي'] : _paymentMethods)
+                  items: availableMethods
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                       .toList(),
                   onChanged: (val) {
@@ -316,15 +320,15 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // معالجة وتسجيل عملية البيع / المرتجع
+  // معالجة وتسجيل عملية البيع / المرتجع في كشف الحساب
   Future<void> _processCheckout(String paymentMethod) async {
     final customerId = _selectedCustomer?.id ?? 'cash_customer';
     final isCredit = paymentMethod == 'أجل';
 
-    // تسجيل الحركات المباشرة لدى العميل في حال لم يكن العميل زبوناً نقدياً
+    // تسجيل الحركات في كشف حساب العميل المسجل
     if (!_isCashCustomer) {
       if (isCredit) {
-        // إذا كان البيع أجلاً: يُسجل سطر مدين واحد فقط
+        // الآجل: تسجيل سطر مدين واحد فقط
         await DBHelper.addCustomerTransaction(
           customerId: customerId,
           type: 'فاتورة مبيعات آجل',
@@ -332,7 +336,7 @@ class _PosScreenState extends State<PosScreen> {
           credit: 0.0,
         );
       } else {
-        // إذا كان نقداً: يُسجل سطرين (مدين + دائن حاسب)
+        // النقدي: تسجيل سطرين (مدين ودائن حاسب)
         await DBHelper.addCustomerTransaction(
           customerId: customerId,
           type: 'فاتورة مبيعات نقدي',
@@ -416,7 +420,7 @@ class _PosScreenState extends State<PosScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // شريط بيانات العميل الحالي
+                // شريط العميل المختار
                 Container(
                   color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -442,7 +446,7 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
 
-                // محتوى الأصناف والفاتورة
+                // محتوى الاصناف والفاتورة
                 Expanded(
                   child: Row(
                     children: [
@@ -482,7 +486,7 @@ class _PosScreenState extends State<PosScreen> {
                                 ),
                               ),
 
-                              // شريط ألوان المجموعات
+                              // شريط المجموعات بألوان ووضوح عالي
                               if (_isTouchMode)
                                 Container(
                                   height: 48,
@@ -573,7 +577,7 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // شبكة عرض الأصناف الملونة
+  // شبكة الأصناف الملونة بالكامل بفرز واضح
   Widget _buildTouchProductGrid() {
     return GridView.builder(
       padding: const EdgeInsets.all(6),
@@ -586,15 +590,13 @@ class _PosScreenState extends State<PosScreen> {
       itemCount: _filteredProducts.length,
       itemBuilder: (ctx, index) {
         final prod = _filteredProducts[index];
-
-        // تحديد اللون المخصص للصنف أو من مجوعته
         Color cardColor = _isReturnMode ? Colors.deepOrange.shade700 : Colors.blue.shade700;
 
         return InkWell(
           onTap: () => _addToCart(prod),
           child: Card(
             elevation: 3,
-            color: cardColor, // الكرت ملون بالكامل
+            color: cardColor,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             child: Padding(
               padding: const EdgeInsets.all(6.0),
@@ -608,7 +610,7 @@ class _PosScreenState extends State<PosScreen> {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
-                      color: Colors.white, // النص باللون الأبيض
+                      color: Colors.white, // نص أبيض ناصع
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -621,7 +623,7 @@ class _PosScreenState extends State<PosScreen> {
                     child: Text(
                       '${prod.sellPrice}',
                       style: const TextStyle(
-                        color: Colors.white, // السعر باللون الأبيض الناصع
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
