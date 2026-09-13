@@ -20,9 +20,26 @@ class _CustomersScreenState extends State<CustomersScreen> {
     _refreshCustomers();
   }
 
+  /// التحقق من وجود "عميل نقدي" افتراضي إضافة إلى باقي العملاء
   Future<void> _refreshCustomers() async {
     setState(() => _isLoading = true);
     final data = await DBHelper.getAllCustomers();
+
+    // التحقق من وجود العميل النقدي الافتراضي في القائمة
+    bool hasDefaultCashCustomer = data.any((c) => c.id == 'cash_customer' || c.name == 'عميل نقدي');
+    if (!hasDefaultCashCustomer) {
+      final defaultCashCustomer = Customer(
+        id: 'cash_customer',
+        name: 'عميل نقدي',
+        phone: '000000000',
+        address: 'افتراضي',
+        balance: 0.0,
+        notes: 'عميل افتراضي للمبيعات النقدية (غير قابل للحذف أو التعديل)',
+      );
+      await DBHelper.saveCustomer(defaultCashCustomer);
+      data.insert(0, defaultCashCustomer);
+    }
+
     setState(() {
       _allCustomers = data;
       _filteredCustomers = data;
@@ -124,6 +141,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _showCustomerDialog({Customer? customer}) {
+    // التأكد من حماية العميل النقدي من التعديل
+    if (customer != null && (customer.id == 'cash_customer' || customer.name == 'عميل نقدي')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('العميل النقدي افتراضي ولا يمكن تعديله')),
+      );
+      return;
+    }
+
     final isEditing = customer != null;
     final nameController = TextEditingController(text: customer?.name ?? '');
     final phoneController = TextEditingController(text: customer?.phone ?? '');
@@ -171,7 +196,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
+            child: const Text('إغلاق'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -205,12 +230,20 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  void _deleteCustomer(String id) {
+  void _deleteCustomer(Customer customer) {
+    // حماية العميل النقدي من الحذف
+    if (customer.id == 'cash_customer' || customer.name == 'عميل نقدي') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا يمكن حذف العميل النقدي الافتراضي للنظام')),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('تأكيد الحذف'),
-        content: const Text('هل أنت أؤكد حذف هذا العميل؟'),
+        content: Text('هل أنت متأكد من حذف العميل ${customer.name}؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -219,7 +252,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              await DBHelper.deleteCustomer(id);
+              await DBHelper.deleteCustomer(customer.id);
               if (mounted) {
                 Navigator.pop(ctx);
                 _refreshCustomers();
@@ -265,26 +298,51 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         itemCount: _filteredCustomers.length,
                         itemBuilder: (context, index) {
                           final c = _filteredCustomers[index];
+                          final isDefaultCash = c.id == 'cash_customer' || c.name == 'عميل نقدي';
                           final hasDebt = c.balance > 0;
 
                           return Card(
+                            color: isDefaultCash ? Colors.amber.shade50 : null,
                             margin: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 5),
                             child: ListTile(
                               leading: CircleAvatar(
-                                backgroundColor:
-                                    hasDebt ? Colors.red.shade100 : Colors.green.shade100,
+                                backgroundColor: isDefaultCash
+                                    ? Colors.amber.shade200
+                                    : (hasDebt ? Colors.red.shade100 : Colors.green.shade100),
                                 child: Icon(
-                                  Icons.person,
-                                  color: hasDebt ? Colors.red : Colors.green,
+                                  isDefaultCash ? Icons.point_of_sale : Icons.person,
+                                  color: isDefaultCash
+                                      ? Colors.orange.shade900
+                                      : (hasDebt ? Colors.red : Colors.green),
                                 ),
                               ),
-                              title: Text(
-                                c.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              title: Row(
+                                children: [
+                                  Text(
+                                    c.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  if (isDefaultCash) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'افتراضي',
+                                        style: TextStyle(color: Colors.white, fontSize: 10),
+                                      ),
+                                    ),
+                                  ]
+                                ],
                               ),
                               subtitle: Text(
-                                'هاتف: ${c.phone}${c.address.isNotEmpty ? ' | ${c.address}' : ''}',
+                                isDefaultCash
+                                    ? 'عميل المبيعات النقدية المباشرة'
+                                    : 'هاتف: ${c.phone}${c.address.isNotEmpty ? ' | ${c.address}' : ''}',
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -306,17 +364,20 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                     tooltip: 'كشف حساب',
                                     onPressed: () => _showCustomerStatement(c),
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit,
-                                        size: 20, color: Colors.blue),
-                                    onPressed: () =>
-                                        _showCustomerDialog(customer: c),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete,
-                                        size: 20, color: Colors.red),
-                                    onPressed: () => _deleteCustomer(c.id),
-                                  ),
+                                  // إخفاء زري التعديل والحذف للعميل النقدي الافتراضي
+                                  if (!isDefaultCash) ...[
+                                    IconButton(
+                                      icon: const Icon(Icons.edit,
+                                          size: 20, color: Colors.blue),
+                                      onPressed: () =>
+                                          _showCustomerDialog(customer: c),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete,
+                                          size: 20, color: Colors.red),
+                                      onPressed: () => _deleteCustomer(c),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
