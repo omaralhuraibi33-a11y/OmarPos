@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'db_helper.dart';
 
 class SuppliersScreen extends StatefulWidget {
-  const SuppliersScreen({Key? key}) : super(Key: key);
-
+  const SuppliersScreen({super.key});
   @override
   State<SuppliersScreen> createState() => _SuppliersScreenState();
 }
