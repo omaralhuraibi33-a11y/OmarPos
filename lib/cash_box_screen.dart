@@ -1,36 +1,42 @@
-import 'package:flutter/material.dart';
+// كود زر الصندوق في الشاشة الرئيسية
+IconButton(
+  icon: const Icon(Icons.account_balance_wallet),
+  tooltip: 'إجمالي الصندوق',
+  onPressed: () async {
+    // جلب الرصيد الإجمالي من قاعدة البيانات
+    double balance = await DBHelper.getMainVaultBalance();
 
-class CashBoxScreen extends StatelessWidget {
-  const CashBoxScreen({super.key});
+    if (!context.mounted) return;
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('الصندوق'),
-        backgroundColor: Colors.brown,
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          'إجمالي الصندوق الحالي',
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Card(
-              elevation: 2,
-              child: ListTile(
-                leading: const Icon(Icons.savings, size: 36, color: Colors.brown),
-                title: const Text('حركة النقدية', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('متابعة رصيد الخزينة والسيولة'),
-              ),
-            ),
-            const Expanded(
-              child: Center(
-                child: Text('شاشة الصندوق جاهزة للتطوير والتعديل'),
+            const Icon(Icons.account_balance_wallet, size: 50, color: Colors.green),
+            const SizedBox(height: 15),
+            Text(
+              '${balance.toStringAsFixed(2)}',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
               ),
             ),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إغلاق'),
+          ),
+        ],
       ),
     );
-  }
-}
+  },
+);
