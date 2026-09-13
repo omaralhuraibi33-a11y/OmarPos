@@ -26,39 +26,28 @@ class PosScreen extends StatefulWidget {
 
 class _PosScreenState extends State<PosScreen> {
   // حالة النظام
-  bool _isTouchMode = true; // true = مبيعات لمس, false = مبيعات عادية
-  bool _isPrinterConnected = true; // حالة الطابعة
-  bool _isInvoiceExpanded = false; // توسيع شاشة الفاتورة
-  bool _isProductsFullScreen = false; // جعل الأصناف بكامل الشاشة
-  bool _isReturnMode = false; // true = وضع مرتجع مبيعات, false = بيع عادي
+  bool _isTouchMode = true;
+  bool _isPrinterConnected = true;
+  bool _isInvoiceExpanded = false;
+  bool _isProductsFullScreen = false;
+  bool _isReturnMode = false;
 
   // البيانات
   List<Category> _categories = [];
   List<Product> _allProducts = [];
   List<Product> _filteredProducts = [];
   List<Customer> _customers = [];
-
-  // قائمة ملاحظات التحضير المقترحة
-  final List<String> _prepNotesList = [
-    'بدون شطة',
-    'زيادة صوص',
-    'بدون ثوم',
-    'بدون بصل',
-    'محمص زيادة',
-    'سفري',
-    'محلي',
-  ];
+  List<String> _prepNotesList = [];
 
   // قائمة طرق الدفع المتاحة
   final List<String> _paymentMethods = ['نقدي', 'أجل', 'شبكة (بطاقة)', 'تحويل بنكي'];
 
   // بيانات الفاتورة الحالية
-  List<CartItem> _cart = [];
-  String _selectedCustomerId = 'cash'; // 'cash' تعني زبون نقدي
-  String _selectedCustomerName = 'زبون نقدي';
+  Customer? _selectedCustomer;
   String _selectedCategoryId = 'all';
   final TextEditingController _searchController = TextEditingController();
 
+  List<CartItem> _cart = [];
   bool _isLoading = true;
 
   @override
@@ -72,15 +61,42 @@ class _PosScreenState extends State<PosScreen> {
     final cats = await DBHelper.getActivePOSCategories();
     final prods = await DBHelper.getActivePOSProducts();
     final custs = await DBHelper.getAllCustomers();
+    final notes = await DBHelper.getPreparationNotes();
+
+    // البحث عن العميل النقدي الافتراضي أو إنشائه
+    Customer cashCustomer = custs.firstWhere(
+      (c) => c.id == 'cash_customer' || c.name == 'عميل نقدي' || c.name == 'زبون نقدي',
+      orElse: () => Customer(
+        id: 'cash_customer',
+        name: 'عميل نقدي',
+        phone: '000000000',
+        address: 'افتراضي',
+        balance: 0.0,
+        notes: 'عميل نقدي افتراضي',
+      ),
+    );
+
+    if (!custs.any((c) => c.id == cashCustomer.id)) {
+      await DBHelper.saveCustomer(cashCustomer);
+      custs.insert(0, cashCustomer);
+    }
 
     setState(() {
       _categories = cats;
       _allProducts = prods;
       _filteredProducts = prods;
       _customers = custs;
+      _selectedCustomer = cashCustomer; // تعيين العميل الافتراضي
+      _prepNotesList = notes.isNotEmpty ? notes : ['بدون شطة', 'زيادة صوص', 'بدون ثوم', 'سفري', 'محلي'];
       _isLoading = false;
     });
   }
+
+  bool get _isCashCustomer =>
+      _selectedCustomer == null ||
+      _selectedCustomer!.id == 'cash_customer' ||
+      _selectedCustomer!.name == 'عميل نقدي' ||
+      _selectedCustomer!.name == 'زبون نقدي';
 
   void _filterProducts(String query) {
     setState(() {
@@ -113,8 +129,11 @@ class _PosScreenState extends State<PosScreen> {
   void _clearInvoice() {
     setState(() {
       _cart.clear();
-      _selectedCustomerId = 'cash';
-      _selectedCustomerName = 'زبون نقدي';
+      // إعادة تعيين إلى العميل النقدي الافتراضي
+      _selectedCustomer = _customers.firstWhere(
+        (c) => c.id == 'cash_customer' || c.name == 'عميل نقدي' || c.name == 'زبون نقدي',
+        orElse: () => _customers.isNotEmpty ? _customers.first : Customer(id: 'cash', name: 'عميل نقدي', phone: '', address: '', balance: 0),
+      );
     });
   }
 
@@ -128,41 +147,35 @@ class _PosScreenState extends State<PosScreen> {
         title: const Text('اختيار العميل'),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView(
+          child: ListView.builder(
             shrinkWrap: true,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.person, color: Colors.green),
-                title: const Text('زبون نقدي (افتراضي)', style: TextStyle(fontWeight: FontWeight.bold)),
+            itemCount: _customers.length,
+            itemBuilder: (context, index) {
+              final c = _customers[index];
+              final isCash = c.id == 'cash_customer' || c.name == 'عميل نقدي' || c.name == 'زبون نقدي';
+
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isCash ? Colors.amber.shade100 : Colors.blue.shade100,
+                  child: Icon(isCash ? Icons.point_of_sale : Icons.person, color: isCash ? Colors.orange.shade900 : Colors.blue),
+                ),
+                title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(isCash ? 'زبون نقدي افتراضي' : 'هاتف: ${c.phone} | الرصيد: ${c.balance.toStringAsFixed(2)}'),
                 onTap: () {
                   setState(() {
-                    _selectedCustomerId = 'cash';
-                    _selectedCustomerName = 'زبون نقدي';
+                    _selectedCustomer = c;
                   });
                   Navigator.pop(ctx);
                 },
-              ),
-              const Divider(),
-              ..._customers.map((c) => ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: Text(c.name),
-                    subtitle: Text('هاتف: ${c.phone} | الدين: ${c.balance}'),
-                    onTap: () {
-                      setState(() {
-                        _selectedCustomerId = c.id;
-                        _selectedCustomerName = c.name;
-                      });
-                      Navigator.pop(ctx);
-                    },
-                  )),
-            ],
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  // إضافة أو تعديل ملاحظات التحضير لصنف معين
+  // ملاحظات التحضير
   void _showPrepNotesDialog(CartItem item) {
     final customNoteCtrl = TextEditingController();
     showDialog(
@@ -173,26 +186,23 @@ class _PosScreenState extends State<PosScreen> {
             title: Text('ملاحظات تحضير: ${item.product.name}'),
             content: SingleChildScrollView(
               child: Column(
-                mainAxisSize: minMode,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Wrap(
                     spacing: 6,
+                    runSpacing: 6,
                     children: _prepNotesList.map((note) {
                       final isSelected = item.preparationNotes.contains(note);
                       return FilterChip(
-                        label: Text(note),
+                        label: Text(note, style: TextStyle(color: isSelected ? Colors.white : Colors.black)),
                         selected: isSelected,
+                        selectedColor: Colors.deepOrange,
                         onSelected: (selected) {
                           setState(() {
                             if (selected) {
-                              item.preparationNotes = item.preparationNotes.isEmpty
-                                  ? note
-                                  : '${item.preparationNotes} - $note';
+                              item.preparationNotes = item.preparationNotes.isEmpty ? note : '${item.preparationNotes} - $note';
                             } else {
-                              item.preparationNotes = item.preparationNotes
-                                  .replaceAll(note, '')
-                                  .replaceAll(' -  - ', ' - ')
-                                  .trim();
+                              item.preparationNotes = item.preparationNotes.replaceAll(note, '').replaceAll(' -  - ', ' - ').trim();
                             }
                           });
                           setDlgState(() {});
@@ -204,7 +214,7 @@ class _PosScreenState extends State<PosScreen> {
                   TextField(
                     controller: customNoteCtrl,
                     decoration: const InputDecoration(
-                      labelText: 'إضافة ملاحظة جديدة خاصة',
+                      labelText: 'إضافة ملاحظة جديدة',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -213,21 +223,20 @@ class _PosScreenState extends State<PosScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () {
+                onPressed: () async {
                   if (customNoteCtrl.text.trim().isNotEmpty) {
                     final newNote = customNoteCtrl.text.trim();
+                    if (!_prepNotesList.contains(newNote)) {
+                      await DBHelper.addPreparationNote(newNote);
+                      _prepNotesList.add(newNote);
+                    }
                     setState(() {
-                      if (!_prepNotesList.contains(newNote)) {
-                        _prepNotesList.add(newNote);
-                      }
-                      item.preparationNotes = item.preparationNotes.isEmpty
-                          ? newNote
-                          : '${item.preparationNotes} - $newNote';
+                      item.preparationNotes = item.preparationNotes.isEmpty ? newNote : '${item.preparationNotes} - $newNote';
                     });
                   }
                   Navigator.pop(ctx);
                 },
-                child: const Text('حفظ الملاحظات'),
+                child: const Text('حفظ الملاحظة'),
               ),
             ],
           );
@@ -236,11 +245,9 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  MainAxisSize get minMode => MainAxisSize.min;
-
-  // نافذة إتمام الدفع أو إرجاع المبلغ
+  // نافذة اختيار طريقة الدفع
   void _showPaymentDialog() {
-    String selectedMethod = 'نقدي';
+    String selectedMethod = _isCashCustomer ? 'نقدي' : 'نقدي';
 
     showDialog(
       context: context,
@@ -261,15 +268,25 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text(_isReturnMode ? 'طريقة إعادة المبلغ:' : 'اختر طريقة الدفع:'),
-                const SizedBox(height: 8),
+                Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}'),
+                if (_isCashCustomer)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      'ملاحظة: العميل النقدي لا يقبل سوى الدفع النقدي.',
+                      style: TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  ),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: selectedMethod,
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                  items: _paymentMethods
+                  decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'طريقة الدفع'),
+                  items: (_isCashCustomer ? ['نقدي'] : _paymentMethods)
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                       .toList(),
-                  onChanged: (val) => setDlgState(() => selectedMethod = val!),
+                  onChanged: (val) {
+                    if (val != null) setDlgState(() => selectedMethod = val);
+                  },
                 ),
               ],
             ),
@@ -299,10 +316,39 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // معالجة الحفظ والطباعة (دعم البيع والمرتجع)
-  void _processCheckout(String paymentMethod) {
-    final actionName = _isReturnMode ? 'مرتجع المبيعات' : 'الفاتورة';
+  // معالجة وتسجيل عملية البيع / المرتجع
+  Future<void> _processCheckout(String paymentMethod) async {
+    final customerId = _selectedCustomer?.id ?? 'cash_customer';
+    final isCredit = paymentMethod == 'أجل';
 
+    // تسجيل الحركات المباشرة لدى العميل في حال لم يكن العميل زبوناً نقدياً
+    if (!_isCashCustomer) {
+      if (isCredit) {
+        // إذا كان البيع أجلاً: يُسجل سطر مدين واحد فقط
+        await DBHelper.addCustomerTransaction(
+          customerId: customerId,
+          type: 'فاتورة مبيعات آجل',
+          debit: _totalAmount,
+          credit: 0.0,
+        );
+      } else {
+        // إذا كان نقداً: يُسجل سطرين (مدين + دائن حاسب)
+        await DBHelper.addCustomerTransaction(
+          customerId: customerId,
+          type: 'فاتورة مبيعات نقدي',
+          debit: _totalAmount,
+          credit: 0.0,
+        );
+        await DBHelper.addCustomerTransaction(
+          customerId: customerId,
+          type: 'سداد فاتورة نقدي',
+          debit: 0.0,
+          credit: _totalAmount,
+        );
+      }
+    }
+
+    final actionName = _isReturnMode ? 'مرتجع المبيعات' : 'الفاتورة';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('تم حفظ $actionName بنجاح ($paymentMethod)'),
@@ -321,7 +367,7 @@ class _PosScreenState extends State<PosScreen> {
 
     _clearInvoice();
     if (_isReturnMode) {
-      setState(() => _isReturnMode = false); // العودة التلقائية للبيع
+      setState(() => _isReturnMode = false);
     }
   }
 
@@ -332,9 +378,7 @@ class _PosScreenState extends State<PosScreen> {
         backgroundColor: _isReturnMode ? Colors.orange.shade800 : null,
         title: Row(
           children: [
-            Text(_isReturnMode
-                ? 'مرتجع مبيعات'
-                : (_isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية')),
+            Text(_isReturnMode ? 'مرتجع مبيعات' : (_isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية')),
             const SizedBox(width: 8),
             if (!_isReturnMode)
               Switch(
@@ -355,7 +399,6 @@ class _PosScreenState extends State<PosScreen> {
               setState(() => _isPrinterConnected = !_isPrinterConnected);
             },
           ),
-          // زر التبديل بين وضع البيع والمرتجع
           TextButton.icon(
             style: TextButton.styleFrom(foregroundColor: Colors.white),
             icon: Icon(_isReturnMode ? Icons.shopping_cart : Icons.assignment_return),
@@ -373,7 +416,7 @@ class _PosScreenState extends State<PosScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // شريط العميل والوضع
+                // شريط بيانات العميل الحالي
                 Container(
                   color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -385,23 +428,9 @@ class _PosScreenState extends State<PosScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'العميل: $_selectedCustomerName',
+                        'العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
-                      if (_isReturnMode) ...[
-                        const SizedBox(width: 15),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade800,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'وضع المرتجع مفعل',
-                            style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
                       const Spacer(),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
@@ -413,7 +442,7 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
 
-                // محتوى الصفحة الرئيسي
+                // محتوى الأصناف والفاتورة
                 Expanded(
                   child: Row(
                     children: [
@@ -453,27 +482,48 @@ class _PosScreenState extends State<PosScreen> {
                                 ),
                               ),
 
+                              // شريط ألوان المجموعات
                               if (_isTouchMode)
                                 Container(
-                                  height: 45,
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  height: 48,
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                                   child: ListView(
                                     scrollDirection: Axis.horizontal,
                                     children: [
-                                      ChoiceChip(
-                                        label: const Text('الكل'),
-                                        selected: _selectedCategoryId == 'all',
-                                        onSelected: (_) => _filterByCategory('all'),
+                                      Padding(
+                                        padding: const EdgeInsets.only(right: 4.0),
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: _selectedCategoryId == 'all' ? Colors.blue.shade900 : Colors.blue,
+                                            foregroundColor: Colors.white,
+                                          ),
+                                          onPressed: () => _filterByCategory('all'),
+                                          child: const Text('الكل', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                        ),
                                       ),
-                                      const SizedBox(width: 5),
                                       ..._categories.map((cat) {
+                                        Color catColor = Colors.teal;
+                                        try {
+                                          catColor = Color(int.parse(cat.colorHex));
+                                        } catch (_) {}
+
+                                        final isSelected = _selectedCategoryId == cat.id;
+
                                         return Padding(
                                           padding: const EdgeInsets.only(right: 4.0),
-                                          child: ChoiceChip(
-                                            label: Text(cat.name),
-                                            selected: _selectedCategoryId == cat.id,
-                                            avatar: CircleAvatar(backgroundColor: Color(int.parse(cat.colorHex)), radius: 6),
-                                            onSelected: (_) => _filterByCategory(cat.id),
+                                          child: ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor,
+                                              elevation: isSelected ? 4 : 1,
+                                            ),
+                                            onPressed: () => _filterByCategory(cat.id),
+                                            child: Text(
+                                              cat.name,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                           ),
                                         );
                                       }),
@@ -517,13 +567,13 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
 
-                // الشريط السفلي
                 _buildBottomBar(),
               ],
             ),
     );
   }
 
+  // شبكة عرض الأصناف الملونة
   Widget _buildTouchProductGrid() {
     return GridView.builder(
       padding: const EdgeInsets.all(6),
@@ -536,11 +586,16 @@ class _PosScreenState extends State<PosScreen> {
       itemCount: _filteredProducts.length,
       itemBuilder: (ctx, index) {
         final prod = _filteredProducts[index];
+
+        // تحديد اللون المخصص للصنف أو من مجوعته
+        Color cardColor = _isReturnMode ? Colors.deepOrange.shade700 : Colors.blue.shade700;
+
         return InkWell(
           onTap: () => _addToCart(prod),
           child: Card(
-            elevation: 2,
-            color: _isReturnMode ? Colors.orange.shade50 : Colors.white,
+            elevation: 3,
+            color: cardColor, // الكرت ملون بالكامل
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             child: Padding(
               padding: const EdgeInsets.all(6.0),
               child: Column(
@@ -550,14 +605,26 @@ class _PosScreenState extends State<PosScreen> {
                     prod.name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${prod.sellPrice}',
-                    style: TextStyle(
-                      color: _isReturnMode ? Colors.orange.shade900 : Colors.green.shade800,
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.white, // النص باللون الأبيض
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${prod.sellPrice}',
+                      style: const TextStyle(
+                        color: Colors.white, // السعر باللون الأبيض الناصع
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ],
@@ -576,7 +643,7 @@ class _PosScreenState extends State<PosScreen> {
         final prod = _filteredProducts[index];
         return ListTile(
           title: Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('السعر: ${prod.sellPrice} | الكمية: ${prod.quantity}'),
+          subtitle: Text('السعر: ${prod.sellPrice}'),
           trailing: IconButton(
             icon: Icon(
               _isReturnMode ? Icons.remove_shopping_cart : Icons.add_shopping_cart,
@@ -598,8 +665,7 @@ class _PosScreenState extends State<PosScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_isReturnMode ? 'الصنف المراد إرجاعه' : 'الصنف / الملاحظات',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(_isReturnMode ? 'الصنف المراد إرجاعه' : 'الصنف / الملاحظات', style: const TextStyle(fontWeight: FontWeight.bold)),
               const Text('العدد', style: TextStyle(fontWeight: FontWeight.bold)),
               const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
@@ -623,8 +689,7 @@ class _PosScreenState extends State<PosScreen> {
                               children: [
                                 Expanded(
                                   flex: 3,
-                                  child: Text(item.product.name,
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                  child: Text(item.product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                                 ),
                                 Row(
                                   children: [
@@ -651,8 +716,7 @@ class _PosScreenState extends State<PosScreen> {
                                   ],
                                 ),
                                 const SizedBox(width: 8),
-                                Text('${item.total.toStringAsFixed(1)}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text('${item.total.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                             if (!_isReturnMode)
@@ -666,14 +730,10 @@ class _PosScreenState extends State<PosScreen> {
                                       const SizedBox(width: 4),
                                       Expanded(
                                         child: Text(
-                                          item.preparationNotes.isEmpty
-                                              ? '+ اضغط لإضافة ملاحظات تحضير'
-                                              : item.preparationNotes,
+                                          item.preparationNotes.isEmpty ? '+ ملاحظات تحضير' : item.preparationNotes,
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: item.preparationNotes.isEmpty
-                                                ? Colors.grey
-                                                : Colors.deepOrange,
+                                            color: item.preparationNotes.isEmpty ? Colors.grey : Colors.deepOrange,
                                             fontStyle: FontStyle.italic,
                                           ),
                                         ),
@@ -695,8 +755,7 @@ class _PosScreenState extends State<PosScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_isReturnMode ? 'إجمالي المسترجع:' : 'الإجمالي العام:',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(_isReturnMode ? 'إجمالي المسترجع:' : 'الإجمالي العام:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               Text(
                 '${_totalAmount.toStringAsFixed(2)}',
                 style: TextStyle(
@@ -726,8 +785,7 @@ class _PosScreenState extends State<PosScreen> {
               ),
               onPressed: _clearInvoice,
               icon: const Icon(Icons.delete_sweep, color: Colors.white),
-              label: Text(_isReturnMode ? 'تفريغ المرتجع' : 'فاتورة جديدة',
-                  style: const TextStyle(color: Colors.white, fontSize: 15)),
+              label: Text(_isReturnMode ? 'تفريغ المرتجع' : 'فاتورة جديدة', style: const TextStyle(color: Colors.white, fontSize: 15)),
             ),
           ),
           const SizedBox(width: 10),
