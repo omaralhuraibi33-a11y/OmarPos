@@ -633,7 +633,6 @@ class DBHelper {
     if (res.isNotEmpty) {
       return res.first['id'] as int;
     }
-    // في حال عدم وجود وردية مفتوحة ننشئ واحدة تبدأ من 1
     return await db.insert('shifts', {
       'startTime': DateTime.now().toString(),
       'userId': '1',
@@ -645,23 +644,30 @@ class DBHelper {
     });
   }
 
+  static Future<int> getNextShiftNumber() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT MAX(id) as maxId FROM shifts');
+    int maxId = (res.first['maxId'] as int?) ?? 0;
+    return maxId + 1;
+  }
+
   static Future<void> closeShift({
-    required String userId,
-    required String userName,
-    required double totalSales,
-    required double totalExpenses,
-    required double transferredToMainVault,
+    String? userId,
+    String? userName,
+    double totalSales = 0.0,
+    double totalExpenses = 0.0,
+    double transferredToMainVault = 0.0,
+    int? shiftNumber,
   }) async {
     final db = await database;
-    int currentShiftId = await getCurrentShiftId();
+    int currentShiftId = shiftNumber ?? await getCurrentShiftId();
 
-    // 1. تحديث الوردية الحالية كـ "مغلقة"
     await db.update(
       'shifts',
       {
         'endTime': DateTime.now().toString(),
-        'userId': userId,
-        'userName': userName,
+        'userId': userId ?? '1',
+        'userName': userName ?? 'المدير العام',
         'totalSales': totalSales,
         'totalExpenses': totalExpenses,
         'transferredToMainVault': transferredToMainVault,
@@ -671,15 +677,13 @@ class DBHelper {
       whereArgs: [currentShiftId],
     );
 
-    // 2. علم جميع الفواتير والسندات في هذه الوردية كـ "مغلقة"
     await db.update('invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
     await db.update('vouchers', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
 
-    // 3. فتح وردية جديدة ترقيمها التسلسلي تلقائي (+1)
     await db.insert('shifts', {
       'startTime': DateTime.now().toString(),
-      'userId': userId,
-      'userName': userName,
+      'userId': userId ?? '1',
+      'userName': userName ?? 'المدير العام',
       'totalSales': 0.0,
       'totalExpenses': 0.0,
       'transferredToMainVault': 0.0,
@@ -721,7 +725,6 @@ class DBHelper {
     }
     await db.insert('invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
 
-    // ربط الحسابات التلقائية عند البيع الآجل
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
       if (invoice.invoiceType == 'sale') {
         await addCustomerTransaction(
@@ -1056,6 +1059,10 @@ class DBHelper {
     return maps.map((m) => m['note'] as String).toList();
   }
 
+  static Future<List<String>> getPreparationNotes() async {
+    return await getPrepNotes();
+  }
+
   static Future<void> addPrepNote(String note) async {
     final db = await database;
     await db.insert('prep_notes', {
@@ -1064,21 +1071,56 @@ class DBHelper {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  static Future<void> addPreparationNote(String note) async {
+    await addPrepNote(note);
+  }
+
   static Future<void> deletePrepNote(String note) async {
     final db = await database;
     await db.delete('prep_notes', where: 'note = ?', whereArgs: [note]);
   }
 
-  // ==================== مسح البيانات ====================
-  static Future<void> clearAllAccountsData() async {
+  // ==================== مسح البيانات والتصفير ====================
+  static Future<void> resetAllRecordsAndBalances() async {
     final db = await database;
     await db.delete('invoices');
-    await db.delete('suppliers');
-    await db.delete('supplier_transactions');
-    await db.delete('customers');
     await db.delete('customer_transactions');
+    await db.delete('supplier_transactions');
     await db.delete('vouchers');
     await db.delete('shifts');
+    await db.rawUpdate('UPDATE customers SET balance = 0.0');
+    await db.rawUpdate('UPDATE suppliers SET balance = 0.0');
+    await db.rawUpdate('UPDATE products SET quantity = 0.0');
+  }
+
+  static Future<void> resetFullSystemToDefault() async {
+    final db = await database;
+    await db.delete('invoices');
+    await db.delete('customer_transactions');
+    await db.delete('supplier_transactions');
+    await db.delete('vouchers');
+    await db.delete('shifts');
+    await db.delete('products');
+    await db.delete('categories');
+    await db.delete('customers');
+    await db.delete('suppliers');
+    await db.delete('prep_notes');
+
+    await db.insert('customers', Customer(id: 'cash_default', name: 'عميل نقدي', phone: '', balance: 0.0).toMap());
+
+    await db.insert('shifts', {
+      'startTime': DateTime.now().toString(),
+      'userId': '1',
+      'userName': 'المدير العام',
+      'totalSales': 0.0,
+      'totalExpenses': 0.0,
+      'transferredToMainVault': 0.0,
+      'status': 'open'
+    });
+  }
+
+  static Future<void> clearAllAccountsData() async {
+    await resetAllRecordsAndBalances();
   }
 
   static Future<void> clearCategoriesAndProducts() async {
@@ -1135,9 +1177,7 @@ class DBHelper {
     }
   }
 
-  // ==================== دوال التقرير المالي الجاهزة ====================
-
-  /// إجمالي المبيعات (الفواتير من نوع sale)
+  // ==================== دوال التقرير المالي ====================
   static Future<double> getTotalSales() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1146,7 +1186,6 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// تكلفة المبيعات (حساب الكمية × سعر الشراء لجميع المنتجات)
   static Future<double> getSalesCost() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1155,7 +1194,6 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// إجمالي المشتريات (الفواتير من نوع purchase)
   static Future<double> getTotalPurchases() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1164,7 +1202,6 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// إجمالي الإيرادات (السندات العامة المقبوضة)
   static Future<double> getTotalRevenues() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1173,7 +1210,6 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// إجمالي المصروفات (السندات من نوع expense)
   static Future<double> getTotalExpenses() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1182,21 +1218,18 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// إجمالي الباقي للموردين
   static Future<double> getSuppliersTotalBalance() async {
     final db = await database;
     final result = await db.rawQuery("SELECT SUM(balance) as total FROM suppliers");
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// إجمالي الباقي على العملاء
   static Future<double> getCustomersTotalBalance() async {
     final db = await database;
     final result = await db.rawQuery("SELECT SUM(balance) as total FROM customers");
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// إجمالي الصندوق الرئيسي (المقبوضات - المصروفات ومدفوعات السندات)
   static Future<double> getMainVaultBalance() async {
     final db = await database;
     final receipts = await db.rawQuery(
@@ -1212,7 +1245,6 @@ class DBHelper {
     return totalReceipts - totalPayments;
   }
 
-  /// إجمالي مردود المبيعات
   static Future<double> getSalesReturnsTotal() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1221,7 +1253,6 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  /// إجمالي مردود المشتريات
   static Future<double> getPurchasesReturnsTotal() async {
     final db = await database;
     final result = await db.rawQuery(
