@@ -103,8 +103,77 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
   }
 
+  // تسديد مبلغ لمورد
+  void _showPaySupplierDialog(Supplier supplier) {
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('تسديد حساب لمورد: ${supplier.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'الرصيد المستحق الحالي: ${supplier.balance.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'المبلغ المسدد *',
+                prefixIcon: Icon(Icons.attach_money),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: notesController,
+              decoration: const InputDecoration(
+                labelText: 'ملاحظات / رقم السند',
+                prefixIcon: Icon(Icons.note),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () async {
+              final amount = double.tryParse(amountController.text.trim());
+              if (amount == null || amount <= 0) return;
+
+              final now = DateTime.now().toString().split('.')[0];
+              await DBHelper.addSupplierTransaction(
+                supplierId: supplier.id,
+                type: 'payment',
+                debit: amount,
+                credit: 0.0,
+                date: now,
+                notes: notesController.text.trim(),
+              );
+
+              Navigator.pop(ctx);
+              _loadSuppliers();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم تسجيل دفعة التسديد بنجاح'), backgroundColor: Colors.green),
+              );
+            },
+            child: const Text('تسجيل السداد', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // نافذة كشف حساب المورد
-  void _showSupplierStatement(Supplier supplier) async {
+  void _showSupplierStatement(Supplier supplier) {
     showDialog(
       context: context,
       builder: (ctx) => FutureBuilder<List<Map<String, dynamic>>>(
@@ -130,9 +199,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'المبلغ المستحق له: ${supplier.balance.toStringAsFixed(2)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: Colors.red,
+                    color: supplier.balance > 0 ? Colors.red : Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -155,7 +224,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                             children: [
                               Expanded(flex: 2, child: Text('التاريخ / الحركة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                               Expanded(child: Text('له (دائن)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red))),
-                              Expanded(child: Text('عليه (مدين)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green))),
+                              Expanded(child: Text('عليه/مسدد (مدين)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green))),
                               Expanded(child: Text('الرصيد', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                             ],
                           ),
@@ -166,6 +235,10 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                             itemCount: statementTransactions.length,
                             itemBuilder: (ctx, index) {
                               final item = statementTransactions[index];
+                              final credit = (item['credit'] as num?)?.toDouble() ?? 0.0;
+                              final debit = (item['debit'] as num?)?.toDouble() ?? 0.0;
+                              final runningBalance = (item['runningBalance'] as num?)?.toDouble() ?? 0.0;
+
                               return Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                 decoration: BoxDecoration(
@@ -185,21 +258,21 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                     ),
                                     Expanded(
                                       child: Text(
-                                        item['credit'] > 0 ? '${item['credit']}' : '-',
+                                        credit > 0 ? '${credit.toStringAsFixed(2)}' : '-',
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
                                       ),
                                     ),
                                     Expanded(
                                       child: Text(
-                                        item['debit'] > 0 ? '${item['debit']}' : '-',
+                                        debit > 0 ? '${debit.toStringAsFixed(2)}' : '-',
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
                                       ),
                                     ),
                                     Expanded(
                                       child: Text(
-                                        '${item['runningBalance']}',
+                                        runningBalance.toStringAsFixed(2),
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                       ),
@@ -257,7 +330,6 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       ),
       body: Column(
         children: [
-          // 1. شريط بحث في رأس الصفحة
           Padding(
             padding: const EdgeInsets.all(10.0),
             child: TextField(
@@ -273,8 +345,6 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               ),
             ),
           ),
-
-          // 2. قائمة الموردين وفي كل سطر (الاسم، المبلغ الذي له، كشف حساب، تعديل، حذف)
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -291,7 +361,6 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               child: Row(
                                 children: [
-                                  // اسم المورد وبيانات الهاتف
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,11 +374,14 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                             'هاتف: ${sup.phone}',
                                             style: const TextStyle(color: Colors.grey, fontSize: 12),
                                           ),
+                                        if (sup.notes.isNotEmpty)
+                                          Text(
+                                            sup.notes,
+                                            style: const TextStyle(color: Colors.blueGrey, fontSize: 11, fontStyle: FontStyle.italic),
+                                          ),
                                       ],
                                     ),
                                   ),
-
-                                  // المبلغ الذي له
                                   Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
                                     child: Column(
@@ -327,22 +399,21 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                       ],
                                     ),
                                   ),
-
-                                  // زر كشف الحساب
+                                  IconButton(
+                                    icon: const Icon(Icons.monetization_on, size: 20, color: Colors.green),
+                                    tooltip: 'تسديد حساب',
+                                    onPressed: () => _showPaySupplierDialog(sup),
+                                  ),
                                   IconButton(
                                     icon: const Icon(Icons.receipt_long, size: 20, color: Colors.teal),
                                     tooltip: 'كشف حساب',
                                     onPressed: () => _showSupplierStatement(sup),
                                   ),
-
-                                  // زر التعديل
                                   IconButton(
                                     icon: const Icon(Icons.edit, size: 20, color: Colors.orange),
                                     tooltip: 'تعديل',
                                     onPressed: () => _showSupplierDialog(sup),
                                   ),
-
-                                  // زر الحذف
                                   IconButton(
                                     icon: const Icon(Icons.delete, size: 20, color: Colors.red),
                                     tooltip: 'حذف',
