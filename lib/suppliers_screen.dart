@@ -2,22 +2,17 @@ import 'package:flutter/material.dart';
 import 'db_helper.dart';
 
 class SuppliersScreen extends StatefulWidget {
-  const SuppliersScreen({Key? key}) : super(key: key);
+  const SuppliersScreen({Key? key}) : super(Key: key);
 
   @override
   State<SuppliersScreen> createState() => _SuppliersScreenState();
 }
 
 class _SuppliersScreenState extends State<SuppliersScreen> {
-  int _selectedTab = 0; // 0 = الموردين, 1 = كشف حساب
-
-  List<Supplier> _suppliers = [];
+  List<Supplier> _allSuppliers = [];
+  List<Supplier> _filteredSuppliers = [];
   bool _isLoading = true;
-
-  // متغيرات كشف الحساب
-  Supplier? _selectedSupplierForStatement;
-  String _searchStatementQuery = '';
-  List<Map<String, dynamic>> _statementTransactions = [];
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -29,19 +24,21 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     setState(() => _isLoading = true);
     final list = await DBHelper.getAllSuppliers();
     setState(() {
-      _suppliers = list;
+      _allSuppliers = list;
+      _filteredSuppliers = list;
       _isLoading = false;
-      if (_suppliers.isNotEmpty && _selectedSupplierForStatement == null) {
-        _selectedSupplierForStatement = _suppliers.first;
-        _loadStatementForSupplier(_suppliers.first.id);
-      }
     });
   }
 
-  Future<void> _loadStatementForSupplier(String supplierId) async {
-    final trans = await DBHelper.getSupplierStatement(supplierId);
+  void _filterSuppliers(String query) {
+    final filtered = _allSuppliers.where((s) {
+      final nameMatches = s.name.toLowerCase().contains(query.toLowerCase());
+      final phoneMatches = s.phone.contains(query);
+      return nameMatches || phoneMatches;
+    }).toList();
+
     setState(() {
-      _statementTransactions = trans;
+      _filteredSuppliers = filtered;
     });
   }
 
@@ -106,13 +103,135 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
   }
 
+  // نافذة كشف حساب المورد
+  void _showSupplierStatement(Supplier supplier) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => FutureBuilder<List<Map<String, dynamic>>>(
+        future: DBHelper.getSupplierStatement(supplier.id),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const AlertDialog(
+              content: SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            );
+          }
+
+          final statementTransactions = snapshot.data ?? [];
+
+          return AlertDialog(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('كشف حساب المورد: ${supplier.name}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const SizedBox(height: 4),
+                Text(
+                  'المبلغ المستحق له: ${supplier.balance.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: statementTransactions.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Text('لا توجد حركات مسجلة لهذا المورد حتى الآن', textAlign: TextAlign.center),
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          color: Colors.grey.shade300,
+                          child: const Row(
+                            children: [
+                              Expanded(flex: 2, child: Text('التاريخ / الحركة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                              Expanded(child: Text('له (دائن)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red))),
+                              Expanded(child: Text('عليه (مدين)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green))),
+                              Expanded(child: Text('الرصيد', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                            ],
+                          ),
+                        ),
+                        Flexible(
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: statementTransactions.length,
+                            itemBuilder: (ctx, index) {
+                              final item = statementTransactions[index];
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                decoration: BoxDecoration(
+                                  border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(item['type'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                          Text(item['date'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        item['credit'] > 0 ? '${item['credit']}' : '-',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        item['debit'] > 0 ? '${item['debit']}' : '-',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        '${item['runningBalance']}',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('إغلاق'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   // حذف مورد
   void _confirmDeleteSupplier(Supplier supplier) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('تأكيد الحذف'),
-        content: Text('هل أنت أيد من حذف المورد "${supplier.name}"؟'),
+        content: Text('هل أنت أؤكد من حذف المورد "${supplier.name}"؟'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           ElevatedButton(
@@ -133,293 +252,115 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('إدارة الموردين والحسابات'),
+        title: const Text('إدارة الموردين'),
         centerTitle: true,
       ),
       body: Column(
         children: [
-          // الأزرار العلوية الصغيرة للتبديل
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            color: Colors.grey.shade200,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  height: 36,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _selectedTab == 0 ? Colors.blue.shade800 : Colors.grey.shade400,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                    onPressed: () => setState(() => _selectedTab = 0),
-                    icon: const Icon(Icons.people, size: 18, color: Colors.white),
-                    label: const Text('الموردين', style: TextStyle(color: Colors.white, fontSize: 13)),
-                  ),
+          // 1. شريط بحث في رأس الصفحة
+          Padding(
+            padding: const EdgeInsets.all(10.0),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _filterSuppliers,
+              decoration: InputDecoration(
+                hintText: 'بحث باسم المورد أو رقم الهاتف...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  height: 36,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _selectedTab == 1 ? Colors.blue.shade800 : Colors.grey.shade400,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                    onPressed: () => setState(() => _selectedTab = 1),
-                    icon: const Icon(Icons.receipt_long, size: 18, color: Colors.white),
-                    label: const Text('كشف حساب', style: TextStyle(color: Colors.white, fontSize: 13)),
-                  ),
-                ),
-              ],
+                contentPadding: const EdgeInsets.symmetric(horizontal: 15),
+              ),
             ),
           ),
 
-          // المحتوى حسب التبويب
+          // 2. قائمة الموردين وفي كل سطر (الاسم، المبلغ الذي له، كشف حساب، تعديل، حذف)
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _selectedTab == 0
-                    ? _buildSuppliersTab()
-                    : _buildStatementTab(),
+                : _filteredSuppliers.isEmpty
+                    ? const Center(child: Text('لا يوجد موردين حالياً'))
+                    : ListView.builder(
+                        itemCount: _filteredSuppliers.length,
+                        itemBuilder: (context, index) {
+                          final sup = _filteredSuppliers[index];
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                children: [
+                                  // اسم المورد وبيانات الهاتف
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          sup.name,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                        ),
+                                        if (sup.phone.isNotEmpty)
+                                          Text(
+                                            'هاتف: ${sup.phone}',
+                                            style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // المبلغ الذي له
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        const Text('له:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                        Text(
+                                          sup.balance.toStringAsFixed(2),
+                                          style: TextStyle(
+                                            color: sup.balance > 0 ? Colors.red : Colors.green,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // زر كشف الحساب
+                                  IconButton(
+                                    icon: const Icon(Icons.receipt_long, size: 20, color: Colors.teal),
+                                    tooltip: 'كشف حساب',
+                                    onPressed: () => _showSupplierStatement(sup),
+                                  ),
+
+                                  // زر التعديل
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 20, color: Colors.orange),
+                                    tooltip: 'تعديل',
+                                    onPressed: () => _showSupplierDialog(sup),
+                                  ),
+
+                                  // زر الحذف
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                                    tooltip: 'حذف',
+                                    onPressed: () => _confirmDeleteSupplier(sup),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
           ),
         ],
       ),
-    );
-  }
-
-  // التبويب الأول: قائمة الموردين
-  Widget _buildSuppliersTab() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('إجمالي الموردين: ${_suppliers.length}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                onPressed: () => _showSupplierDialog(),
-                icon: const Icon(Icons.add, color: Colors.white),
-                label: const Text('إضافة مورد', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _suppliers.isEmpty
-              ? const Center(child: Text('لا يوجد موردين مسجلين حالياً'))
-              : ListView.builder(
-                  itemCount: _suppliers.length,
-                  itemBuilder: (ctx, index) {
-                    final sup = _suppliers[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue.shade100,
-                          child: const Icon(Icons.business, color: Colors.blue),
-                        ),
-                        title: Row(
-                          children: [
-                            Text(sup.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            const Spacer(),
-                            // إجمالي المبلغ الذي له
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: sup.balance > 0 ? Colors.red.shade50 : Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: sup.balance > 0 ? Colors.red : Colors.green),
-                              ),
-                              child: Text(
-                                'له: ${sup.balance.toStringAsFixed(2)}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: sup.balance > 0 ? Colors.red.shade900 : Colors.green.shade900,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (sup.phone.isNotEmpty) Text('هاتف: ${sup.phone}'),
-                            if (sup.notes.isNotEmpty)
-                              Text('مورد: ${sup.notes}', style: const TextStyle(color: Colors.blueGrey, fontSize: 12)),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.orange),
-                              onPressed: () => _showSupplierDialog(sup),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _confirmDeleteSupplier(sup),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  // التبويب الثاني: كشف الحساب التفصيلي
-  Widget _buildStatementTab() {
-    final filteredSuppliers = _suppliers.where((s) => s.name.contains(_searchStatementQuery)).toList();
-
-    return Column(
-      children: [
-        // خيار البحث واختيار المورد
-        Container(
-          padding: const EdgeInsets.all(10),
-          color: Colors.blue.shade50,
-          child: Column(
-            children: [
-              TextField(
-                onChanged: (val) => setState(() => _searchStatementQuery = val),
-                decoration: InputDecoration(
-                  hintText: 'بحث عن مورد...',
-                  prefixIcon: const Icon(Icons.search),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  fillColor: Colors.white,
-                  filled: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('عرض كشف: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<Supplier>(
-                          value: _selectedSupplierForStatement,
-                          isExpanded: true,
-                          hint: const Text('اختر المورد'),
-                          items: filteredSuppliers.map((s) {
-                            return DropdownMenuItem(value: s, child: Text(s.name));
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedSupplierForStatement = val);
-                              _loadStatementForSupplier(val.id);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        // رأس التقرير المالي للمورد
-        if (_selectedSupplierForStatement != null)
-          Container(
-            padding: const EdgeInsets.all(10),
-            color: Colors.blue.shade100,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('المورد: ${_selectedSupplierForStatement!.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(
-                  'الرصيد المتبقي له: ${_selectedSupplierForStatement!.balance.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
-                ),
-              ],
-            ),
-          ),
-
-        // جدول / قائمة حركة كشف الحساب
-        Expanded(
-          child: _selectedSupplierForStatement == null
-              ? const Center(child: Text('يرجى اختيار مورد لعرض كشف الحساب'))
-              : _statementTransactions.isEmpty
-                  ? const Center(child: Text('لا توجد عمليات مسجلة لهذا المورد'))
-                  : Column(
-                      children: [
-                        // العناوين
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          color: Colors.grey.shade300,
-                          child: const Row(
-                            children: [
-                              Expanded(flex: 2, child: Text('التاريخ / الحركة', style: TextStyle(fontWeight: FontWeight.bold))),
-                              Expanded(child: Text('له (دائن)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red))),
-                              Expanded(child: Text('عليه (مدين)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green))),
-                              Expanded(child: Text('الرصيد', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
-                            ],
-                          ),
-                        ),
-                        // البيانات
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: _statementTransactions.length,
-                            itemBuilder: (ctx, index) {
-                              final item = _statementTransactions[index];
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                decoration: BoxDecoration(
-                                  border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      flex: 2,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(item['type'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                          Text(item['date'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                                        ],
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        item['credit'] > 0 ? '${item['credit']}' : '-',
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        item['debit'] > 0 ? '${item['debit']}' : '-',
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        '${item['runningBalance']}',
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-        ),
-      ],
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showSupplierDialog(),
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }
