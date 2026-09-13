@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
-import 'db_helper.dart';
+import '../db_helper.dart';
 
 class WipeDataScreen extends StatelessWidget {
-  const WipeDataScreen({Key? key}) : super(key: key);
+  const WipeDataScreen({super.key});
 
-  void _confirmWipe(BuildContext context, String actionType, Future<void> Function() onAction) {
+  void _confirmWipe(
+    BuildContext context,
+    String actionType,
+    Future<void> Function() onAction,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد $actionType'),
-        content: Text('هل أنت متأكد من $actionType؟ هذه العملية نهائية ولا يمكن التراجع عنها.'),
+        content: Text(
+          'هل أنت متأكد من $actionType؟ هذه العملية نهائية ولا يمكن التراجع عنها.',
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx), 
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('إلغاء'),
           ),
           ElevatedButton(
@@ -34,7 +40,10 @@ class WipeDataScreen extends StatelessWidget {
                 }
               }
             },
-            child: const Text('تأكيد المسح', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'تأكيد المسح',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -55,8 +64,15 @@ class WipeDataScreen extends StatelessWidget {
           Card(
             elevation: 3,
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              leading: const Icon(Icons.history_edu, color: Colors.orange, size: 32),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              leading: const Icon(
+                Icons.history_edu,
+                color: Colors.orange,
+                size: 32,
+              ),
               title: const Text(
                 'تصفير جميع السجلات والأرقام',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -66,8 +82,8 @@ class WipeDataScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
               onTap: () => _confirmWipe(
-                context, 
-                'تصفير جميع السجلات والأرقام', 
+                context,
+                'تصفير جميع السجلات والأرقام',
                 DBHelper.resetAllRecordsAndBalances,
               ),
             ),
@@ -79,19 +95,30 @@ class WipeDataScreen extends StatelessWidget {
             elevation: 3,
             color: Colors.red.shade50,
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              leading: const Icon(Icons.restore_from_trash, color: Colors.red, size: 36),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
+              leading: const Icon(
+                Icons.restore_from_trash,
+                color: Colors.red,
+                size: 36,
+              ),
               title: const Text(
                 'تصفير كامل للنظام',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Colors.red,
+                ),
               ),
               subtitle: const Text(
                 'مسح شامل لجميع البيانات، المجموعات، الأصناف، العملاء والموردين وإعادة النظام للحالة الافتراضية',
                 style: TextStyle(fontSize: 12, color: Colors.redAccent),
               ),
               onTap: () => _confirmWipe(
-                context, 
-                'تصفير كامل للنظام', 
+                context,
+                'تصفير كامل للنظام',
                 DBHelper.resetFullSystemToDefault,
               ),
             ),
