@@ -662,10 +662,11 @@ class DBHelper {
     String? userName,
     double totalSales = 0.0,
     double totalExpenses = 0.0,
+    double totalReturns = 0.0, // تم إضافة البرامتر المطلوب هنا
     double transferredToMainVault = 0.0,
     double? expectedCash,
     double? actualCash,
-    double? difference, // تم إضافة البرامتر لحل الخطأ المستهدف
+    double? difference,
     int? shiftNumber,
   }) async {
     final db = await database;
