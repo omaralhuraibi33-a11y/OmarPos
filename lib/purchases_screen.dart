@@ -33,7 +33,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   final List<PurchaseItem> _purchaseItems = [];
 
-  final TextEditingController _supplierController = TextEditingController(text: 'اختيار مورد (آجل افتراضياً)');
+  final TextEditingController _supplierController = TextEditingController();
   final TextEditingController _invoiceDiscountController = TextEditingController(text: '0.0');
 
   bool _isLoading = true;
@@ -63,7 +63,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     setState(() {
       _purchaseItems.clear();
       _selectedSupplier = null;
-      _supplierController.text = 'اختيار مورد (آجل افتراضياً)';
+      _supplierController.clear();
       _invoiceDiscountController.text = '0.0';
     });
   }
@@ -72,20 +72,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(_isReturnMode ? 'اختر المورد المراد إرجاع البضاعة له' : 'اختر المورد (الحساب الآجل)'),
+        title: Text(_isReturnMode ? 'اختر المورد للمرتجع' : 'اختيار مورد'),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView(
             shrinkWrap: true,
             children: [
               ListTile(
-                leading: const Icon(Icons.person_pin, color: Colors.orange),
-                title: const Text('مشتريات نقدية عابرة', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('تسجيل حساب عام للمشتريات السريعة'),
+                leading: const Icon(Icons.person, color: Colors.orange),
+                title: const Text('مشتريات نقدية / عامة', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('بدون تحديد حساب مورد معين'),
                 onTap: () {
                   setState(() {
                     _selectedSupplier = null;
-                    _supplierController.text = 'مشتريات نقدية عابرة (آجل)';
+                    _supplierController.text = 'مشتريات نقدية / عامة';
                   });
                   Navigator.pop(ctx);
                 },
@@ -99,7 +99,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               ..._suppliers.map((sup) => ListTile(
                 leading: const Icon(Icons.business, color: Colors.blue),
                 title: Text(sup.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text('الرصيد المستحق له: ${sup.balance.toStringAsFixed(2)}'),
+                subtitle: Text('الرصيد الحالي: ${sup.balance.toStringAsFixed(2)}'),
                 onTap: () {
                   setState(() {
                     _selectedSupplier = sup;
@@ -112,9 +112,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ),
         ),
         actions: [
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -124,7 +125,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   void _showAddItemDialog() {
     if (_allProducts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا توجد أصناف بالمخزن. أضف أصنافاً من شاشة المخزن أولاً')),
+        const SnackBar(content: Text('لا توجد أصناف بالمخزن. أضف أصنافاً أولاً')),
       );
       return;
     }
@@ -138,14 +139,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(_isReturnMode ? 'إضافة صنف لإرجاعه للمورد' : 'إضافة صنف للفاتورة'),
+          title: Text(_isReturnMode ? 'إضافة صنف للمرتجع' : 'إضافة صنف للفاتورة'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<Product>(
                   value: selectedProduct,
-                  decoration: const InputDecoration(labelText: 'اختر الصنف *'),
+                  decoration: const InputDecoration(labelText: 'اختر الصنف *', border: OutlineInputBorder()),
                   items: _allProducts.map((p) {
                     return DropdownMenuItem(value: p, child: Text(p.name));
                   }).toList(),
@@ -158,31 +159,45 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     }
                   },
                 ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: quantityController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                     labelText: _isReturnMode ? 'الكمية المرجعة *' : 'الكمية المشتراة *',
+                    border: const OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'سعر الشراء الفردي *'),
+                  decoration: const InputDecoration(
+                    labelText: 'سعر الشراء *',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: discountController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'خصم الصنف (إن وجد)'),
+                  decoration: const InputDecoration(
+                    labelText: 'خصم الصنف (إن وجد)',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء', style: TextStyle(color: Colors.white)),
+            ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: _isReturnMode ? Colors.red.shade800 : Colors.blue,
+                backgroundColor: _isReturnMode ? Colors.red.shade700 : Colors.blue.shade700,
               ),
               onPressed: () {
                 final qty = double.tryParse(quantityController.text.trim()) ?? 0.0;
@@ -201,7 +216,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 });
                 Navigator.pop(ctx);
               },
-              child: const Text('إضافة', style: TextStyle(color: Colors.white)),
+              child: const Text('إضافة الصنف', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -218,12 +233,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
 
     if (_isReturnMode) {
-      // 1. معالجة مرتجع المشتريات: خصم من كميات المخزن
+      // مرتجع مشتريات: خصم من المخزن
       for (var item in _purchaseItems) {
         await DBHelper.updateProductStock(item.product.id, -item.quantity);
       }
 
-      // 2. تخصيم المستحق للمورد (مدين لصالح المورد لتقليل دينه)
+      // خصم من مستحقات المورد تلقائياً
       if (_selectedSupplier != null) {
         await DBHelper.addSupplierTransaction(
           supplierId: _selectedSupplier!.id,
@@ -233,11 +248,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         );
       }
 
-      if (mounted) {
-        _showReceiptVoucherDialog();
-      }
+      _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتقييده بنجاح');
     } else {
-      // 1. معالجة الفاتورة العادية: إضافة للكميات وتحديث السعر
+      // فاتورة مشتريات: زيادة المخزن وتحديث سعر الشراء
       for (var item in _purchaseItems) {
         await DBHelper.updateProductStock(item.product.id, item.quantity);
 
@@ -247,163 +260,25 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         }
       }
 
-      // 2. إثبات دائن للمورد (استحقاق آجل)
+      // إثبات دائن للمورد تلقائياً
       if (_selectedSupplier != null) {
         await DBHelper.addSupplierTransaction(
           supplierId: _selectedSupplier!.id,
-          type: 'فاتورة مشتريات (آجل)',
+          type: 'فاتورة مشتريات',
           credit: _finalTotal,
           debit: 0.0,
         );
       }
 
-      if (mounted) {
-        _showPaymentVoucherDialog();
-      }
+      _finishInvoiceProcess('تم حفظ فاتورة المشتريات وتحديث المخزون بنجاح');
     }
-  }
-
-  // نافذة إصدار سند صرف (عند الشراء العادي)
-  void _showPaymentVoucherDialog() {
-    String paymentSource = 'الصندوق الرئيسي (نقدي)';
-    final paidAmountController = TextEditingController(text: _finalTotal.toStringAsFixed(2));
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) => AlertDialog(
-          title: const Text('تم تثبيت الفاتورة (آجل) بنجاح'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('هل تريد تحرير "سند صرف" وسداد المبلغ أو جزء منه الآن؟'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: paidAmountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'المبلغ المدفوع بالسند',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: paymentSource,
-                decoration: const InputDecoration(labelText: 'طريقة الصرف / الخزينة', border: OutlineInputBorder()),
-                items: ['الصندوق الرئيسي (نقدي)', 'البنك / الحساب البنكي', 'شبكة / محفظة']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (val) => setDlgState(() => paymentSource = val!),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _finishInvoiceProcess('تم حفظ الفاتورة كـ (آجل) بدون سداد مقدماً.');
-              },
-              child: const Text('إبقاء الفاتورة آجل بالكامل'),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              icon: const Icon(Icons.receipt_long, color: Colors.white),
-              label: const Text('إصدار سند الصرف', style: TextStyle(color: Colors.white)),
-              onPressed: () async {
-                final paid = double.tryParse(paidAmountController.text.trim()) ?? 0.0;
-                if (paid > 0 && _selectedSupplier != null) {
-                  await DBHelper.addSupplierTransaction(
-                    supplierId: _selectedSupplier!.id,
-                    type: 'سند صرف ($paymentSource)',
-                    credit: 0.0,
-                    debit: paid,
-                  );
-                }
-                Navigator.pop(ctx);
-                _finishInvoiceProcess('تم حفظ الفاتورة وتوليد سند الصرف بقيمة $paid بنجاح!');
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // نافذة إصدار سند قبض (عند مرتجع المشتريات)
-  void _showReceiptVoucherDialog() {
-    String receiptSource = 'الصندوق الرئيسي (نقدي)';
-    final receivedAmountController = TextEditingController(text: _finalTotal.toStringAsFixed(2));
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) => AlertDialog(
-          title: const Text('تم حفظ مرتجع المشتريات بنجاح'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('هل استلمت المبلغ المرتجع نقدياً/بنكياً وتريد تحرير "سند قبض"؟'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: receivedAmountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'المبلغ المستلم',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: receiptSource,
-                decoration: const InputDecoration(labelText: 'حساب الإيداع / الخزينة', border: OutlineInputBorder()),
-                items: ['الصندوق الرئيسي (نقدي)', 'البنك / الحساب البنكي', 'شبكة / محفظة']
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (val) => setDlgState(() => receiptSource = val!),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _finishInvoiceProcess('تم تقييد المرتجع كـ خصم من حساب المورد الآجل.');
-              },
-              child: const Text('تخفيض حساب المورد فقط'),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800),
-              icon: const Icon(Icons.receipt, color: Colors.white),
-              label: const Text('إصدار سند القبض', style: TextStyle(color: Colors.white)),
-              onPressed: () async {
-                final amount = double.tryParse(receivedAmountController.text.trim()) ?? 0.0;
-                if (amount > 0 && _selectedSupplier != null) {
-                  await DBHelper.addSupplierTransaction(
-                    supplierId: _selectedSupplier!.id,
-                    type: 'سند قبض ($receiptSource)',
-                    credit: amount,
-                    debit: 0.0,
-                  );
-                }
-                Navigator.pop(ctx);
-                _finishInvoiceProcess('تم حفظ المرتجع وتوليد سند قبض بقيمة $amount بنجاح!');
-              },
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _finishInvoiceProcess(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: _isReturnMode ? Colors.red.shade800 : Colors.green,
+        content: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: _isReturnMode ? Colors.red.shade800 : Colors.green.shade700,
       ),
     );
     _resetInvoice();
@@ -417,14 +292,23 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: _isReturnMode ? Colors.red.shade900 : null,
-        title: Text(_isReturnMode ? 'مرتجع مشتريات' : 'فاتورة المشتريات'),
+        backgroundColor: _isReturnMode ? Colors.red.shade800 : Colors.blue.shade800,
+        title: Text(
+          _isReturnMode ? 'مرتجع مشتريات' : 'فاتورة المشتريات',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
         actions: [
-          TextButton.icon(
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
-            icon: Icon(_isReturnMode ? Icons.shopping_bag : Icons.assignment_return),
-            label: Text(_isReturnMode ? 'فاتورة جديدة' : 'مرتجع'),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _isReturnMode ? Colors.blue.shade700 : Colors.red.shade700,
+              elevation: 0,
+            ),
+            icon: Icon(_isReturnMode ? Icons.shopping_bag : Icons.assignment_return, color: Colors.white),
+            label: Text(
+              _isReturnMode ? 'فاتورة شراء' : 'مرتجع',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
             onPressed: () {
               setState(() {
                 _isReturnMode = !_isReturnMode;
@@ -432,6 +316,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               });
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _isLoading
@@ -439,7 +324,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           : Column(
               children: [
                 Container(
-                  color: _isReturnMode ? Colors.red.shade50 : Colors.blue.shade50,
+                  color: Colors.grey.shade100,
                   padding: const EdgeInsets.all(12),
                   child: Row(
                     children: [
@@ -450,12 +335,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           readOnly: true,
                           onTap: _showSelectSupplierDialog,
                           decoration: InputDecoration(
-                            labelText: _isReturnMode ? 'المورد المرجّع له' : 'المورد (آجل تلقائياً)',
-                            prefixIcon: Icon(_isReturnMode ? Icons.assignment_return : Icons.business),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.arrow_drop_down_circle, color: Colors.blue),
+                            hintText: 'اضغط للبحث عن مورد...',
+                            labelText: _isReturnMode ? 'المورد المرجّع له' : 'المورد',
+                            prefixIcon: IconButton(
+                              icon: const Icon(Icons.search, color: Colors.blue, size: 28),
                               onPressed: _showSelectSupplierDialog,
-                              tooltip: 'اختيار مورد',
+                              tooltip: 'بحث عن مورد',
                             ),
                             border: const OutlineInputBorder(),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -470,7 +355,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           onChanged: (_) => setState(() {}),
                           decoration: const InputDecoration(
                             labelText: 'خصم الفاتورة',
-                            prefixIcon: Icon(Icons.discount),
+                            prefixIcon: Icon(Icons.discount, color: Colors.orange),
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
@@ -485,13 +370,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       ? Center(
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _isReturnMode ? Colors.red.shade800 : null,
+                              backgroundColor: _isReturnMode ? Colors.red.shade700 : Colors.blue.shade700,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             ),
                             onPressed: _showAddItemDialog,
                             icon: const Icon(Icons.add, color: Colors.white),
                             label: Text(
-                              _isReturnMode ? 'اضغط لإضافة أصناف مرجعة' : 'اضغط هنا لإضافة أصناف للفاتورة',
-                              style: const TextStyle(color: Colors.white),
+                              _isReturnMode ? 'اضغط لإضافة أصناف مرجعة' : 'اضغط لإضافة أصناف للفاتورة',
+                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                             ),
                           ),
                         )
@@ -500,10 +386,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           itemBuilder: (ctx, index) {
                             final item = _purchaseItems[index];
                             return Card(
+                              elevation: 2,
                               margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               child: ListTile(
                                 title: Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.purchasePrice} | خصم الصنف: ${item.discount}'),
+                                subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.purchasePrice} | الخصم: ${item.discount}'),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -511,8 +398,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                                       '${item.total.toStringAsFixed(2)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 15,
-                                        color: _isReturnMode ? Colors.red.shade900 : Colors.blue,
+                                        fontSize: 16,
+                                        color: _isReturnMode ? Colors.red.shade900 : Colors.blue.shade900,
                                       ),
                                     ),
                                     IconButton(
@@ -537,8 +424,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('المجموع الفرعي: ${_subTotal.toStringAsFixed(2)}'),
-                          Text('خصم الفاتورة: ${_invoiceDiscount.toStringAsFixed(2)}'),
+                          Text('المجموع الفرعي: ${_subTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                          Text('خصم الفاتورة: ${_invoiceDiscount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const Divider(),
@@ -546,15 +433,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            _isReturnMode ? 'صافي المرتجع:' : 'الصافي النهائي:',
+                            _isReturnMode ? 'صافي المرتجع:' : 'الإجمالي النهائي:',
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           Text(
                             '${_finalTotal.toStringAsFixed(2)}',
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: _isReturnMode ? Colors.red.shade900 : Colors.green,
+                              color: _isReturnMode ? Colors.red.shade800 : Colors.green.shade800,
                             ),
                           ),
                         ],
@@ -563,28 +450,35 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange.shade800,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
                               onPressed: _resetInvoice,
-                              icon: const Icon(Icons.refresh),
-                              label: Text(_isReturnMode ? 'تفريغ المرتجع' : 'فاتورة جديدة'),
+                              icon: const Icon(Icons.refresh, color: Colors.white),
+                              label: Text(
+                                _isReturnMode ? 'تفريغ' : 'جديدة',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _isReturnMode ? Colors.red.shade800 : null,
+                              backgroundColor: Colors.blue.shade700,
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                             ),
                             onPressed: _showAddItemDialog,
                             icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
-                            label: const Text('إضافة صنف', style: TextStyle(color: Colors.white)),
+                            label: const Text('إضافة صنف', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             flex: 2,
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _isReturnMode ? Colors.red.shade900 : Colors.green.shade700,
+                                backgroundColor: _isReturnMode ? Colors.red.shade800 : Colors.green.shade700,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
                               onPressed: _savePurchaseProcess,
