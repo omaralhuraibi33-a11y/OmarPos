@@ -13,12 +13,49 @@ import 'users_screen.dart';
 import 'shift_close_screen.dart';
 import 'financial_report_screen.dart';
 import 'vouchers_screen.dart';
-import 'cash_box_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   final AppUser currentUser;
 
   const HomeScreen({super.key, required this.currentUser});
+
+  /// دالة عرض إجمالي المبالغ في الصندوق
+  void _showCashBoxDialog(BuildContext context) async {
+    double balance = await DBHelper.getMainVaultBalance();
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(
+          'إجمالي الصندوق الحالي',
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.account_balance_wallet, size: 50, color: Colors.green),
+            const SizedBox(height: 15),
+            Text(
+              balance.toStringAsFixed(2),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,15 +66,16 @@ class HomeScreen extends StatelessWidget {
       {'title': 'العملاء', 'icon': Icons.people, 'color': Colors.purple, 'page': const CustomersScreen()},
       {'title': 'الموردين', 'icon': Icons.local_shipping, 'color': Colors.indigo, 'page': const SuppliersScreen()},
       {'title': 'التقارير', 'icon': Icons.bar_chart, 'color': Colors.green, 'page': const ReportsScreen()},
-      {'title': 'إعدادات النظام', 'icon': Icons.settings, 'color': Colors.blueGrey, 'page': SettingsScreen()},
+      {'title': 'إعدادات النظام', 'icon': Icons.settings, 'color': Colors.blueGrey, 'page': const SettingsScreen()},
       {'title': 'إدارة المستخدمين', 'icon': Icons.admin_panel_settings, 'color': Colors.deepOrange, 'page': const UsersScreen()},
       {'title': 'إغلاق الصندوق / الوردية', 'icon': Icons.lock_clock, 'color': Colors.red, 'page': const ShiftCloseScreen()},
       {'title': 'التقرير المالي', 'icon': Icons.account_balance_wallet, 'color': Colors.lightGreen, 'page': const FinancialReportScreen()},
       {'title': 'السندات', 'icon': Icons.receipt_long, 'color': Colors.amber, 'page': const VouchersScreen()},
-      {'title': 'الصندوق', 'icon': Icons.savings, 'color': Colors.brown, 'page': const CashBoxScreen()},
+      {'title': 'الصندوق', 'icon': Icons.savings, 'color': Colors.brown, 'isCashBox': true},
     ];
 
-    void navigateToScreen(String title, Widget screen) {
+    void navigateToScreen(Map<String, dynamic> item) {
+      String title = item['title'];
       bool hasPermission = currentUser.isAdmin || (currentUser.permissions[title] ?? false);
 
       if (!hasPermission) {
@@ -50,10 +88,16 @@ class HomeScreen extends StatelessWidget {
         return;
       }
 
+      // إذا كان العنصر هو زر الصندوق، يفتح نافذة الإجمالي مباشرة
+      if (item['isCashBox'] == true) {
+        _showCashBoxDialog(context);
+        return;
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => Directionality(textDirection: TextDirection.rtl, child: screen),
+          builder: (context) => Directionality(textDirection: TextDirection.rtl, child: item['page']),
         ),
       );
     }
@@ -94,7 +138,7 @@ class HomeScreen extends StatelessWidget {
               elevation: hasAccess ? 3 : 1,
               color: hasAccess ? Colors.white : Colors.grey.shade200,
               child: InkWell(
-                onTap: () => navigateToScreen(item['title'], item['page']),
+                onTap: () => navigateToScreen(item),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
