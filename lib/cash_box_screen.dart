@@ -1,9 +1,27 @@
-// كود زر الصندوق في الشاشة الرئيسية
-IconButton(
-  icon: const Icon(Icons.account_balance_wallet),
-  tooltip: 'إجمالي الصندوق',
-  onPressed: () async {
-    // جلب الرصيد الإجمالي من قاعدة البيانات
+import 'package:flutter/material.dart';
+import 'db_helper.dart';
+
+class CashBoxScreen extends StatelessWidget {
+  const CashBoxScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('إجمالي الصندوق'),
+        backgroundColor: Colors.indigo,
+      ),
+      body: Center(
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.account_balance_wallet),
+          label: const Text('عرض رصيد الصندوق الحالي'),
+          onPressed: () => _showCashBoxDialog(context),
+        ),
+      ),
+    );
+  }
+
+  static Future<void> _showCashBoxDialog(BuildContext context) async {
     double balance = await DBHelper.getMainVaultBalance();
 
     if (!context.mounted) return;
@@ -38,5 +56,5 @@ IconButton(
         ],
       ),
     );
-  },
-);
+  }
+}
