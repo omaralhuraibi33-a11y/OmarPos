@@ -403,7 +403,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -511,7 +511,8 @@ class DBHelper {
             date TEXT,
             credit REAL,
             debit REAL,
-            runningBalance REAL
+            runningBalance REAL,
+            notes TEXT
           )
         ''');
 
@@ -622,6 +623,11 @@ class DBHelper {
             )
           ''');
         }
+        if (oldVersion < 9) {
+          try {
+            await db.execute('ALTER TABLE supplier_transactions ADD COLUMN notes TEXT');
+          } catch (_) {}
+        }
       },
     );
   }
@@ -657,6 +663,7 @@ class DBHelper {
     double totalSales = 0.0,
     double totalExpenses = 0.0,
     double transferredToMainVault = 0.0,
+    double? expectedCash,
     int? shiftNumber,
   }) async {
     final db = await database;
@@ -878,6 +885,7 @@ class DBHelper {
           credit: 0.0,
           debit: voucher.amount,
           date: voucher.date,
+          notes: voucher.notes,
         );
       } else if (voucher.voucherType == 'receipt') {
         await addSupplierTransaction(
@@ -886,6 +894,7 @@ class DBHelper {
           credit: voucher.amount,
           debit: 0.0,
           date: voucher.date,
+          notes: voucher.notes,
         );
       }
     }
@@ -931,6 +940,7 @@ class DBHelper {
     required double credit,
     required double debit,
     String? date,
+    String? notes,
   }) async {
     final db = await database;
     final supList = await db.query('suppliers', where: 'id = ?', whereArgs: [supplierId]);
@@ -949,6 +959,7 @@ class DBHelper {
       'credit': credit,
       'debit': debit,
       'runningBalance': newBalance,
+      'notes': notes ?? '',
     });
   }
 
