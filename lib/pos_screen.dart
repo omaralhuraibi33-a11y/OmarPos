@@ -120,6 +120,11 @@ class _PosScreenState extends State<PosScreen> {
 
   double get _totalAmount => _cart.fold(0.0, (sum, item) => sum + item.total);
 
+  // دالة مساعدة لتنسيق الأرقام بدون أصفار عشرية زائفة
+  String _formatNum(double number) {
+    return number % 1 == 0 ? number.toInt().toString() : number.toStringAsFixed(2);
+  }
+
   void _selectCustomerDialog() {
     showDialog(
       context: context,
@@ -140,7 +145,7 @@ class _PosScreenState extends State<PosScreen> {
                   child: Icon(isCash ? Icons.point_of_sale : Icons.person, color: isCash ? Colors.orange.shade900 : Colors.blue),
                 ),
                 title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(isCash ? 'عميل نقدي افتراضي' : 'هاتف: ${c.phone} | الرصيد: ${c.balance.toStringAsFixed(2)}'),
+                subtitle: Text(isCash ? 'عميل نقدي افتراضي' : 'هاتف: ${c.phone} | الرصيد: ${_formatNum(c.balance)}'),
                 onTap: () {
                   setState(() {
                     _selectedCustomer = c;
@@ -240,7 +245,7 @@ class _PosScreenState extends State<PosScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'المبلغ الإجمالي: ${_totalAmount.toStringAsFixed(2)}',
+                  'المبلغ الإجمالي: ${_formatNum(_totalAmount)}',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 18,
@@ -353,14 +358,36 @@ class _PosScreenState extends State<PosScreen> {
         backgroundColor: _isReturnMode ? Colors.orange.shade800 : null,
         title: Row(
           children: [
-            Text(_isReturnMode ? 'مرتجع مبيعات' : (_isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية')),
-            const SizedBox(width: 8),
             if (!_isReturnMode)
-              Switch(
-                value: _isTouchMode,
-                onChanged: (val) => setState(() => _isTouchMode = val),
-                activeColor: Colors.white,
-              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade900,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Switch(
+                      value: _isTouchMode,
+                      onChanged: (val) => setState(() => _isTouchMode = val),
+                      activeColor: Colors.amber,
+                      activeTrackColor: Colors.white24,
+                    ),
+                  ],
+                ),
+              )
+            else
+              const Text('مرتجع مبيعات', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
@@ -374,16 +401,27 @@ class _PosScreenState extends State<PosScreen> {
               setState(() => _isPrinterConnected = !_isPrinterConnected);
             },
           ),
-          TextButton.icon(
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
-            icon: Icon(_isReturnMode ? Icons.shopping_cart : Icons.assignment_return),
-            label: Text(_isReturnMode ? 'وضع البيع' : 'مرتجع'),
-            onPressed: () {
-              setState(() {
-                _isReturnMode = !_isReturnMode;
-                _clearInvoice();
-              });
-            },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isReturnMode ? Colors.deepOrange.shade900 : Colors.blue.shade900,
+                foregroundColor: Colors.white,
+                elevation: 3,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              icon: Icon(_isReturnMode ? Icons.shopping_cart : Icons.assignment_return, color: Colors.amber),
+              label: Text(
+                _isReturnMode ? 'وضع البيع' : 'مرتجع',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              onPressed: () {
+                setState(() {
+                  _isReturnMode = !_isReturnMode;
+                  _clearInvoice();
+                });
+              },
+            ),
           ),
         ],
       ),
@@ -582,7 +620,7 @@ class _PosScreenState extends State<PosScreen> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      '${prod.sellPrice}',
+                      _formatNum(prod.sellPrice),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -606,7 +644,7 @@ class _PosScreenState extends State<PosScreen> {
         final prod = _filteredProducts[index];
         return ListTile(
           title: Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('السعر: ${prod.sellPrice} | الكمية: ${prod.quantity}'),
+          subtitle: Text('السعر: ${_formatNum(prod.sellPrice)} | الكمية: ${_formatNum(prod.quantity)}'),
           trailing: IconButton(
             icon: Icon(
               _isReturnMode ? Icons.remove_shopping_cart : Icons.add_shopping_cart,
@@ -670,7 +708,7 @@ class _PosScreenState extends State<PosScreen> {
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 4),
-                                      child: Text('${item.quantity.toInt()}'),
+                                      child: Text(_formatNum(item.quantity)),
                                     ),
                                     InkWell(
                                       onTap: () => setState(() => item.quantity++),
@@ -679,7 +717,7 @@ class _PosScreenState extends State<PosScreen> {
                                   ],
                                 ),
                                 const SizedBox(width: 8),
-                                Text('${item.total.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text(_formatNum(item.total), style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                             if (!_isReturnMode)
@@ -720,7 +758,7 @@ class _PosScreenState extends State<PosScreen> {
             children: [
               Text(_isReturnMode ? 'إجمالي المسترجع:' : 'الإجمالي العام:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               Text(
-                '${_totalAmount.toStringAsFixed(2)}',
+                _formatNum(_totalAmount),
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
