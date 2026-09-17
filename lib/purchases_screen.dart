@@ -69,6 +69,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   void _showSelectSupplierDialog() {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -79,7 +80,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             shrinkWrap: true,
             children: [
               ListTile(
-                leading: const Icon(Icons.person, color: Colors.orange),
+                leading: Icon(Icons.person, color: theme.colorScheme.secondary),
                 title: const Text('مشتريات نقدية / عامة', style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text('بدون تحديد حساب مورد معين'),
                 onTap: () {
@@ -97,7 +98,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   child: Text('لا يوجد موردين مسجلين حالياً', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                 ),
               ..._suppliers.map((sup) => ListTile(
-                leading: const Icon(Icons.business, color: Colors.blue),
+                leading: Icon(Icons.business, color: theme.colorScheme.primary),
                 title: Text(sup.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text('الرصيد الحالي: ${sup.balance.toStringAsFixed(2)}'),
                 onTap: () {
@@ -113,7 +114,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+            style: ElevatedButton.styleFrom(backgroundColor: theme.disabledColor),
             onPressed: () => Navigator.pop(ctx),
             child: const Text('إلغاء', style: TextStyle(color: Colors.white)),
           ),
@@ -130,6 +131,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return;
     }
 
+    final theme = Theme.of(context);
     Product selectedProduct = _allProducts.first;
     final quantityController = TextEditingController(text: '1.0');
     final priceController = TextEditingController(text: selectedProduct.purchasePrice.toString());
@@ -191,13 +193,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           ),
           actions: [
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+              style: ElevatedButton.styleFrom(backgroundColor: theme.disabledColor),
               onPressed: () => Navigator.pop(ctx),
               child: const Text('إلغاء', style: TextStyle(color: Colors.white)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: _isReturnMode ? Colors.red.shade700 : Colors.blue.shade700,
+                backgroundColor: _isReturnMode ? theme.colorScheme.error : theme.colorScheme.primary,
               ),
               onPressed: () {
                 final qty = double.tryParse(quantityController.text.trim()) ?? 0.0;
@@ -233,12 +235,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
 
     if (_isReturnMode) {
-      // مرتجع مشتريات: خصم من المخزن
       for (var item in _purchaseItems) {
         await DBHelper.updateProductStock(item.product.id, -item.quantity);
       }
 
-      // خصم من مستحقات المورد تلقائياً
       if (_selectedSupplier != null) {
         await DBHelper.addSupplierTransaction(
           supplierId: _selectedSupplier!.id,
@@ -250,7 +250,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
       _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتقييده بنجاح');
     } else {
-      // فاتورة مشتريات: زيادة المخزن وتحديث سعر الشراء
       for (var item in _purchaseItems) {
         await DBHelper.updateProductStock(item.product.id, item.quantity);
 
@@ -260,7 +259,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         }
       }
 
-      // إثبات دائن للمورد تلقائياً
       if (_selectedSupplier != null) {
         await DBHelper.addSupplierTransaction(
           supplierId: _selectedSupplier!.id,
@@ -275,10 +273,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   void _finishInvoiceProcess(String message) {
+    final theme = Theme.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: _isReturnMode ? Colors.red.shade800 : Colors.green.shade700,
+        backgroundColor: _isReturnMode ? theme.colorScheme.error : Colors.green.shade700,
       ),
     );
     _resetInvoice();
@@ -290,18 +289,20 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: _isReturnMode ? Colors.red.shade800 : Colors.blue.shade800,
+        backgroundColor: _isReturnMode ? theme.colorScheme.error : theme.colorScheme.primary,
         title: Text(
           _isReturnMode ? 'مرتجع مشتريات' : 'فاتورة المشتريات',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: theme.colorScheme.onPrimary, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
         actions: [
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: _isReturnMode ? Colors.blue.shade700 : Colors.red.shade700,
+              backgroundColor: _isReturnMode ? theme.colorScheme.primary : theme.colorScheme.error,
               elevation: 0,
             ),
             icon: Icon(_isReturnMode ? Icons.shopping_bag : Icons.assignment_return, color: Colors.white),
@@ -324,7 +325,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           : Column(
               children: [
                 Container(
-                  color: Colors.grey.shade100,
+                  color: theme.colorScheme.surfaceContainerHighest,
                   padding: const EdgeInsets.all(12),
                   child: Row(
                     children: [
@@ -338,7 +339,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                             hintText: 'اضغط للبحث عن مورد...',
                             labelText: _isReturnMode ? 'المورد المرجّع له' : 'المورد',
                             prefixIcon: IconButton(
-                              icon: const Icon(Icons.search, color: Colors.blue, size: 28),
+                              icon: Icon(Icons.search, color: theme.colorScheme.primary, size: 28),
                               onPressed: _showSelectSupplierDialog,
                               tooltip: 'بحث عن مورد',
                             ),
@@ -353,11 +354,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           controller: _invoiceDiscountController,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           onChanged: (_) => setState(() {}),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'خصم الفاتورة',
-                            prefixIcon: Icon(Icons.discount, color: Colors.orange),
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            prefixIcon: Icon(Icons.discount, color: theme.colorScheme.secondary),
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
                         ),
                       ),
@@ -370,7 +371,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       ? Center(
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _isReturnMode ? Colors.red.shade700 : Colors.blue.shade700,
+                              backgroundColor: _isReturnMode ? theme.colorScheme.error : theme.colorScheme.primary,
                               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             ),
                             onPressed: _showAddItemDialog,
@@ -390,20 +391,43 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                               margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               child: ListTile(
                                 title: Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.purchasePrice} | الخصم: ${item.discount}'),
+                                subtitle: Row(
+                                  children: [
+                                    InkWell(
+                                      onTap: () {
+                                        if (item.quantity > 1) {
+                                          setState(() => item.quantity--);
+                                        }
+                                      },
+                                      child: Icon(Icons.remove_circle_outline, color: theme.colorScheme.error, size: 20),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                                      child: Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    ),
+                                    InkWell(
+                                      onTap: () {
+                                        setState(() => item.quantity++);
+                                      },
+                                      child: const Icon(Icons.add_circle_outline, color: Colors.green, size: 20),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text('السعر: ${item.purchasePrice}'),
+                                  ],
+                                ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      '${item.total.toStringAsFixed(2)}',
+                                      item.total.toStringAsFixed(2),
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
-                                        color: _isReturnMode ? Colors.red.shade900 : Colors.blue.shade900,
+                                        color: _isReturnMode ? theme.colorScheme.error : theme.colorScheme.primary,
                                       ),
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      icon: Icon(Icons.delete, color: theme.colorScheme.error),
                                       onPressed: () {
                                         setState(() => _purchaseItems.removeAt(index));
                                       },
@@ -418,7 +442,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
                 Container(
                   padding: const EdgeInsets.all(12),
-                  color: Colors.grey.shade200,
+                  color: theme.colorScheme.surfaceContainerHighest,
                   child: Column(
                     children: [
                       Row(
@@ -437,11 +461,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            '${_finalTotal.toStringAsFixed(2)}',
+                            _finalTotal.toStringAsFixed(2),
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: _isReturnMode ? Colors.red.shade800 : Colors.green.shade800,
+                              color: _isReturnMode ? theme.colorScheme.error : Colors.green.shade700,
                             ),
                           ),
                         ],
@@ -452,7 +476,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           Expanded(
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange.shade800,
+                                backgroundColor: theme.colorScheme.secondary,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
                               onPressed: _resetInvoice,
@@ -466,7 +490,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade700,
+                              backgroundColor: theme.colorScheme.primary,
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
                             ),
                             onPressed: _showAddItemDialog,
@@ -478,7 +502,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                             flex: 2,
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _isReturnMode ? Colors.red.shade800 : Colors.green.shade700,
+                                backgroundColor: _isReturnMode ? theme.colorScheme.error : theme.colorScheme.primary,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
                               onPressed: _savePurchaseProcess,
