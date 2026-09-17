@@ -44,6 +44,10 @@ class _PosScreenState extends State<PosScreen> {
   List<CartItem> _cart = [];
   bool _isLoading = true;
 
+  // إعدادات أحجام العرض
+  String _mainButtonSizeSetting = 'وسط';
+  String _posItemSizeSetting = 'وسط';
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +63,10 @@ class _PosScreenState extends State<PosScreen> {
     final dbPaymentMethods = await DBHelper.getPaymentMethods();
     final defaultCust = await DBHelper.getOrCreateDefaultCustomer();
 
+    // جلب إعدادات الأحجام المحفوظة
+    final savedMainBtnSize = await DBHelper.getSetting('main_button_size');
+    final savedPosItemSize = await DBHelper.getSetting('pos_item_size');
+
     if (!custs.any((c) => c.id == defaultCust.id)) {
       custs.insert(0, defaultCust);
     }
@@ -71,8 +79,72 @@ class _PosScreenState extends State<PosScreen> {
       _selectedCustomer = custs.firstWhere((c) => c.id == defaultCust.id, orElse: () => defaultCust);
       _prepNotesList = notes.isNotEmpty ? notes : ['بدون شطة', 'زيادة صوص', 'بدون ثوم', 'سفري', 'محلي'];
       _paymentMethods = dbPaymentMethods.isNotEmpty ? dbPaymentMethods : ['نقدي', 'آجل'];
+      if (savedMainBtnSize != null) _mainButtonSizeSetting = savedMainBtnSize;
+      if (savedPosItemSize != null) _posItemSizeSetting = savedPosItemSize;
       _isLoading = false;
     });
+  }
+
+  // حساب أبعاد كروت أصناف الـ POS بحسب الإعداد المحفوظ
+  int _getGridCrossAxisCount() {
+    if (_isProductsFullScreen) {
+      switch (_posItemSizeSetting) {
+        case 'صغير':
+          return 6;
+        case 'كبير':
+          return 4;
+        case 'وسط':
+        default:
+          return 5;
+      }
+    } else {
+      switch (_posItemSizeSetting) {
+        case 'صغير':
+          return 4;
+        case 'كبير':
+          return 2;
+        case 'وسط':
+        default:
+          return 3;
+      }
+    }
+  }
+
+  double _getItemFontSize() {
+    switch (_posItemSizeSetting) {
+      case 'صغير':
+        return 12.0;
+      case 'كبير':
+        return 16.0;
+      case 'وسط':
+      default:
+        return 14.0;
+    }
+  }
+
+  // حساب ارتفاع وبادنج أزرار أسفل الشاشة الرئيسية بحسب الإعداد المحفوظ
+  double _getBottomButtonHeight() {
+    switch (_mainButtonSizeSetting) {
+      case 'صغير':
+        return 40.0;
+      case 'كبير':
+        return 56.0;
+      case 'وسط':
+      default:
+        return 48.0;
+    }
+  }
+
+  double _getBottomButtonFontSize() {
+    switch (_mainButtonSizeSetting) {
+      case 'صغير':
+        return 13.0;
+      case 'كبير':
+        return 18.0;
+      case 'وسط':
+      default:
+        return 15.0;
+    }
   }
 
   bool get _isCashCustomer =>
@@ -120,7 +192,6 @@ class _PosScreenState extends State<PosScreen> {
 
   double get _totalAmount => _cart.fold(0.0, (sum, item) => sum + item.total);
 
-  // دالة مساعدة لتنسيق الأرقام بدون أصفار عشرية زائفة
   String _formatNum(double number) {
     return number % 1 == 0 ? number.toInt().toString() : number.toStringAsFixed(2);
   }
@@ -239,7 +310,7 @@ class _PosScreenState extends State<PosScreen> {
           final availableMethods = _isCashCustomer ? ['نقدي'] : _paymentMethods;
 
           return AlertDialog(
-            title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع واختيار طريقة الدفع'),
+            title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع وااختيار طريقة الدفع'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,7 +377,6 @@ class _PosScreenState extends State<PosScreen> {
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     final invoiceType = _isReturnMode ? 'return' : 'sale';
 
-    // 1. إنشاء وحفظ الفاتورة
     final invoice = Invoice(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       invoiceType: invoiceType,
@@ -321,7 +391,6 @@ class _PosScreenState extends State<PosScreen> {
 
     await DBHelper.saveInvoice(invoice);
 
-    // 2. خصم أو زيادة المخزون الأصناف
     for (var item in _cart) {
       double stockDelta = _isReturnMode ? item.quantity : -item.quantity;
       await DBHelper.updateProductStock(item.product.id, stockDelta);
@@ -581,7 +650,7 @@ class _PosScreenState extends State<PosScreen> {
     return GridView.builder(
       padding: const EdgeInsets.all(6),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: _isProductsFullScreen ? 5 : 3,
+        crossAxisCount: _getGridCrossAxisCount(),
         childAspectRatio: 1.1,
         crossAxisSpacing: 6,
         mainAxisSpacing: 6,
@@ -590,6 +659,7 @@ class _PosScreenState extends State<PosScreen> {
       itemBuilder: (ctx, index) {
         final prod = _filteredProducts[index];
         Color cardColor = _isReturnMode ? Colors.deepOrange.shade700 : Colors.blue.shade700;
+        final itemFontSize = _getItemFontSize();
 
         return InkWell(
           onTap: () => _addToCart(prod),
@@ -606,9 +676,9 @@ class _PosScreenState extends State<PosScreen> {
                     prod.name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: itemFontSize,
                       color: Colors.white,
                     ),
                   ),
@@ -621,10 +691,10 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                     child: Text(
                       _formatNum(prod.sellPrice),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: itemFontSize - 1,
                       ),
                     ),
                   ),
@@ -773,35 +843,45 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildBottomBar() {
+    final btnHeight = _getBottomButtonHeight();
+    final btnFontSize = _getBottomButtonFontSize();
+
     return Container(
       padding: const EdgeInsets.all(8),
       color: Colors.white,
       child: Row(
         children: [
           Expanded(
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey.shade700,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+            child: SizedBox(
+              height: btnHeight,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey.shade700,
+                ),
+                onPressed: _clearInvoice,
+                icon: const Icon(Icons.delete_sweep, color: Colors.white),
+                label: Text(
+                  _isReturnMode ? 'تفريغ المرتجع' : 'فاتورة جديدة',
+                  style: TextStyle(color: Colors.white, fontSize: btnFontSize),
+                ),
               ),
-              onPressed: _clearInvoice,
-              icon: const Icon(Icons.delete_sweep, color: Colors.white),
-              label: Text(_isReturnMode ? 'تفريغ المرتجع' : 'فاتورة جديدة', style: const TextStyle(color: Colors.white, fontSize: 15)),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             flex: 2,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green.shade700,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onPressed: _cart.isEmpty ? null : _showPaymentDialog,
-              icon: Icon(_isReturnMode ? Icons.assignment_return : Icons.payment, color: Colors.white),
-              label: Text(
-                _isReturnMode ? 'إتمام المرتجع' : 'الدفع',
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            child: SizedBox(
+              height: btnHeight,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green.shade700,
+                ),
+                onPressed: _cart.isEmpty ? null : _showPaymentDialog,
+                icon: Icon(_isReturnMode ? Icons.assignment_return : Icons.payment, color: Colors.white),
+                label: Text(
+                  _isReturnMode ? 'إتمام المرتجع' : 'الدفع',
+                  style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ),
