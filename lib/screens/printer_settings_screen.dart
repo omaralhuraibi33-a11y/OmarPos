@@ -23,7 +23,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     _loadSavedSettings();
   }
 
-  // تحميل الإعدادات وقائمة الطابعات المحفوظة من قاعدة البيانات
+  // تحميل الإعدادات وقائمة الطابعات المحفوظة من قاعدة البيانات عبر المفاتيح الموحدة
   Future<void> _loadSavedSettings() async {
     final savedPrintersJson = await DBHelper.getSetting('printers_list');
     final savedAutoKitchen = await DBHelper.getSetting('auto_kitchen');
@@ -45,7 +45,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     }
   }
 
-  // حفظ الطابعات والإعدادات في قاعدة البيانات
+  // حفظ الطابعات والإعدادات في قاعدة البيانات بنفس المفاتيح الموحدة للنظام
   Future<void> _saveSettings() async {
     final printersJson = jsonEncode(_printers);
     await DBHelper.saveSetting('printers_list', printersJson);
