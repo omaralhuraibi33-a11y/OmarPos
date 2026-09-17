@@ -89,7 +89,7 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // دالة الطباعة الموحدة المربوطة بإعدادات الطابعات المحفوظة (تم إصلاح معالجة الـ Socket والبلوتوث)
+  // دالة الطباعة الموحدة المصححة بالكامل
   Future<void> _printReceipt({
     required String invoiceId,
     required String paymentMethod,
@@ -161,17 +161,15 @@ class _PosScreenState extends State<PosScreen> {
             try {
               socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
               
-              // الاستماع لمنع استثناءات الاتصال المفاجئة
               socket.listen((_) {}, onError: (_) {}, onDone: () {});
 
               socket.add(bytes);
               await socket.flush();
 
-              // مهلة زمنية للتأكد من استقبال الطابعة لجميع البيانات والقص
               await Future.delayed(const Duration(milliseconds: 300));
             } finally {
               if (socket != null) {
-                await socket.destroy(); // إغلاق المقبس وتحرير البورت بأمان
+                socket.destroy(); // إصلاح: تم إزالة await لأن الدالة ترجع void
               }
             }
           }
@@ -179,12 +177,11 @@ class _PosScreenState extends State<PosScreen> {
           final String mac = (printer['macAddress'] ?? '').trim();
           if (mac.isNotEmpty) {
             try {
-              await PrintBluetoothThermal.disconnect();
+              await PrintBluetoothThermal.disconnect; // إصلاح: disconnect هي Future وليست دالة
             } catch (_) {}
 
             bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
             if (connected) {
-              // تقسيم مصفوفة البايتات لتجنب امتلاء ذاكرة البلوتوث
               const int chunkSize = 100;
               for (var i = 0; i < bytes.length; i += chunkSize) {
                 var end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
@@ -192,7 +189,7 @@ class _PosScreenState extends State<PosScreen> {
                 await Future.delayed(const Duration(milliseconds: 40));
               }
               await Future.delayed(const Duration(milliseconds: 200));
-              await PrintBluetoothThermal.disconnect(); // إصلاح عدم وجود أقواس الاستدعاء
+              await PrintBluetoothThermal.disconnect; // إصلاح: تم إزالة الأقواس
             }
           }
         }
@@ -427,7 +424,7 @@ class _PosScreenState extends State<PosScreen> {
           final availableMethods = _isCashCustomer ? ['نقدي'] : _paymentMethods;
 
           return AlertDialog(
-            title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع وااختيار طريقة الدفع'),
+            title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع واختيار طريقة الدفع'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,7 +521,6 @@ class _PosScreenState extends State<PosScreen> {
       );
     }
 
-    // التنفيذ الفعلي للطباعة في حال كانت الطابعة مفعلة
     if (_isPrinterConnected) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -535,7 +531,6 @@ class _PosScreenState extends State<PosScreen> {
         );
       }
 
-      // إرسال الأمر للطباعة (نسخة الزبون ونسخة المطبخ)
       await _printReceipt(invoiceId: invoiceId, paymentMethod: paymentMethod, type: 'زبون');
       await _printReceipt(invoiceId: invoiceId, paymentMethod: paymentMethod, type: 'مطبخ');
     }
