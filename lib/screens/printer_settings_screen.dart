@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'db_helper.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
   const PrinterSettingsScreen({Key? key}) : super(key: key);
@@ -15,11 +17,47 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   bool _autoKitchen = false;
   bool _autoCustomer = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedSettings();
+  }
+
+  // تحميل الإعدادات وقائمة الطابعات المحفوظة من قاعدة البيانات
+  Future<void> _loadSavedSettings() async {
+    final savedPrintersJson = await DBHelper.getSetting('printers_list');
+    final savedAutoKitchen = await DBHelper.getSetting('auto_kitchen');
+    final savedAutoCustomer = await DBHelper.getSetting('auto_customer');
+
+    if (mounted) {
+      setState(() {
+        if (savedPrintersJson != null && savedPrintersJson.isNotEmpty) {
+          final List<dynamic> decoded = jsonDecode(savedPrintersJson);
+          _printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+        if (savedAutoKitchen != null) {
+          _autoKitchen = savedAutoKitchen == 'true';
+        }
+        if (savedAutoCustomer != null) {
+          _autoCustomer = savedAutoCustomer == 'true';
+        }
+      });
+    }
+  }
+
+  // حفظ الطابعات والإعدادات في قاعدة البيانات
+  Future<void> _saveSettings() async {
+    final printersJson = jsonEncode(_printers);
+    await DBHelper.saveSetting('printers_list', printersJson);
+    await DBHelper.saveSetting('auto_kitchen', _autoKitchen.toString());
+    await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
+  }
+
   void _showPrinterDialog({Map<String, dynamic>? printerToEdit, int? editIndex}) {
     final nameCtrl = TextEditingController(text: printerToEdit?['name'] ?? '');
     final ipCtrl = TextEditingController(text: printerToEdit?['ip'] ?? '');
     final macCtrl = TextEditingController(text: printerToEdit?['macAddress'] ?? '');
-    
+
     String connection = printerToEdit?['connection'] ?? 'بلوتوث';
     String usage = printerToEdit?['usage'] ?? 'زبون';
     String paperSize = printerToEdit?['paperSize'] ?? '80';
@@ -49,8 +87,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     onChanged: (val) => setDlgState(() => connection = val!),
                   ),
                   const SizedBox(height: 12),
-                  
-                  // جلب الأجهزة المقترنة الفعلية من بلوتوث النظام
+
                   if (connection == 'بلوتوث') ...[
                     SizedBox(
                       width: double.infinity,
@@ -62,9 +99,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         icon: const Icon(Icons.bluetooth_searching),
                         label: const Text('البحث عن الأجهزة المقترنة (Bluetooth)'),
                         onPressed: () async {
-                          // التصحيح الأساسي هنا: pairedBluetooths مع حرف s في النهاية
                           final List<BluetoothInfo> pairedBtDevices = await PrintBluetoothThermal.pairedBluetooths;
-                          
+
                           if (!context.mounted) return;
 
                           showModalBottomSheet(
@@ -152,7 +188,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   final printerData = {
                     'name': nameCtrl.text.trim().isEmpty ? 'طابعة جديدة' : nameCtrl.text.trim(),
                     'connection': connection,
@@ -169,7 +205,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                       _printers[editIndex] = printerData;
                     }
                   });
-                  Navigator.pop(ctx);
+                  await _saveSettings();
+                  if (context.mounted) Navigator.pop(ctx);
                 },
                 child: const Text('حفظ الطابعة'),
               ),
@@ -201,12 +238,18 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   SwitchListTile(
                     title: const Text('طباعة المطبخ تلقائياً'),
                     value: _autoKitchen,
-                    onChanged: (val) => setState(() => _autoKitchen = val),
+                    onChanged: (val) async {
+                      setState(() => _autoKitchen = val);
+                      await _saveSettings();
+                    },
                   ),
                   SwitchListTile(
                     title: const Text('طباعة الزبون تلقائياً'),
                     value: _autoCustomer,
-                    onChanged: (val) => setState(() => _autoCustomer = val),
+                    onChanged: (val) async {
+                      setState(() => _autoCustomer = val);
+                      await _saveSettings();
+                    },
                   ),
                 ],
               ),
@@ -267,11 +310,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () {
+                              onPressed: () async {
                                 setState(() {
                                   _printers.removeAt(i);
                                   if (_selectedPrinterIndex == i) _selectedPrinterIndex = null;
                                 });
+                                await _saveSettings();
                               },
                             ),
                           ],
