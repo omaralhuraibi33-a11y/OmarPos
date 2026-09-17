@@ -69,9 +69,9 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     }
   }
 
-  // حفظ الإعدادات في قاعدة البيانات
+  // حفظ الإعدادات في قاعدة البيانات مع استخدام toARGB32 لتفادي تحذيرات الإصدارات الحديثة
   Future<void> _saveSettings() async {
-    await DBHelper.saveSetting('theme_color', _selectedPrimaryColor.value.toString());
+    await DBHelper.saveSetting('theme_color', _selectedPrimaryColor.toARGB32().toString());
     await DBHelper.saveSetting('main_button_size', _mainButtonSize);
     await DBHelper.saveSetting('pos_item_size', _posItemSize);
     await DBHelper.saveSetting('is_dark_mode', _currentIsDarkMode.toString());
@@ -153,7 +153,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
             spacing: 12,
             runSpacing: 10,
             children: _systemColors.map((color) {
-              final isSelected = _selectedPrimaryColor.value == color.value;
+              final isSelected = _selectedPrimaryColor.toARGB32() == color.toARGB32();
               return GestureDetector(
                 onTap: () {
                   setState(() {
@@ -222,7 +222,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
 
           const SizedBox(height: 30),
 
-          // زر حفظ الاعدادات
+          // زر حفظ الإعدادات
           SizedBox(
             width: double.infinity,
             height: 48,
