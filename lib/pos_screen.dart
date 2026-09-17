@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'db_helper.dart';
 
 class CartItem {
@@ -18,7 +22,7 @@ class CartItem {
 }
 
 class PosScreen extends StatefulWidget {
-  const PosScreen({Key? key}) : super(key: key);
+  const PosScreen({Key? key}) : super(Key: key);
   @override
   State<PosScreen> createState() => _PosScreenState();
 }
@@ -83,6 +87,91 @@ class _PosScreenState extends State<PosScreen> {
       if (savedPosItemSize != null) _posItemSizeSetting = savedPosItemSize;
       _isLoading = false;
     });
+  }
+
+  // دالة الطباعة الموحدة المربوطة بإعدادات الطابعات المحفوظة
+  Future<void> _printReceipt({
+    required String invoiceId,
+    required String paymentMethod,
+    required String type, // 'زبون' أو 'مطبخ'
+  }) async {
+    final savedPrintersJson = await DBHelper.getSetting('printers_list');
+    final autoKitchen = await DBHelper.getSetting('auto_kitchen') == 'true';
+    final autoCustomer = await DBHelper.getSetting('auto_customer') == 'true';
+
+    // التثبت من تفعيل الطباعة التلقائية حسب النوع
+    if (type == 'مطبخ' && !autoKitchen) return;
+    if (type == 'زبون' && !autoCustomer) return;
+
+    if (savedPrintersJson == null || savedPrintersJson.isEmpty) return;
+
+    final List<dynamic> decoded = jsonDecode(savedPrintersJson);
+    final printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+
+    // تصفية الطابعات المخصصة لهذا الاستخدام
+    final targetPrinters = printers.where((p) => p['usage'] == type).toList();
+
+    for (var printer in targetPrinters) {
+      try {
+        final profile = await CapabilityProfile.load();
+        final generator = Generator(
+          printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80,
+          profile,
+        );
+
+        List<int> bytes = [];
+        bytes += generator.text(
+          _isReturnMode ? 'مرتجع مبيعات' : 'فاتورة مبيعات',
+          styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2),
+        );
+        bytes += generator.text('نوع الطباعة: $type', styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text('طريقة الدفع: $paymentMethod', styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+
+        for (var item in _cart) {
+          bytes += generator.row([
+            PosColumn(text: item.product.name, width: 6),
+            PosColumn(text: _formatNum(item.quantity), width: 2),
+            PosColumn(text: _formatNum(item.total), width: 4),
+          ]);
+          if (item.preparationNotes.isNotEmpty) {
+            bytes += generator.text('  ملاحظة: ${item.preparationNotes}', styles: const PosStyles(align: PosAlign.left));
+          }
+        }
+
+        bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text(
+          'الإجمالي: ${_formatNum(_totalAmount)}',
+          styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size1),
+        );
+        bytes += generator.feed(2);
+        bytes += generator.cut();
+
+        // إرسال البيانات حسب طريقة الاتصال
+        if (printer['connection'] == 'واي فاي') {
+          final String ip = (printer['ip'] ?? '').trim();
+          if (ip.isNotEmpty) {
+            final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
+            socket.add(bytes);
+            await socket.flush();
+            await socket.close();
+          }
+        } else {
+          final String mac = (printer['macAddress'] ?? '').trim();
+          if (mac.isNotEmpty) {
+            bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+            if (connected) {
+              await PrintBluetoothThermal.writeBytes(bytes);
+              await PrintBluetoothThermal.disconnect;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('خطأ في الطباعة ($type): $e');
+      }
+    }
   }
 
   // حساب أبعاد كروت أصناف الـ POS بحسب الإعداد المحفوظ
@@ -376,9 +465,10 @@ class _PosScreenState extends State<PosScreen> {
     final customerId = _selectedCustomer?.id ?? 'cash_default';
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     final invoiceType = _isReturnMode ? 'return' : 'sale';
+    final invoiceId = DateTime.now().millisecondsSinceEpoch.toString();
 
     final invoice = Invoice(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: invoiceId,
       invoiceType: invoiceType,
       paymentType: isCredit ? 'credit' : 'cash',
       totalAmount: _totalAmount,
@@ -397,20 +487,29 @@ class _PosScreenState extends State<PosScreen> {
     }
 
     final actionName = _isReturnMode ? 'مرتجع المبيعات' : 'الفاتورة';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('تم حفظ $actionName بنجاح ($paymentMethod)'),
-        backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green,
-      ),
-    );
-
-    if (_isPrinterConnected) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('جاري إرسال $actionName للطابعة الحرارية...'),
-          backgroundColor: Colors.blue,
+          content: Text('تم حفظ $actionName بنجاح ($paymentMethod)'),
+          backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green,
         ),
       );
+    }
+
+    // التنفيذ الفلي للطباعة في حال كانت الطابعة مفعلة
+    if (_isPrinterConnected) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('جاري إرسال $actionName للطابعة الحرارية...'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+
+      // إرسال الأمر للطباعة (نسخة الزبون ونسخة المطبخ)
+      await _printReceipt(invoiceId: invoiceId, paymentMethod: paymentMethod, type: 'زبون');
+      await _printReceipt(invoiceId: invoiceId, paymentMethod: paymentMethod, type: 'مطبخ');
     }
 
     await _loadData();
