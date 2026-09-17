@@ -89,7 +89,7 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // دالة الطباعة الموحدة المربوطة بإعدادات الطابعات المحفوظة
+  // دالة الطباعة الموحدة المربوطة بإعدادات الطابعات المحفوظة (تم إصلاح معالجة الـ Socket والبلوتوث)
   Future<void> _printReceipt({
     required String invoiceId,
     required String paymentMethod,
@@ -120,6 +120,10 @@ class _PosScreenState extends State<PosScreen> {
         );
 
         List<int> bytes = [];
+
+        // إعادة ضبط الطابعة وتنظيف الذاكرة الموقتة
+        bytes += generator.reset();
+
         bytes += generator.text(
           _isReturnMode ? 'مرتجع مبيعات' : 'فاتورة مبيعات',
           styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2),
@@ -153,18 +157,42 @@ class _PosScreenState extends State<PosScreen> {
         if (printer['connection'] == 'واي فاي') {
           final String ip = (printer['ip'] ?? '').trim();
           if (ip.isNotEmpty) {
-            final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
-            socket.add(bytes);
-            await socket.flush();
-            await socket.close();
+            Socket? socket;
+            try {
+              socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
+              
+              // الاستماع لمنع استثناءات الاتصال المفاجئة
+              socket.listen((_) {}, onError: (_) {}, onDone: () {});
+
+              socket.add(bytes);
+              await socket.flush();
+
+              // مهلة زمنية للتأكد من استقبال الطابعة لجميع البيانات والقص
+              await Future.delayed(const Duration(milliseconds: 300));
+            } finally {
+              if (socket != null) {
+                await socket.destroy(); // إغلاق المقبس وتحرير البورت بأمان
+              }
+            }
           }
         } else {
           final String mac = (printer['macAddress'] ?? '').trim();
           if (mac.isNotEmpty) {
+            try {
+              await PrintBluetoothThermal.disconnect();
+            } catch (_) {}
+
             bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
             if (connected) {
-              await PrintBluetoothThermal.writeBytes(bytes);
-              await PrintBluetoothThermal.disconnect;
+              // تقسيم مصفوفة البايتات لتجنب امتلاء ذاكرة البلوتوث
+              const int chunkSize = 100;
+              for (var i = 0; i < bytes.length; i += chunkSize) {
+                var end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
+                await PrintBluetoothThermal.writeBytes(bytes.sublist(i, end));
+                await Future.delayed(const Duration(milliseconds: 40));
+              }
+              await Future.delayed(const Duration(milliseconds: 200));
+              await PrintBluetoothThermal.disconnect(); // إصلاح عدم وجود أقواس الاستدعاء
             }
           }
         }
@@ -496,7 +524,7 @@ class _PosScreenState extends State<PosScreen> {
       );
     }
 
-    // التنفيذ الفلي للطباعة في حال كانت الطابعة مفعلة
+    // التنفيذ الفعلي للطباعة في حال كانت الطابعة مفعلة
     if (_isPrinterConnected) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
