@@ -14,10 +14,88 @@ import 'shift_close_screen.dart';
 import 'financial_report_screen.dart';
 import 'vouchers_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final AppUser currentUser;
 
   const HomeScreen({super.key, required this.currentUser});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String _mainButtonSizeSetting = 'وسط';
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final savedSize = await DBHelper.getSetting('main_button_size');
+    if (mounted) {
+      setState(() {
+        if (savedSize != null) {
+          _mainButtonSizeSetting = savedSize;
+        }
+        _isLoading = false;
+      });
+    }
+  }
+
+  // تحديد عدد الأعمدة بناءً على الإعداد المحفوظ
+  int _getCrossAxisCount() {
+    switch (_mainButtonSizeSetting) {
+      case 'صغير':
+        return 3;
+      case 'كبير':
+        return 2;
+      case 'وسط':
+      default:
+        return 2;
+    }
+  }
+
+  // تحديد حجم الأيقونة
+  double _getIconSize() {
+    switch (_mainButtonSizeSetting) {
+      case 'صغير':
+        return 28.0;
+      case 'كبير':
+        return 48.0;
+      case 'وسط':
+      default:
+        return 36.0;
+    }
+  }
+
+  // تحديد حجم الخط
+  double _getFontSize() {
+    switch (_mainButtonSizeSetting) {
+      case 'صغير':
+        return 12.0;
+      case 'كبير':
+        return 16.0;
+      case 'وسط':
+      default:
+        return 14.0;
+    }
+  }
+
+  // تحديد نسبة أبعاد الكارت
+  double _getChildAspectRatio() {
+    switch (_mainButtonSizeSetting) {
+      case 'صغير':
+        return 1.0;
+      case 'كبير':
+        return 1.2;
+      case 'وسط':
+      default:
+        return 1.1;
+    }
+  }
 
   /// دالة عرض إجمالي المبالغ في الصندوق
   void _showCashBoxDialog(BuildContext context) async {
@@ -74,9 +152,9 @@ class HomeScreen extends StatelessWidget {
       {'title': 'الصندوق', 'icon': Icons.savings, 'color': Colors.brown, 'isCashBox': true},
     ];
 
-    void navigateToScreen(Map<String, dynamic> item) {
+    void navigateToScreen(Map<String, dynamic> item) async {
       String title = item['title'];
-      bool hasPermission = currentUser.isAdmin || (currentUser.permissions[title] ?? false);
+      bool hasPermission = widget.currentUser.isAdmin || (widget.currentUser.permissions[title] ?? false);
 
       if (!hasPermission) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -88,18 +166,20 @@ class HomeScreen extends StatelessWidget {
         return;
       }
 
-      // إذا كان العنصر هو زر الصندوق، يفتح نافذة الإجمالي مباشرة
       if (item['isCashBox'] == true) {
         _showCashBoxDialog(context);
         return;
       }
 
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => Directionality(textDirection: TextDirection.rtl, child: item['page']),
         ),
       );
+
+      // إعادة تحميل الإعدادات عند العودة من الشاشات الأخرى (كإعدادات النظام)
+      _loadSettings();
     }
 
     return Directionality(
@@ -108,7 +188,7 @@ class HomeScreen extends StatelessWidget {
         appBar: AppBar(
           backgroundColor: Colors.indigo,
           foregroundColor: Colors.white,
-          title: Text('الصفحة الرئيسية (${currentUser.name})'),
+          title: Text('الصفحة الرئيسية (${widget.currentUser.name})'),
           actions: [
             IconButton(
               icon: const Icon(Icons.logout),
@@ -121,48 +201,52 @@ class HomeScreen extends StatelessWidget {
             )
           ],
         ),
-        body: GridView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: modules.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 14,
-            childAspectRatio: 1.1,
-          ),
-          itemBuilder: (context, index) {
-            final item = modules[index];
-            bool hasAccess = currentUser.isAdmin || (currentUser.permissions[item['title']] ?? false);
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : GridView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: modules.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _getCrossAxisCount(),
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                  childAspectRatio: _getChildAspectRatio(),
+                ),
+                itemBuilder: (context, index) {
+                  final item = modules[index];
+                  bool hasAccess = widget.currentUser.isAdmin || (widget.currentUser.permissions[item['title']] ?? false);
 
-            return Card(
-              elevation: hasAccess ? 3 : 1,
-              color: hasAccess ? Colors.white : Colors.grey.shade200,
-              child: InkWell(
-                onTap: () => navigateToScreen(item),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      item['icon'],
-                      size: 36,
-                      color: hasAccess ? item['color'] : Colors.grey,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      item['title'],
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: hasAccess ? Colors.black87 : Colors.grey,
+                  return Card(
+                    elevation: hasAccess ? 3 : 1,
+                    color: hasAccess ? Colors.white : Colors.grey.shade200,
+                    child: InkWell(
+                      onTap: () => navigateToScreen(item),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            item['icon'],
+                            size: _getIconSize(),
+                            color: hasAccess ? item['color'] : Colors.grey,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            item['title'],
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: _getFontSize(),
+                              color: hasAccess ? Colors.black87 : Colors.grey,
+                            ),
+                          ),
+                          if (!hasAccess)
+                            const Icon(Icons.lock, size: 16, color: Colors.grey),
+                        ],
                       ),
                     ),
-                    if (!hasAccess)
-                      const Icon(Icons.lock, size: 16, color: Colors.grey),
-                  ],
-                ),
+                  );
+                },
               ),
-            );
-          },
-        ),
       ),
     );
   }
