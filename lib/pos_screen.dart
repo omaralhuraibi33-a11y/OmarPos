@@ -428,32 +428,23 @@ class _PosScreenState extends State<PosScreen> {
         title: Row(
           children: [
             if (!_isReturnMode)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade900,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(width: 4),
-                    Switch(
-                      value: _isTouchMode,
-                      onChanged: (val) => setState(() => _isTouchMode = val),
-                      activeColor: Colors.amber,
-                      activeTrackColor: Colors.white24,
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 4),
+                  Switch(
+                    value: _isTouchMode,
+                    onChanged: (val) => setState(() => _isTouchMode = val),
+                    activeColor: Colors.amber,
+                  ),
+                ],
               )
             else
               const Text('مرتجع مبيعات', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -472,17 +463,15 @@ class _PosScreenState extends State<PosScreen> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isReturnMode ? Colors.deepOrange.shade900 : Colors.blue.shade900,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
                 foregroundColor: Colors.white,
-                elevation: 3,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               icon: Icon(_isReturnMode ? Icons.shopping_cart : Icons.assignment_return, color: Colors.amber),
               label: Text(
                 _isReturnMode ? 'وضع البيع' : 'مرتجع',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               onPressed: () {
                 setState(() {
