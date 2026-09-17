@@ -76,13 +76,13 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       bytes += generator.cut();
 
       if (printer['connection'] == 'واي فاي') {
-        final String ip = printer['ip'] ?? '';
+        final String ip = (printer['ip'] ?? '').trim();
         if (ip.isEmpty) {
           throw 'عنوان الـ IP غير مدخل!';
         }
 
-        // الاتصال المباشر بالمنفذ القياسي للطباعة الحرارية الشبكية 9100
-        final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
+        // الاتصال المباشر بالمنفذ القياسي للطباعة الحرارية الشبكية 9100 مع تحديد مهلة انتظار
+        final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
         socket.add(bytes);
         await socket.flush();
         await socket.close();
@@ -94,7 +94,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
         }
       } else {
         // طباعة البلوتوث
-        final String mac = printer['macAddress'] ?? '';
+        final String mac = (printer['macAddress'] ?? '').trim();
+        if (mac.isEmpty) {
+          throw 'عنوان MAC الخاص بالبلوتوث غير مدخل!';
+        }
+
         bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
         if (connected) {
           await PrintBluetoothThermal.writeBytes(bytes);
@@ -231,7 +235,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   ] else ...[
                     TextField(
                       controller: ipCtrl,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'عنوان IP للطابعة (مثال: 192.168.1.100)',
                         border: OutlineInputBorder(),
