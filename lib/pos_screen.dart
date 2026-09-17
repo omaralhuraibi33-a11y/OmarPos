@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
-import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'db_helper.dart';
+import 'services/printer_service.dart'; // تم إضافة استيراد ملف خدمة الطباعة
 
 class CartItem {
   final Product product;
@@ -89,114 +88,42 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // دالة الطباعة الموحدة المصححة بالكامل
+  // دالة الطباعة المحدثة المعتمدة على PrinterService
   Future<void> _printReceipt({
     required String invoiceId,
     required String paymentMethod,
-    required String type, // 'زبون' أو 'مطبخ'
   }) async {
-    final savedPrintersJson = await DBHelper.getSetting('printers_list');
-    final autoKitchen = await DBHelper.getSetting('auto_kitchen') == 'true';
-    final autoCustomer = await DBHelper.getSetting('auto_customer') == 'true';
+    // 1. تحويل عناصر السلة إلى قائمة مع الخصائص المحددة
+    final itemsList = _cart.map((item) => {
+      'name': item.product.name,
+      'qty': item.quantity,
+      'price': item.unitPrice,
+      'notes': item.preparationNotes,
+    }).toList();
 
-    // التثبت من تفعيل الطباعة التلقائية حسب النوع
-    if (type == 'مطبخ' && !autoKitchen) return;
-    if (type == 'زبون' && !autoCustomer) return;
+    // 2. إنشاء كائن وهمي للفاتورة ليقرأه PrinterService
+    final invoiceData = Invoice(
+      id: invoiceId,
+      invoiceType: _isReturnMode ? 'return' : 'sale',
+      paymentType: (paymentMethod == 'آجل' || paymentMethod == 'أجل') ? 'credit' : 'cash',
+      totalAmount: _totalAmount,
+      date: DateTime.now().toString().split('.')[0],
+      customerId: _selectedCustomer?.id,
+      customerName: _selectedCustomer?.name ?? 'عميل نقدي',
+    );
 
-    if (savedPrintersJson == null || savedPrintersJson.isEmpty) return;
+    // 3. إرسال أمره الطباعة للزبون وللمطبخ عبر PrinterService
+    await PrinterService.printInvoice(
+      invoice: invoiceData,
+      items: itemsList,
+      usageType: 'زبون',
+    );
 
-    final List<dynamic> decoded = jsonDecode(savedPrintersJson);
-    final printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-
-    // تصفية الطابعات المخصصة لهذا الاستخدام
-    final targetPrinters = printers.where((p) => p['usage'] == type).toList();
-
-    for (var printer in targetPrinters) {
-      try {
-        final profile = await CapabilityProfile.load();
-        final generator = Generator(
-          printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80,
-          profile,
-        );
-
-        List<int> bytes = [];
-
-        // إعادة ضبط الطابعة وتنظيف الذاكرة الموقتة
-        bytes += generator.reset();
-
-        bytes += generator.text(
-          _isReturnMode ? 'مرتجع مبيعات' : 'فاتورة مبيعات',
-          styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2),
-        );
-        bytes += generator.text('نوع الطباعة: $type', styles: const PosStyles(align: PosAlign.center));
-        bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
-        bytes += generator.text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', styles: const PosStyles(align: PosAlign.center));
-        bytes += generator.text('طريقة الدفع: $paymentMethod', styles: const PosStyles(align: PosAlign.center));
-        bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-
-        for (var item in _cart) {
-          bytes += generator.row([
-            PosColumn(text: item.product.name, width: 6),
-            PosColumn(text: _formatNum(item.quantity), width: 2),
-            PosColumn(text: _formatNum(item.total), width: 4),
-          ]);
-          if (item.preparationNotes.isNotEmpty) {
-            bytes += generator.text('  ملاحظة: ${item.preparationNotes}', styles: const PosStyles(align: PosAlign.left));
-          }
-        }
-
-        bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-        bytes += generator.text(
-          'الإجمالي: ${_formatNum(_totalAmount)}',
-          styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size1),
-        );
-        bytes += generator.feed(2);
-        bytes += generator.cut();
-
-        // إرسال البيانات حسب طريقة الاتصال
-        if (printer['connection'] == 'واي فاي') {
-          final String ip = (printer['ip'] ?? '').trim();
-          if (ip.isNotEmpty) {
-            Socket? socket;
-            try {
-              socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
-              
-              socket.listen((_) {}, onError: (_) {}, onDone: () {});
-
-              socket.add(bytes);
-              await socket.flush();
-
-              await Future.delayed(const Duration(milliseconds: 300));
-            } finally {
-              if (socket != null) {
-                socket.destroy(); // إصلاح: تم إزالة await لأن الدالة ترجع void
-              }
-            }
-          }
-        } else {
-          final String mac = (printer['macAddress'] ?? '').trim();
-          if (mac.isNotEmpty) {
-            try {
-              await PrintBluetoothThermal.disconnect; // إصلاح: disconnect هي Future وليست دالة
-            } catch (_) {}
-
-            bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
-            if (connected) {
-              const int chunkSize = 100;
-              for (var i = 0; i < bytes.length; i += chunkSize) {
-                var end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
-                await PrintBluetoothThermal.writeBytes(bytes.sublist(i, end));
-                await Future.delayed(const Duration(milliseconds: 40));
-              }
-              await Future.delayed(const Duration(milliseconds: 200));
-              await PrintBluetoothThermal.disconnect; // إصلاح: تم إزالة الأقواس
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint('خطأ في الطباعة ($type): $e');
-      }
-    }
+    await PrinterService.printInvoice(
+      invoice: invoiceData,
+      items: itemsList,
+      usageType: 'مطبخ',
+    );
   }
 
   // حساب أبعاد كروت أصناف الـ POS بحسب الإعداد المحفوظ
@@ -504,8 +431,10 @@ class _PosScreenState extends State<PosScreen> {
       isClosed: false,
     );
 
+    // 1. حفظ الفاتورة في الداتا بيز
     await DBHelper.saveInvoice(invoice);
 
+    // 2. تحديث المخزون
     for (var item in _cart) {
       double stockDelta = _isReturnMode ? item.quantity : -item.quantity;
       await DBHelper.updateProductStock(item.product.id, stockDelta);
@@ -521,6 +450,7 @@ class _PosScreenState extends State<PosScreen> {
       );
     }
 
+    // 3. إرسال أمره الطباعة فوراً إذا كانت الطابعة مفعلة
     if (_isPrinterConnected) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -531,8 +461,7 @@ class _PosScreenState extends State<PosScreen> {
         );
       }
 
-      await _printReceipt(invoiceId: invoiceId, paymentMethod: paymentMethod, type: 'زبون');
-      await _printReceipt(invoiceId: invoiceId, paymentMethod: paymentMethod, type: 'مطبخ');
+      await _printReceipt(invoiceId: invoiceId, paymentMethod: paymentMethod);
     }
 
     await _loadData();
