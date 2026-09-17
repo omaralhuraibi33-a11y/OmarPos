@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'db_helper.dart';
+import 'package:omar_pos/db_helper.dart';
+
 
 class AppearanceSettingsScreen extends StatefulWidget {
   final bool isDarkMode;
