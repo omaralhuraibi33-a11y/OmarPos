@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:io'; // لاستخدام Socket للواي فاي
 import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:omar_pos/db_helper.dart';
-
 
 class PrinterSettingsScreen extends StatefulWidget {
   const PrinterSettingsScreen({Key? key}) : super(key: key);
@@ -17,6 +18,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
 
   bool _autoKitchen = false;
   bool _autoCustomer = false;
+  bool _isTesting = false;
 
   @override
   void initState() {
@@ -24,7 +26,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     _loadSavedSettings();
   }
 
-  // تحميل الإعدادات وقائمة الطابعات المحفوظة من قاعدة البيانات عبر المفاتيح الموحدة
   Future<void> _loadSavedSettings() async {
     final savedPrintersJson = await DBHelper.getSetting('printers_list');
     final savedAutoKitchen = await DBHelper.getSetting('auto_kitchen');
@@ -46,12 +47,76 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     }
   }
 
-  // حفظ الطابعات والإعدادات في قاعدة البيانات بنفس المفاتيح الموحدة للنظام
   Future<void> _saveSettings() async {
     final printersJson = jsonEncode(_printers);
     await DBHelper.saveSetting('printers_list', printersJson);
     await DBHelper.saveSetting('auto_kitchen', _autoKitchen.toString());
     await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
+  }
+
+  // دالة تجربة الطباعة الحقيقية (سواء واي فاي أو بلوتوث)
+  Future<void> _testPrint(Map<String, dynamic> printer) async {
+    setState(() => _isTesting = true);
+
+    try {
+      // تجهيز بيانات الصفحة التجريبية ببروتوكول ESC/POS
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(
+        printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80,
+        profile,
+      );
+
+      List<int> bytes = [];
+      bytes += generator.text('OMAR POS TEST',
+          styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
+      bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('SUCCESSFUL PRINT TEST!', styles: const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.text('IP: ${printer['ip']}', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.feed(2);
+      bytes += generator.cut();
+
+      if (printer['connection'] == 'واي فاي') {
+        final String ip = printer['ip'] ?? '';
+        if (ip.isEmpty) {
+          throw 'عنوان الـ IP غير مدخل!';
+        }
+
+        // الاتصال المباشر بالمنفذ القياسي للطباعة الحرارية الشبكية 9100
+        final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
+        socket.add(bytes);
+        await socket.flush();
+        await socket.close();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تمت الطباعة عبر الواي فاي بنجاح!'), backgroundColor: Colors.green),
+          );
+        }
+      } else {
+        // طباعة البلوتوث
+        final String mac = printer['macAddress'] ?? '';
+        bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+        if (connected) {
+          await PrintBluetoothThermal.writeBytes(bytes);
+          await PrintBluetoothThermal.disconnect;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('تمت الطباعة عبر البلوتوث بنجاح!'), backgroundColor: Colors.green),
+            );
+          }
+        } else {
+          throw 'تعذر الاتصال بطابعة البلوتوث!';
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('فشل الاتصال بالطابعة: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isTesting = false);
+    }
   }
 
   void _showPrinterDialog({Map<String, dynamic>? printerToEdit, int? editIndex}) {
@@ -88,7 +153,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     onChanged: (val) => setDlgState(() => connection = val!),
                   ),
                   const SizedBox(height: 12),
-
                   if (connection == 'بلوتوث') ...[
                     SizedBox(
                       width: double.infinity,
@@ -101,7 +165,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         label: const Text('البحث عن الأجهزة المقترنة (Bluetooth)'),
                         onPressed: () async {
                           final List<BluetoothInfo> pairedBtDevices = await PrintBluetoothThermal.pairedBluetooths;
-
                           if (!context.mounted) return;
 
                           showModalBottomSheet(
@@ -168,7 +231,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   ] else ...[
                     TextField(
                       controller: ipCtrl,
-                      decoration: const InputDecoration(labelText: 'عنوان IP للطابعة (مثال: 192.168.1.100)'),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'عنوان IP للطابعة (مثال: 192.168.1.100)',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -265,15 +332,19 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _selectedPrinterIndex != null ? Colors.orange : Colors.grey,
                 ),
-                onPressed: _selectedPrinterIndex == null
+                onPressed: (_selectedPrinterIndex == null || _isTesting)
                     ? null
                     : () {
                         final p = _printers[_selectedPrinterIndex!];
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('تم إرسال صفحة تجريبية إلى الطابعة: ${p['name']}')),
-                        );
+                        _testPrint(p);
                       },
-                icon: const Icon(Icons.print, color: Colors.white),
+                icon: _isTesting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Icon(Icons.print, color: Colors.white),
                 label: const Text('تجربة الطابعة', style: TextStyle(color: Colors.white)),
               ),
             ],
