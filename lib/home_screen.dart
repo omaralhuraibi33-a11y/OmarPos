@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package0:flutter/material.dart';
 import 'db_helper.dart';
 import 'login_screen.dart';
 
@@ -137,6 +137,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // جلب لون الثيم الديناميكي بدلاً من الألوان الثابتة
+    final primaryColor = Theme.of(context).primaryColor;
+
     final List<Map<String, dynamic>> modules = [
       {'title': 'نقطة البيع', 'icon': Icons.point_of_sale, 'color': Colors.blue, 'page': const PosScreen()},
       {'title': 'المشتريات', 'icon': Icons.shopping_cart, 'color': Colors.orange, 'page': const PurchasesScreen()},
@@ -186,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
-          backgroundColor: Colors.indigo,
+          backgroundColor: primaryColor,
           foregroundColor: Colors.white,
           title: Text('الصفحة الرئيسية (${widget.currentUser.name})'),
           actions: [
@@ -218,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   return Card(
                     elevation: hasAccess ? 3 : 1,
-                    color: hasAccess ? Colors.white : Colors.grey.shade200,
+                    color: hasAccess ? Theme.of(context).cardColor : Colors.grey.shade200,
                     child: InkWell(
                       onTap: () => navigateToScreen(item),
                       child: Column(
@@ -236,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: _getFontSize(),
-                              color: hasAccess ? Colors.black87 : Colors.grey,
+                              color: hasAccess ? null : Colors.grey,
                             ),
                           ),
                           if (!hasAccess)
