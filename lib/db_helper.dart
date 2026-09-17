@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dartd:convert';
 import 'dart:io';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -657,7 +657,6 @@ class DBHelper {
     return maxId + 1;
   }
 
-  // دالة إغلاق الوردية المرنة (تستقبل جميع البرامترات المحتملة لتجنب أي تعارض بناء)
   static Future<void> closeShift({
     String? userId,
     String? userName,
@@ -1040,8 +1039,8 @@ class DBHelper {
   static Future<String?> getSetting(String key, {String? defaultValue}) async {
     final db = await database;
     final res = await db.query('settings', where: 'key = ?', whereArgs: [key]);
-    if (res.isNotEmpty) {
-      return res.first['value'] as String?;
+    if (res.isNotEmpty && res.first['value'] != null) {
+      return res.first['value'] as String;
     }
     return defaultValue;
   }
