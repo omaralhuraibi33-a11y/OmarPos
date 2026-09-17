@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'db_helper.dart';
+import 'db_helper.dart'; // قم بالتعديل لـ '../db_helper.dart' إذا كان الملف داخل مجلد screens
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -49,8 +49,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // جلب اللون الأساسي الديناميكي المحدد في المظهر
+    final primaryColor = Theme.of(context).primaryColor;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('تسجيل الدخول'), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: const Text('تسجيل الدخول'),
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -60,7 +67,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   DropdownButtonFormField<AppUser>(
                     value: selectedUser,
-                    decoration: const InputDecoration(labelText: 'اختر المستخدم', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'اختر المستخدم',
+                      border: OutlineInputBorder(),
+                    ),
                     items: loginUsers.map((u) {
                       return DropdownMenuItem(value: u, child: Text(u.name));
                     }).toList(),
@@ -71,11 +81,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: pinController,
                     keyboardType: TextInputType.number,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'رمز الدخول (PIN)', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'رمز الدخول (PIN)',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white, minimumSize: const Size.fromHeight(50)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(50),
+                    ),
                     onPressed: _login,
                     child: const Text('دخول', style: TextStyle(fontSize: 18)),
                   ),
