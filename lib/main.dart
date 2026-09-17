@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'db_helper.dart';
-import 'login_screen.dart';
+import 'db_helper.dart'; // إذا كان بنفس المجلد، أو '../db_helper.dart' إذا كان الشاشات داخل مجلد screens
+import 'login_screen.dart'; // قم بتعديل المسار حسب المجلد إذا لزم الأمر
 
 // تعريف Notifier للتحكم بالمظهر واللون الأساسي على مستوى التطبيق كامل
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
-final ValueNotifier<Color> primaryColorNotifier = ValueNotifier(Colors.indigo);
+final ValueNotifier<Color> primaryColorNotifier = ValueNotifier(Colors.blue);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // جلب إعدادات المظهر المخزنة في قاعدة البيانات عند التشغيل
-  final isDarkMode = await DBHelper.getSetting('dark_mode') == 'true';
-  final savedColorHex = await DBHelper.getSetting('primary_color');
+  // جلب إعدادات المظهر المخزنة بالاعتماد على المفاتيح الموحدة
+  final isDarkMode = await DBHelper.getSetting('is_dark_mode') == 'true';
+  final savedColorHex = await DBHelper.getSetting('theme_color');
 
   if (isDarkMode) {
     themeModeNotifier.value = ThemeMode.dark;
@@ -42,18 +42,36 @@ class OmarPosMasterApp extends StatelessWidget {
               debugShowCheckedModeBanner: false,
               themeMode: themeMode,
               theme: ThemeData(
+                useMaterial3: true,
+                primaryColor: primaryColor,
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: primaryColor,
+                  primary: primaryColor,
                   brightness: Brightness.light,
                 ),
-                useMaterial3: true,
+                appBarTheme: AppBarTheme(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+                elevatedButtonTheme: ElevatedButtonThemeData(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
               ),
               darkTheme: ThemeData(
+                useMaterial3: true,
+                primaryColor: primaryColor,
                 colorScheme: ColorScheme.fromSeed(
                   seedColor: primaryColor,
+                  primary: primaryColor,
                   brightness: Brightness.dark,
                 ),
-                useMaterial3: true,
+                appBarTheme: AppBarTheme(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                ),
               ),
               home: const Directionality(
                 textDirection: TextDirection.rtl,
