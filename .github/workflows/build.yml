@@ -24,17 +24,11 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Generate Flutter Android Project
+    - name: Generate Android Project Safely
       run: |
-        mkdir -p temp_backup
-        cp -r lib temp_backup/ 2>/dev/null || true
-        cp pubspec.yaml temp_backup/ 2>/dev/null || true
-        cp pubspec.lock temp_backup/ 2>/dev/null || true
-        flutter create --org com.omarpos.master --project-name omar_pos --platforms=android --overwrite .
-        cp -r temp_backup/lib . 2>/dev/null || true
-        cp temp_backup/pubspec.yaml . 2>/dev/null || true
-        cp temp_backup/pubspec.lock . 2>/dev/null || true
-        rm -rf temp_backup
+        flutter create --org com.omarpos.master --project-name omar_pos --platforms=android temp_android_proj
+        cp -r temp_android_proj/android .
+        rm -rf temp_android_proj
 
     - name: Force Android SDK 36 Across All Modules
       run: |
