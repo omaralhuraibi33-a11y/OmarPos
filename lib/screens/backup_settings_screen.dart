@@ -48,7 +48,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
 
   /// تغيير موقع مجلد النسخ الاحتياطي باستخدام file_selector
   Future<void> _changeBackupDirectory() async {
-    // استخدام getDirectoryPath من مكتبة file_selector البديلة
     String? selectedDirectory = await getDirectoryPath();
 
     if (selectedDirectory != null) {
@@ -110,37 +109,101 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  /// استعادة نسخة احتياطية باستخدام file_selector
+  /// استعادة نسخة احتياطية عبر قراءة محتوى المجلد مباشرة وعرضها داخل قائمة التطبيق
   Future<void> _restoreBackup() async {
     setState(() => _isProcessing = true);
     try {
-      // تحديد امتداد ملف قاعدة البيانات المسموح به
-      const XTypeGroup typeGroup = XTypeGroup(
-        label: 'Database Files',
-        extensions: ['db'],
-      );
+      final targetDirPath = _customFolderPath ?? (await _getDefaultBackupDirectory()).path;
+      final targetDir = Directory(targetDirPath);
 
-      final XFile? result = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+      if (!await targetDir.exists()) {
+        throw Exception('مجلد النسخ الاحتياطي غير موجود!');
+      }
 
-      if (result != null && result.path.isNotEmpty) {
-        final selectedFile = File(result.path);
+      final List<FileSystemEntity> files = targetDir.listSync();
+      final backupFiles = files.where((file) {
+        return file is File && file.path.endsWith('.db');
+      }).toList();
 
-        final dbPath = await getDatabasesPath();
-        final currentDbPath = p.join(dbPath, 'omar_pos.db');
-
-        final db = await openDatabase(currentDbPath);
-        await db.close();
-
-        await selectedFile.copy(currentDbPath);
-
+      if (backupFiles.isEmpty) {
+        setState(() => _isProcessing = false);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تمت استعادة النسخة الاحتياطية بنجاح! يُفضل إعادة تشغيل التطبيق.'),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text('لا توجد أي نسخ احتياطية في المجلد حالياً!'), backgroundColor: Colors.orange),
         );
+        return;
       }
+
+      // ترتيب الملفات من الأحدث للأقدم
+      backupFiles.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+
+      setState(() => _isProcessing = false);
+
+      if (!mounted) return;
+
+      // إظهار قائمة منبثقة بالنسخ الموجودة
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('اختر النسخة للاستعادة'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: ListView.builder(
+                itemCount: backupFiles.length,
+                itemBuilder: (context, index) {
+                  final file = backupFiles[index] as File;
+                  final fileName = p.basename(file.path);
+                  return ListTile(
+                    leading: const Icon(Icons.storage, color: Colors.green),
+                    title: Text(fileName, style: const TextStyle(fontSize: 14)),
+                    onTap: () async {
+                      Navigator.pop(context); // إغلاق النافذة
+                      await _performRestore(file.path); // تنفيذ الاستعادة
+                    },
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      setState(() => _isProcessing = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('حدث خطأ: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// تنفيذ استبدال قاعدة البيانات بالملف المختار
+  Future<void> _performRestore(String selectedFilePath) async {
+    setState(() => _isProcessing = true);
+    try {
+      final selectedFile = File(selectedFilePath);
+      final dbPath = await getDatabasesPath();
+      final currentDbPath = p.join(dbPath, 'omar_pos.db');
+
+      final db = await openDatabase(currentDbPath);
+      await db.close();
+
+      await selectedFile.copy(currentDbPath);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تمت استعادة النسخة الاحتياطية بنجاح! يُفضل إعادة تشغيل التطبيق.'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
