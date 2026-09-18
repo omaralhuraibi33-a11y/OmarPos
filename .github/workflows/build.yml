@@ -26,10 +26,10 @@ jobs:
 
     - name: Recreate Clean Android & Setup Environment
       run: |
-        # 1. مسح مجلد الأندرويد القديم بالكامل للتخلص من أي قوالب v1 تالفة أو مخفية
+        # 1. مسح مجلد الأندرويد القديم لضمان نظافة البناء
         rm -rf android
 
-        # 2. توليد مجلد أندرويد جديد ونظيف 100% يدعم الـ V2 embedding بشكل رسمي وتلقائي
+        # 2. توليد مجلد أندرويد حديث ونظيف يدعم الإعدادات الجديدة
         flutter create . --platforms=android
 
         # 3. تثبيت مسار الفلاتر الأساسي
@@ -42,14 +42,14 @@ jobs:
         android.enableJetifier=true
         EOF
 
-        # 5. إعداد إصدار Gradle Wrapper 8.11.1
+        # 5. إعداد إصدار Gradle Wrapper 9.3.1 المتوافق مع الـ Plugin الحديث
         mkdir -p android/gradle/wrapper
         cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
         zipStoreBase=GRADLE_USER_HOME
         zipStorePath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
+        distributionUrl=https\://services.gradle.org/distributions/gradle-9.3.1-bin.zip
         EOF
 
     - name: Get Dependencies
