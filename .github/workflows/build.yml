@@ -34,9 +34,11 @@ jobs:
 
     - name: Set Android Min SDK Version
       run: |
-        sed -i 's/minSdkVersion .*/minSdkVersion 21/g' android/app/build.gradle || true
-        sed -i 's/compileSdkVersion .*/compileSdkVersion 36/g' android/app/build.gradle || true
-        sed -i 's/targetSdkVersion .*/targetSdkVersion 36/g' android/app/build.gradle || true
+       sed -i 's/minSdkVersion .*/minSdkVersion 21/g' android/app/build.gradle || true
+       sed -i 's/compileSdkVersion .*/compileSdkVersion 36/g' android/app/build.gradle || true
+       sed -i 's/compileSdk .*/compileSdk 36/g' android/app/build.gradle || true
+       sed -i 's/targetSdkVersion .*/targetSdkVersion 36/g' android/app/build.gradle || true
+       sed -i 's/targetSdk .*/targetSdk 36/g' android/app/build.gradle || true
 
 
     - name: Get Dependencies
