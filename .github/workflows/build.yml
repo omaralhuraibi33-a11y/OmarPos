@@ -24,9 +24,14 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Fix Android Scaffolding & Gradle Version
+    - name: Fix Android Scaffolding & Environment
       run: |
         mkdir -p android/gradle/wrapper
+        
+        # 1. إنشاء local.properties بتحديد مسار الفلاتر الحقيقي
+        echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+
+        # 2. إنشاء gradle-wrapper.properties
         cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
@@ -35,18 +40,39 @@ jobs:
         distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
         EOF
 
-        cat << 'EOF' > android/build.gradle
-        buildscript {
+        # 3. إنشاء settings.gradle
+        cat << 'EOF' > android/settings.gradle
+        pluginManagement {
+            def flutterSdkPath = {
+                def properties = new Properties()
+                def propertiesFile = new File(settingsDir, 'local.properties')
+                if (propertiesFile.exists()) {
+                    propertiesFile.withReader('UTF-8') { reader -> properties.load(reader) }
+                }
+                def flutterSdkPath = properties.getProperty('flutter.sdk')
+                return flutterSdkPath
+            }()
+
+            includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
             repositories {
                 google()
                 mavenCentral()
-            }
-            dependencies {
-                classpath 'com.android.tools.build:gradle:8.2.1'
-                classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24"
+                gradlePluginPortal()
             }
         }
 
+        plugins {
+            id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+            id "com.android.application" version "8.2.1" apply false
+            id "org.jetbrains.kotlin.android" version "1.9.24" apply false
+        }
+
+        include ":app"
+        EOF
+
+        # 4. إنشاء build.gradle الرئيسي
+        cat << 'EOF' > android/build.gradle
         allprojects {
             repositories {
                 google()
@@ -65,10 +91,13 @@ jobs:
         }
         EOF
 
+        # 5. إنشاء android/app/build.gradle
         cat << 'EOF' > android/app/build.gradle
-        apply plugin: 'com.android.application'
-        apply plugin: 'kotlin-android'
-        apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
+        plugins {
+            id "com.android.application"
+            id "kotlin-android"
+            id "dev.flutter.flutter-gradle-plugin"
+        }
 
         android {
             namespace "com.omarpos.master"
