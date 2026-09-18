@@ -30,19 +30,19 @@ jobs:
         
         echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
 
-        # تفعيل AndroidX
         cat << 'EOF' > android/gradle.properties
         org.gradle.jvmargs=-Xmx4608m
         android.useAndroidX=true
         android.enableJetifier=true
         EOF
 
+        # رفع إصدار Gradle ليتوافق مع AGP 8.9.1
         cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
         zipStoreBase=GRADLE_USER_HOME
         zipStorePath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
         EOF
 
         cat << 'EOF' > android/settings.gradle
@@ -68,8 +68,8 @@ jobs:
 
         plugins {
             id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-            id "com.android.application" version "8.2.1" apply false
-            id "org.jetbrains.kotlin.android" version "1.9.24" apply false
+            id "com.android.application" version "8.9.1" apply false
+            id "org.jetbrains.kotlin.android" version "2.1.0" apply false
         }
 
         include ":app"
