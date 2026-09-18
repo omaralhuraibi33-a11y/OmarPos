@@ -30,7 +30,7 @@ jobs:
         
         echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
 
-        # تفعيل AndroidX لإنهاء أخطاء المكتبات
+        # تفعيل AndroidX
         cat << 'EOF' > android/gradle.properties
         org.gradle.jvmargs=-Xmx4608m
         android.useAndroidX=true
@@ -104,7 +104,6 @@ jobs:
         android {
             namespace "com.omarpos.master"
             compileSdk 36
-            ndkVersion "26.2.11394358"
 
             defaultConfig {
                 applicationId "com.omarpos.master"
