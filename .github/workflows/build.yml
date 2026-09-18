@@ -28,7 +28,7 @@ jobs:
       run: |
         mkdir -p temp_lib
         cp -r lib/* temp_lib/ 2>/dev/null || true
-        flutter create --org com.omarpos.master --project-name omar_pos --platforms=android --force .
+        flutter create --org com.omarpos.master --project-name omar_pos --platforms=android --overwrite .
         cp -r temp_lib/* lib/ 2>/dev/null || true
         rm -rf temp_lib
 
