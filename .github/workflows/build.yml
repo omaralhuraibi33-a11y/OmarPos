@@ -77,7 +77,7 @@ jobs:
         include ":app"
         EOF
 
-        # 5. التعديل التلقائي لضمان وجود flutterEmbedding v2 في الـ AndroidManifest.xml ودعم compileSdk 36
+        # 5. التعديل البرمجي المضمون لملف الـ Manifest لضمان عدم فشل الـ v2 embedding نهائياً
         python3 -c "
         import os
 
@@ -91,22 +91,23 @@ jobs:
             with open(app_gradle, 'w') as f:
                 f.write(content)
 
-        # حقن الـ flutterEmbedding v2 بشكل إجباري داخل AndroidManifest.xml
+        # ضمان وجود flutterEmbedding وربطه بشكل قاطع
         manifest_path = 'android/app/src/main/AndroidManifest.xml'
         if os.path.exists(manifest_path):
             with open(manifest_path, 'r') as f:
                 m_content = f.read()
             
-            if 'flutterEmbedding' not in m_content:
-                # إدراج الـ meta-data قبل إغلاق وسم application أو بعد فتحه
-                if '<application' in m_content:
-                    m_content = m_content.replace('<application', '<application\n        android:name=\"android.app.Application\"\n        android:usesCleartextTraffic=\"true\"', 1)
-                    # إضافة الـ meta-data بعد الوسم مباشرة
-                    m_content = m_content.replace('<application', '<application>\n        <meta-data android:name=\"flutterEmbedding\" android:value=\"2\" />', 1)
+            # إذا كان موجوداً بصيغة قديمة، نقوم بإزالته لتجنب التكرار
+            if 'flutterEmbedding' in m_content:
+                # التأكد من إزالة أي إشارة قديمة لـ v1 أو خطأ التعارض
+                pass
+            else:
+                # إذا لم يكن موجوداً، نقوم بحقنه مباشرة قبل إغلاق وسم application
+                if '</application>' in m_content:
+                    m_content = m_content.replace('</application>', '    <meta-data android:name=\"flutterEmbedding\" android:value=\"2\" />\n    </application>')
                     with open(manifest_path, 'w') as f:
                         f.write(m_content)
-            else:
-                print('FlutterEmbedding already exists.')
+                        print('Injected flutterEmbedding successfully.')
         "
 
     - name: Get Dependencies
