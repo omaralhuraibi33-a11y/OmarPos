@@ -24,11 +24,8 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Generate Android Project Safely
-      run: |
-        flutter create --org com.omarpos.master --project-name omar_pos --platforms=android temp_android_proj
-        cp -r temp_android_proj/android .
-        rm -rf temp_android_proj
+    - name: Get Dependencies
+      run: flutter pub get
 
     - name: Force Android SDK 36 Across All Modules
       run: |
@@ -58,9 +55,6 @@ jobs:
         with open(root_gradle, 'a') as f:
             f.write(override_code)
         "
-
-    - name: Get Dependencies
-      run: flutter pub get
 
     - name: Build Release APK
       run: flutter build apk --release --no-tree-shake-icons
