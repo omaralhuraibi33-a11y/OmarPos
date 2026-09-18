@@ -24,19 +24,20 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Fix Android Scaffolding & Environment
+    - name: Fix Configs in Existing Android Folder
       run: |
-        mkdir -p android/gradle/wrapper
-        
+        # 1. تثبيت مسار الفلاتر في local.properties الحقيقي
         echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
 
+        # 2. ضبط gradle.properties لتفعيل AndroidX
         cat << 'EOF' > android/gradle.properties
         org.gradle.jvmargs=-Xmx4608m
         android.useAndroidX=true
         android.enableJetifier=true
         EOF
 
-        # رفع إصدار Gradle ليتوافق مع AGP 8.9.1
+        # 3. ضبط Gradle Wrapper إلى الإصدار 8.11.1 المتوافق
+        mkdir -p android/gradle/wrapper
         cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
@@ -45,6 +46,7 @@ jobs:
         distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
         EOF
 
+        # 4. تحديث settings.gradle لدعم الـ plugins الحديثة
         cat << 'EOF' > android/settings.gradle
         pluginManagement {
             def flutterSdkPath = {
@@ -75,55 +77,21 @@ jobs:
         include ":app"
         EOF
 
-        cat << 'EOF' > android/build.gradle
-        allprojects {
-            repositories {
-                google()
-                mavenCentral()
-            }
-        }
-        rootProject.buildDir = '../build'
-        subprojects {
-            project.buildDir = "${rootProject.buildDir}/${project.name}"
-        }
-        subprojects {
-            project.evaluationDependsOn(':app')
-        }
-        tasks.register("clean", Delete) {
-            delete rootProject.buildDir
-        }
-        EOF
-
-        cat << 'EOF' > android/app/build.gradle
-        plugins {
-            id "com.android.application"
-            id "kotlin-android"
-            id "dev.flutter.flutter-gradle-plugin"
-        }
-
-        android {
-            namespace "com.omarpos.master"
-            compileSdk 36
-
-            defaultConfig {
-                applicationId "com.omarpos.master"
-                minSdk 21
-                targetSdk 36
-                versionCode 1
-                versionName "1.0.0"
-            }
-
-            buildTypes {
-                release {
-                    signingConfig signingConfigs.debug
-                }
-            }
-        }
-
-        flutter {
-            source '../..'
-        }
-        EOF
+        # 5. ضبط compileSdk 36 مباشرة في ملف app/build.gradle الأصلي
+        python3 -c "
+        app_gradle = 'android/app/build.gradle'
+        with open(app_gradle, 'r') as f:
+            content = f.read()
+        
+        # استبدال أو إضافة compileSdk و targetSdk
+        if 'compileSdk' in content:
+            content = content.replace('compileSdk 34', 'compileSdk 36').replace('compileSdk 35', 'compileSdk 36').replace('compileSdk = 34', 'compileSdk 36')
+        if 'targetSdk' in content:
+            content = content.replace('targetSdk 34', 'targetSdk 36').replace('targetSdk 35', 'targetSdk 36')
+            
+        with open(app_gradle, 'w') as f:
+            f.write(content)
+        "
 
     - name: Get Dependencies
       run: flutter pub get
