@@ -28,10 +28,8 @@ jobs:
       run: |
         mkdir -p android/gradle/wrapper
         
-        # 1. إنشاء local.properties بتحديد مسار الفلاتر الحقيقي
         echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
 
-        # 2. إنشاء gradle-wrapper.properties
         cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
@@ -40,7 +38,6 @@ jobs:
         distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
         EOF
 
-        # 3. إنشاء settings.gradle
         cat << 'EOF' > android/settings.gradle
         pluginManagement {
             def flutterSdkPath = {
@@ -71,7 +68,6 @@ jobs:
         include ":app"
         EOF
 
-        # 4. إنشاء build.gradle الرئيسي
         cat << 'EOF' > android/build.gradle
         allprojects {
             repositories {
@@ -91,7 +87,6 @@ jobs:
         }
         EOF
 
-        # 5. إنشاء android/app/build.gradle
         cat << 'EOF' > android/app/build.gradle
         plugins {
             id "com.android.application"
@@ -122,25 +117,6 @@ jobs:
             source '../..'
         }
         EOF
-
-    - name: Force Android SDK 36 Across All Dependencies
-      run: |
-        python3 -c "
-        root_gradle = 'android/build.gradle'
-        override_code = '''
-        subprojects {
-            afterEvaluate { project ->
-                if (project.hasProperty('android')) {
-                    project.android {
-                        compileSdkVersion 36
-                    }
-                }
-            }
-        }
-        '''
-        with open(root_gradle, 'a') as f:
-            f.write(override_code)
-        "
 
     - name: Get Dependencies
       run: flutter pub get
