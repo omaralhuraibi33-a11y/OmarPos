@@ -30,27 +30,39 @@ jobs:
         cp -r lib temp_backup/ 2>/dev/null || true
         cp pubspec.yaml temp_backup/ 2>/dev/null || true
         cp pubspec.lock temp_backup/ 2>/dev/null || true
-        
         flutter create --org com.omarpos.master --project-name omar_pos --platforms=android --overwrite .
-        
         cp -r temp_backup/lib . 2>/dev/null || true
         cp temp_backup/pubspec.yaml . 2>/dev/null || true
         cp temp_backup/pubspec.lock . 2>/dev/null || true
         rm -rf temp_backup
 
-    - name: Update Android SDK Versions
+    - name: Force Android SDK 36 Across All Modules
       run: |
         python3 -c "
-        import os, re
-        path = 'android/app/build.gradle'
-        if os.path.exists(path):
-            with open(path, 'r') as f:
-                content = f.read()
-            content = re.sub(r'compileSdk\s*=.*|compileSdkVersion\s*.*', 'compileSdk = 36', content)
-            content = re.sub(r'targetSdk\s*=.*|targetSdkVersion\s*.*', 'targetSdk = 36', content)
-            content = re.sub(r'minSdk\s*=.*|minSdkVersion\s*.*', 'minSdk = 21', content)
-            with open(path, 'w') as f:
-                f.write(content)
+        import re
+        app_gradle = 'android/app/build.gradle'
+        with open(app_gradle, 'r') as f:
+            c = f.read()
+        c = re.sub(r'compileSdk\s*=.*|compileSdkVersion\s*.*', 'compileSdk = 36', c)
+        c = re.sub(r'targetSdk\s*=.*|targetSdkVersion\s*.*', 'targetSdk = 36', c)
+        c = re.sub(r'minSdk\s*=.*|minSdkVersion\s*.*', 'minSdk = 21', c)
+        with open(app_gradle, 'w') as f:
+            f.write(c)
+
+        root_gradle = 'android/build.gradle'
+        override_code = '''
+        subprojects {
+            afterEvaluate { project ->
+                if (project.hasProperty('android')) {
+                    project.android {
+                        compileSdkVersion 36
+                    }
+                }
+            }
+        }
+        '''
+        with open(root_gradle, 'a') as f:
+            f.write(override_code)
         "
 
     - name: Get Dependencies
