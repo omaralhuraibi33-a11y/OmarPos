@@ -24,19 +24,19 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Fix Configs in Existing Android Folder
+    - name: Fix Configs and Force Embedding V2
       run: |
-        # 1. تثبيت مسار الفلاتر في local.properties الحقيقي
+        # 1. تثبيت مسار الفلاتر
         echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
 
-        # 2. ضبط gradle.properties لتفعيل AndroidX
+        # 2. ضبط gradle.properties
         cat << 'EOF' > android/gradle.properties
         org.gradle.jvmargs=-Xmx4608m
         android.useAndroidX=true
         android.enableJetifier=true
         EOF
 
-        # 3. ضبط Gradle Wrapper إلى الإصدار 8.11.1 المتوافق
+        # 3. ضبط Gradle Wrapper إلى 8.11.1
         mkdir -p android/gradle/wrapper
         cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
         distributionBase=GRADLE_USER_HOME
@@ -46,7 +46,7 @@ jobs:
         distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
         EOF
 
-        # 4. تحديث settings.gradle لدعم الـ plugins الحديثة
+        # 4. تحديث settings.gradle
         cat << 'EOF' > android/settings.gradle
         pluginManagement {
             def flutterSdkPath = {
@@ -77,20 +77,36 @@ jobs:
         include ":app"
         EOF
 
-        # 5. ضبط compileSdk 36 مباشرة في ملف app/build.gradle الأصلي
+        # 5. التعديل التلقائي لضمان وجود flutterEmbedding v2 في الـ AndroidManifest.xml ودعم compileSdk 36
         python3 -c "
+        import os
+
+        # تحديث build.gradle لتحديث الـ SDK
         app_gradle = 'android/app/build.gradle'
-        with open(app_gradle, 'r') as f:
-            content = f.read()
-        
-        # استبدال أو إضافة compileSdk و targetSdk
-        if 'compileSdk' in content:
-            content = content.replace('compileSdk 34', 'compileSdk 36').replace('compileSdk 35', 'compileSdk 36').replace('compileSdk = 34', 'compileSdk 36')
-        if 'targetSdk' in content:
+        if os.path.exists(app_gradle):
+            with open(app_gradle, 'r') as f:
+                content = f.read()
+            content = content.replace('compileSdk 34', 'compileSdk 36').replace('compileSdk 35', 'compileSdk 36')
             content = content.replace('targetSdk 34', 'targetSdk 36').replace('targetSdk 35', 'targetSdk 36')
+            with open(app_gradle, 'w') as f:
+                f.write(content)
+
+        # حقن الـ flutterEmbedding v2 بشكل إجباري داخل AndroidManifest.xml
+        manifest_path = 'android/app/src/main/AndroidManifest.xml'
+        if os.path.exists(manifest_path):
+            with open(manifest_path, 'r') as f:
+                m_content = f.read()
             
-        with open(app_gradle, 'w') as f:
-            f.write(content)
+            if 'flutterEmbedding' not in m_content:
+                # إدراج الـ meta-data قبل إغلاق وسم application أو بعد فتحه
+                if '<application' in m_content:
+                    m_content = m_content.replace('<application', '<application\n        android:name=\"android.app.Application\"\n        android:usesCleartextTraffic=\"true\"', 1)
+                    # إضافة الـ meta-data بعد الوسم مباشرة
+                    m_content = m_content.replace('<application', '<application>\n        <meta-data android:name=\"flutterEmbedding\" android:value=\"2\" />', 1)
+                    with open(manifest_path, 'w') as f:
+                        f.write(m_content)
+            else:
+                print('FlutterEmbedding already exists.')
         "
 
     - name: Get Dependencies
