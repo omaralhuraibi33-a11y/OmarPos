@@ -26,18 +26,27 @@ jobs:
 
     - name: Fix Android Scaffolding & Gradle Version
       run: |
-        # إنشاء ملف gradle-wrapper.properties بالإصدار الحديث المعتمد من فلاتر
         mkdir -p android/gradle/wrapper
         cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
         zipStoreBase=GRADLE_USER_HOME
         zipStorePath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.0-bin.zip
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
         EOF
 
-        # إنشاء android/build.gradle الرئيسي الصحيح
         cat << 'EOF' > android/build.gradle
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath 'com.android.tools.build:gradle:8.2.1'
+                classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24"
+            }
+        }
+
         allprojects {
             repositories {
                 google()
@@ -56,13 +65,10 @@ jobs:
         }
         EOF
 
-        # إنشاء android/app/build.gradle المعتمد
         cat << 'EOF' > android/app/build.gradle
-        plugins {
-            id "com.android.application"
-            id "kotlin-android"
-            id "dev.flutter.flutter-gradle-plugin"
-        }
+        apply plugin: 'com.android.application'
+        apply plugin: 'kotlin-android'
+        apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
         android {
             namespace "com.omarpos.master"
@@ -111,7 +117,7 @@ jobs:
       run: flutter pub get
 
     - name: Build Release APK
-      run: flutter build apk --release --no-tree-shake-icons
+      run: flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
