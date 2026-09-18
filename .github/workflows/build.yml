@@ -24,7 +24,7 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Setup Android Environment Properties
+    - name: Setup Android Environment & Force V2 Embedding
       run: |
         # 1. تثبيت مسار الفلاتر الأساسي
         echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
@@ -45,6 +45,33 @@ jobs:
         zipStorePath=wrapper/dists
         distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
         EOF
+
+        # 4. إصلاح وتأكيد دعم V2 Embedding تلقائياً منعاً لأي خطأ
+        python3 -c "
+        import os
+
+        # التأكد من وجود ملف الـ Manifest وتحديثه
+        manifest_path = 'android/app/src/main/AndroidManifest.xml'
+        if os.path.exists(manifest_path):
+            with open(manifest_path, 'r') as f:
+                content = f.read()
+            
+            # إزالة أي إعدادات قديمة تعارض الـ v2 إذا وجدت
+            if 'flutterEmbedding' not in content:
+                content = content.replace('</application>', '    <meta-data android:name=\"flutterEmbedding\" android:value=\"2\" />\n    </application>')
+                with open(manifest_path, 'w') as f:
+                    f.write(content)
+                    print('Injected flutterEmbedding v2 successfully.')
+
+        # التأكد من وجود مجلد الـ Java والـ MainActivity الصحيح
+        java_dir = 'android/app/src/main/kotlin/com/example/omar_pos'
+        os.makedirs(java_dir, exist_ok=True)
+        main_activity = os.path.join(java_dir, 'MainActivity.kt')
+        if not os.path.exists(main_activity):
+            with open(main_activity, 'w') as f:
+                f.write('package com.example.omar_pos\n\nio.flutter.embedding.android.FlutterActivity\n\nclass MainActivity: FlutterActivity() {\n}\n')
+                print('Created default MainActivity.kt successfully.')
+        "
 
     - name: Get Dependencies
       run: flutter pub get
