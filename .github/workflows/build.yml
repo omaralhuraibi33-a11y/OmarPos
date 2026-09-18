@@ -24,19 +24,19 @@ jobs:
       with:
         channel: 'stable'
 
-    - name: Fix Configs and Force Embedding V2
+    - name: Setup Android Environment Properties
       run: |
-        # 1. تثبيت مسار الفلاتر
+        # 1. تثبيت مسار الفلاتر الأساسي
         echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
 
-        # 2. ضبط gradle.properties
+        # 2. ضبط خصائص الجريدل
         cat << 'EOF' > android/gradle.properties
         org.gradle.jvmargs=-Xmx4608m
         android.useAndroidX=true
         android.enableJetifier=true
         EOF
 
-        # 3. ضبط Gradle Wrapper إلى 8.11.1
+        # 3. إعداد إصدار Gradle Wrapper 8.11.1
         mkdir -p android/gradle/wrapper
         cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
         distributionBase=GRADLE_USER_HOME
@@ -45,70 +45,6 @@ jobs:
         zipStorePath=wrapper/dists
         distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
         EOF
-
-        # 4. تحديث settings.gradle
-        cat << 'EOF' > android/settings.gradle
-        pluginManagement {
-            def flutterSdkPath = {
-                def properties = new Properties()
-                def propertiesFile = new File(settingsDir, 'local.properties')
-                if (propertiesFile.exists()) {
-                    propertiesFile.withReader('UTF-8') { reader -> properties.load(reader) }
-                }
-                def flutterSdkPath = properties.getProperty('flutter.sdk')
-                return flutterSdkPath
-            }()
-
-            includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
-
-            repositories {
-                google()
-                mavenCentral()
-                gradlePluginPortal()
-            }
-        }
-
-        plugins {
-            id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-            id "com.android.application" version "8.9.1" apply false
-            id "org.jetbrains.kotlin.android" version "2.1.0" apply false
-        }
-
-        include ":app"
-        EOF
-
-        # 5. التعديل البرمجي المضمون لملف الـ Manifest لضمان عدم فشل الـ v2 embedding نهائياً
-        python3 -c "
-        import os
-
-        # تحديث build.gradle لتحديث الـ SDK
-        app_gradle = 'android/app/build.gradle'
-        if os.path.exists(app_gradle):
-            with open(app_gradle, 'r') as f:
-                content = f.read()
-            content = content.replace('compileSdk 34', 'compileSdk 36').replace('compileSdk 35', 'compileSdk 36')
-            content = content.replace('targetSdk 34', 'targetSdk 36').replace('targetSdk 35', 'targetSdk 36')
-            with open(app_gradle, 'w') as f:
-                f.write(content)
-
-        # ضمان وجود flutterEmbedding وربطه بشكل قاطع
-        manifest_path = 'android/app/src/main/AndroidManifest.xml'
-        if os.path.exists(manifest_path):
-            with open(manifest_path, 'r') as f:
-                m_content = f.read()
-            
-            # إذا كان موجوداً بصيغة قديمة، نقوم بإزالته لتجنب التكرار
-            if 'flutterEmbedding' in m_content:
-                # التأكد من إزالة أي إشارة قديمة لـ v1 أو خطأ التعارض
-                pass
-            else:
-                # إذا لم يكن موجوداً، نقوم بحقنه مباشرة قبل إغلاق وسم application
-                if '</application>' in m_content:
-                    m_content = m_content.replace('</application>', '    <meta-data android:name=\"flutterEmbedding\" android:value=\"2\" />\n    </application>')
-                    with open(manifest_path, 'w') as f:
-                        f.write(m_content)
-                        print('Injected flutterEmbedding successfully.')
-        "
 
     - name: Get Dependencies
       run: flutter pub get
