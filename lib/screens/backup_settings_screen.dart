@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart'; // استبدال مكتبة اختيار الملفات
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:omar_pos/db_helper.dart';
-
 
 class BackupSettingsScreen extends StatefulWidget {
   const BackupSettingsScreen({Key? key}) : super(key: key);
@@ -47,9 +46,10 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     return backupDir;
   }
 
-  /// تغيير موقع مجلد النسخ الاحتياطي
+  /// تغيير موقع مجلد النسخ الاحتياطي باستخدام file_selector
   Future<void> _changeBackupDirectory() async {
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    // استخدام getDirectoryPath من مكتبة file_selector البديلة
+    String? selectedDirectory = await getDirectoryPath();
 
     if (selectedDirectory != null) {
       final newDir = Directory(p.join(selectedDirectory, 'OmarPOS_Backups'));
@@ -74,7 +74,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     setState(() => _isProcessing = true);
     try {
       final dbPath = await getDatabasesPath();
-      final currentDbFile = File(p.join(dbPath, 'omar_pos.db')); // اسم قاعدة بيانات مشروعك
+      final currentDbFile = File(p.join(dbPath, 'omar_pos.db'));
 
       if (!await currentDbFile.exists()) {
         throw Exception('قاعدة البيانات غير موجودة!');
@@ -86,7 +86,6 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         await targetDir.create(recursive: true);
       }
 
-      // إعطاء النسخة رقماً وتاريخاً مميزاً (سنة_شهر_يوم_ساعة_دقيقة_ثانية)
       final now = DateTime.now();
       final timeStamp = '${now.year}${_twoDigits(now.month)}${_twoDigits(now.day)}_${_twoDigits(now.hour)}${_twoDigits(now.minute)}${_twoDigits(now.second)}';
       final backupFileName = 'OmarPOS_Backup_$timeStamp.db';
@@ -111,31 +110,27 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
-  /// استعادة نسخة احتياطية من المجلد المحدد
+  /// استعادة نسخة احتياطية باستخدام file_selector
   Future<void> _restoreBackup() async {
     setState(() => _isProcessing = true);
     try {
-      final initialPath = _customFolderPath ?? (await _getDefaultBackupDirectory()).path;
-
-      // فتح متصفح الملفات لاختيار النسخة الاحتياطية (.db)
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        initialDirectory: initialPath,
-        type: FileType.custom,
-        allowedExtensions: ['db'],
+      // تحديد امتداد ملف قاعدة البيانات المسموح به
+      const XTypeGroup typeGroup = XTypeGroup(
+        label: 'Database Files',
+        extensions: ['db'],
       );
 
-      if (result != null && result.files.single.path != null) {
-        final selectedFilePath = result.files.single.path!;
-        final selectedFile = File(selectedFilePath);
+      final XFile? result = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+
+      if (result != null && result.path.isNotEmpty) {
+        final selectedFile = File(result.path);
 
         final dbPath = await getDatabasesPath();
         final currentDbPath = p.join(dbPath, 'omar_pos.db');
 
-        // أغلق قاعدة البيانات الحالية قبل الاستبدال
         final db = await openDatabase(currentDbPath);
         await db.close();
 
-        // استبدال قاعدة البيانات بالنسخة المختارة
         await selectedFile.copy(currentDbPath);
 
         if (!mounted) return;
