@@ -23,14 +23,20 @@ jobs:
       uses: subosito/flutter-action@v2
       with:
         channel: 'stable'
-    
+
     - name: Generate Flutter Android Project
       run: |
-        mkdir -p temp_lib
-        cp -r lib/* temp_lib/ 2>/dev/null || true
+        mkdir -p temp_backup
+        cp -r lib temp_backup/ 2>/dev/null || true
+        cp pubspec.yaml temp_backup/ 2>/dev/null || true
+        cp pubspec.lock temp_backup/ 2>/dev/null || true
+        
         flutter create --org com.omarpos.master --project-name omar_pos --platforms=android --overwrite .
-        cp -r temp_lib/* lib/ 2>/dev/null || true
-        rm -rf temp_lib
+        
+        cp -r temp_backup/lib . 2>/dev/null || true
+        cp temp_backup/pubspec.yaml . 2>/dev/null || true
+        cp temp_backup/pubspec.lock . 2>/dev/null || true
+        rm -rf temp_backup
 
     - name: Update Android SDK Versions
       run: |
@@ -45,13 +51,10 @@ jobs:
             content = re.sub(r'minSdk\s*=.*|minSdkVersion\s*.*', 'minSdk = 21', content)
             with open(path, 'w') as f:
                 f.write(content)
-        else:
-            print('Warning: build.gradle not found at path:', path)
         "
 
-
     - name: Get Dependencies
-      run: flutter pub upgrade
+      run: flutter pub get
 
     - name: Build Release APK
       run: flutter build apk --release --no-tree-shake-icons
