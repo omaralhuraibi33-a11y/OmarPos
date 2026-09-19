@@ -12,6 +12,8 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
   final _footerController = TextEditingController();
   bool _showLogo = true;
   bool _showTaxNo = true;
+  bool _autoKitchen = false;
+  bool _autoCustomer = false;
   bool _isLoading = true;
 
   @override
@@ -25,13 +27,19 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
     final footer = await DBHelper.getSetting('invoice_footer', defaultValue: 'شكراً لزيارتكم! نأمل رؤيتكم مجدداً.');
     final logo = await DBHelper.getSetting('show_logo', defaultValue: 'true');
     final tax = await DBHelper.getSetting('show_tax_no', defaultValue: 'true');
+    final autoKitchen = await DBHelper.getSetting('auto_kitchen', defaultValue: 'false');
+    final autoCustomer = await DBHelper.getSetting('auto_customer', defaultValue: 'false');
 
-    setState(() {
-      _footerController.text = footer ?? '';
-      _showLogo = logo == 'true';
-      _showTaxNo = tax == 'true';
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _footerController.text = footer ?? '';
+        _showLogo = logo == 'true';
+        _showTaxNo = tax == 'true';
+        _autoKitchen = autoKitchen == 'true';
+        _autoCustomer = autoCustomer == 'true';
+        _isLoading = false;
+      });
+    }
   }
 
   /// حفظ الإعدادات في قاعدة البيانات
@@ -39,10 +47,15 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
     await DBHelper.saveSetting('invoice_footer', _footerController.text.trim());
     await DBHelper.saveSetting('show_logo', _showLogo.toString());
     await DBHelper.saveSetting('show_tax_no', _showTaxNo.toString());
+    await DBHelper.saveSetting('auto_kitchen', _autoKitchen.toString());
+    await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم حفظ إعدادات الفاتورة بنجاح')),
+      const SnackBar(
+        content: Text('تم حفظ إعدادات الفواتير والطباعة بنجاح'),
+        backgroundColor: Colors.green,
+      ),
     );
   }
 
@@ -55,12 +68,17 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('إعدادات الفواتير')),
+      appBar: AppBar(title: const Text('إعدادات الفواتير والطباعة')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                const Text(
+                  'إعدادات مظهر الفاتورة',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                ),
+                const Divider(),
                 SwitchListTile(
                   title: const Text('إظهار الشعار في الفاتورة المطبوعة'),
                   value: _showLogo,
@@ -80,11 +98,33 @@ class _InvoiceSettingsScreenState extends State<InvoiceSettingsScreen> {
                     border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
+                const Text(
+                  'إعدادات الطباعة التلقائية عند الحفظ',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                ),
+                const Divider(),
+                SwitchListTile(
+                  title: const Text('الطباعة التلقائية لمطبخ التحضير'),
+                  subtitle: const Text('إرسال نسخة للطابعة المخصصة للمطبخ تلقائياً عند حفظ الفاتورة'),
+                  value: _autoKitchen,
+                  onChanged: (val) => setState(() => _autoKitchen = val),
+                ),
+                SwitchListTile(
+                  title: const Text('الطباعة التلقائية لفاتورة العميل'),
+                  subtitle: const Text('إرسال نسخة للطابعة المخصصة للزبون تلقائياً عند حفظ الفاتورة'),
+                  value: _autoCustomer,
+                  onChanged: (val) => setState(() => _autoCustomer = val),
+                ),
+                const SizedBox(height: 24),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: _saveSettings,
-                  child: const Text('حفظ إعدادات الفاتورة'),
+                  child: const Text('حفظ جميع الإعدادات', style: TextStyle(fontSize: 16)),
                 ),
               ],
             ),
