@@ -39,7 +39,7 @@ class PrinterService {
     }
   }
 
-  // دالة إرسال البيانات الفعلية للطابعة الفردية
+  // دالة إرسال البيانات (تدعم الواي فاي والبلوتوث تلقائياً حسب إعدادات الطابعة)
   static Future<void> _sendToPrinter(
     Map<String, dynamic> printer,
     dynamic invoice,
@@ -48,7 +48,6 @@ class PrinterService {
   ) async {
     try {
       final paperSizeStr = printer['paperSize'] ?? '80';
-      // التعامل مع مقاسات الورق (57 مم أو 80 مم)
       final paperSize = (paperSizeStr == '57' || paperSizeStr == '58') ? PaperSize.mm58 : PaperSize.mm80;
 
       final profile = await CapabilityProfile.load();
@@ -56,7 +55,15 @@ class PrinterService {
 
       List<int> bytes = [];
 
-      // استخراج بيانات الفاتورة بمرونة
+      // سطر اختبار الاتصال
+      bytes += generator.reset();
+      bytes += generator.text(
+        'PRINT TEST OK',
+        styles: const PosStyles(align: PosAlign.center, bold: true),
+      );
+      bytes += generator.feed(1);
+
+      // استخراج بيانات الفاتورة
       String invoiceId = '';
       String invoiceDate = '';
       String customerName = '';
@@ -77,7 +84,6 @@ class PrinterService {
         paymentType = invoice.paymentType?.toString() ?? 'cash';
       }
 
-      // قراءة تذييل الفاتورة المحفوظ في الإعدادات (إن وجد)
       final footerText = await DBHelper.getSetting('invoice_footer', defaultValue: 'شكراً لزيارتكم! نأمل رؤيتكم مجدداً.');
 
       // --- تصميم الوصل ---
@@ -100,7 +106,7 @@ class PrinterService {
       ]);
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
 
-      // حلقة تفاصيل الأصناف
+      // تفاصيل الأصناف
       for (var item in items) {
         final name = item['name']?.toString() ?? '';
         final qty = item['qty']?.toString() ?? '1';
@@ -139,48 +145,49 @@ class PrinterService {
       bytes += generator.feed(2);
       bytes += generator.cut();
 
-      // --- إرسال البيانات حسب نوع الاتصال ---
-      final connectionType = printer['connection'];
-      if (connectionType == 'واي فاي') {
+      // --- التوجيه التلقائي حسب نوع الاتصال المخزن في إعدادات الطابعة ---
+      final connectionType = printer['connection'] ?? 'واي فاي';
+
+      if (connectionType == 'واي فاي' || connectionType == 'Network' || connectionType == 'LAN') {
         final ip = (printer['ip'] ?? '').trim();
         if (ip.isNotEmpty) {
+          debugPrint('جاري الطباعة عبر الواي فاي للطابعة ${printer['name']} على IP: $ip...');
           final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
           socket.add(bytes);
           await socket.flush();
           await socket.close();
-          debugPrint('تمت الطباعة عبر الواي فاي بنجاح للطابعة: ${printer['name']}');
+          debugPrint('تمت الطباعة عبر الواي فاي بنجاح.');
         } else {
-          debugPrint('عنوان الـ IP غير مسجل للطابعة الواي فاي: ${printer['name']}');
+          debugPrint('خطأ: عنوان الـ IP غير موجود للطابعة الواي فاي.');
         }
       } else {
-        // اتصال البلوتوث مع مهل زمنية تضمن إرسال البيانات بالكامل للطابعة الحرارية
+        // الاتصال عبر البلوتوث
         final mac = (printer['macAddress'] ?? '').trim();
         if (mac.isNotEmpty) {
-          // التأكد من قطع أي اتصال سابق قد يعيق العملية
           try {
             await PrintBluetoothThermal.disconnect;
           } catch (_) {}
 
+          debugPrint('جاري الاتصال بالطابعة عبر البلوتوث MAC: $mac...');
           bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
           if (connected) {
-            // إعطاء مهلة صغيرة جداً لتهيئة مستشعر الطابعة بعد الاتصال
             await Future.delayed(const Duration(milliseconds: 300));
-            
             bool sent = await PrintBluetoothThermal.writeBytes(bytes);
             if (sent) {
-              debugPrint('تمت الطباعة عبر البلوتوث بنجاح للطابعة: ${printer['name']}');
+              debugPrint('تمت الطباعة عبر البلوتوث بنجاح.');
             } else {
-              debugPrint('فشل في إرسال البايتس عبر البلوتوث للطابعة: ${printer['name']}');
+              debugPrint('فشل إرسال البيانات عبر البلوتوث.');
             }
-            
-            // مهلة قبل فصل الاتصال لضمان خروج الورق بالكامل من الهيد
             await Future.delayed(const Duration(milliseconds: 500));
             await PrintBluetoothThermal.disconnect;
           } else {
-            debugPrint('فشل الاتصال بطابعة البلوتوث ذات العنوان: $mac');
+            debugPrint('فشل الاتصال بجهاز البلوتوث ذو العنوان: $mac');
           }
+        } else {
+          debugPrint('خطأ: عنوان الـ MAC غير موجود للطابعة البلوتوث.');
         }
       }
+
     } catch (e) {
       debugPrint('خطأ أثناء إرسال الطباعة للطابعة ${printer['name']}: $e');
     }
