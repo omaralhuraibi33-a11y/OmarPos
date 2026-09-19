@@ -86,6 +86,7 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
+  /// [دالة الطباعة المُحدثة]: تفحص إعدادات التشغيل التلقائي (auto_customer و auto_kitchen) من قاعدة البيانات أولاً
   Future<void> _printReceipt({
     required String invoiceId,
     required String paymentMethod,
@@ -93,6 +94,8 @@ class _PosScreenState extends State<PosScreen> {
     String? customerName,
     double? customTotal,
   }) async {
+    if (!_isPrinterConnected) return;
+
     final activeCart = customCart ?? _cart;
     final activeTotal = customTotal ?? _totalAmount;
     final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
@@ -114,33 +117,34 @@ class _PosScreenState extends State<PosScreen> {
       'customerName': activeCustomer,
     };
 
-    // طباعة الزبون
     try {
-      await PrinterService.printInvoice(
-        invoice: invoiceData,
-        items: itemsList,
-        usageType: 'زبون',
-      );
-    } catch (e) {
-      debugPrint('خطأ في طباعة الزبون: $e');
-    }
+      // 1. فحص إعداد طباعة الزبون تلقائياً من جدول الإعدادات
+      final autoCustomer = await DBHelper.getSetting('auto_customer');
+      if (autoCustomer == 'true') {
+        await PrinterService.printInvoice(
+          invoice: invoiceData,
+          items: itemsList,
+          usageType: 'زبون',
+        );
+      }
 
-    // طباعة المطبخ
-    try {
-      await PrinterService.printInvoice(
-        invoice: invoiceData,
-        items: itemsList,
-        usageType: 'مطبخ',
-      );
+      // 2. فحص إعداد طباعة المطبخ تلقائياً من جدول الإعدادات
+      final autoKitchen = await DBHelper.getSetting('auto_kitchen');
+      if (autoKitchen == 'true') {
+        await PrinterService.printInvoice(
+          invoice: invoiceData,
+          items: itemsList,
+          usageType: 'مطبخ',
+        );
+      }
     } catch (e) {
-      debugPrint('خطأ في طباعة المطبخ: $e');
+      debugPrint('خطأ في إرسال أمر الطباعة التلقائية: $e');
     }
   }
 
   // دالة عرض الفواتير السابقة مع إمكانية طباعتها من جديد
   void _showInvoicesHistoryDialog() async {
-    // جلب آخر الفواتير من قاعدة البيانات
-    final invoices = await DBHelper.getAllInvoices(); // تأكد من توفر هذه الدالة في DBHelper أو استبدلها بالدالة المتاحة لديك
+    final invoices = await DBHelper.getAllInvoices();
 
     if (!mounted) return;
 
@@ -171,7 +175,6 @@ class _PosScreenState extends State<PosScreen> {
                               const SnackBar(content: Text('جاري إعادة طباعة الفاتورة...')),
                             );
                             
-                            // محاولة طباعة الفاتورة باستخدام بيانات رأس الفاتورة
                             await PrinterService.printInvoice(
                               invoice: {
                                 'id': inv.id,
@@ -181,7 +184,7 @@ class _PosScreenState extends State<PosScreen> {
                                 'date': inv.date,
                                 'customerName': inv.customerName,
                               },
-                              items: [], // أو جلب الأصناف التابعة لهذه الفاتورة إن وجد جدول تفاصيل
+                              items: [],
                               usageType: 'زبون',
                             );
                           },
@@ -465,7 +468,6 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Future<void> _processCheckout(String paymentMethod) async {
-    // نسخ مؤقت لعناصر السلة لضمان استمرار الطباعة حتى لو تفريغت السلة فوراً
     final cartSnapshot = List<CartItem>.from(_cart);
     final totalSnapshot = _totalAmount;
     final customerNameSnapshot = _selectedCustomer?.name ?? 'عميل نقدي';
@@ -489,7 +491,7 @@ class _PosScreenState extends State<PosScreen> {
       isClosed: false,
     );
 
-    // 1. **الطباعة أولاً لتكون فورية وسريعة جداً للمستخدم**
+    // 1. استدعاء الطباعة الفورية المرتبطة بفحص إعدادات (auto_customer و auto_kitchen)
     if (_isPrinterConnected) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -510,7 +512,7 @@ class _PosScreenState extends State<PosScreen> {
       );
     }
 
-    // 2. **الحفظ في قاعدة البيانات بعد بدء الطباعة**
+    // 2. الحفظ في قاعدة البيانات وتحديث المخزون
     await DBHelper.saveInvoice(invoice);
 
     for (var item in cartSnapshot) {
@@ -563,7 +565,6 @@ class _PosScreenState extends State<PosScreen> {
           ],
         ),
         actions: [
-          // زر استعراض السجل وطباعة الفواتير السابقة
           IconButton(
             tooltip: 'سجل الفواتير السابقة',
             icon: const Icon(Icons.receipt_long, color: Colors.amberAccent),
