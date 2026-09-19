@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'db_helper.dart';
-import 'services/printer_service.dart'; // تم إضافة استيراد ملف خدمة الطباعة
+import 'services/printer_service.dart';
 
 class CartItem {
   final Product product;
@@ -47,7 +47,6 @@ class _PosScreenState extends State<PosScreen> {
   List<CartItem> _cart = [];
   bool _isLoading = true;
 
-  // إعدادات أحجام العرض
   String _mainButtonSizeSetting = 'وسط';
   String _posItemSizeSetting = 'وسط';
 
@@ -66,7 +65,6 @@ class _PosScreenState extends State<PosScreen> {
     final dbPaymentMethods = await DBHelper.getPaymentMethods();
     final defaultCust = await DBHelper.getOrCreateDefaultCustomer();
 
-    // جلب إعدادات الأحجام المحفوظة
     final savedMainBtnSize = await DBHelper.getSetting('main_button_size');
     final savedPosItemSize = await DBHelper.getSetting('pos_item_size');
 
@@ -88,31 +86,35 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // دالة الطباعة الآمنة والمحدثة لتفادي أي أخطاء متتالية
   Future<void> _printReceipt({
     required String invoiceId,
     required String paymentMethod,
+    List<CartItem>? customCart,
+    String? customerName,
+    double? customTotal,
   }) async {
-    // 1. تحويل عناصر السلة إلى قائمة خريطة (Map)
-    final itemsList = _cart.map((item) => {
+    final activeCart = customCart ?? _cart;
+    final activeTotal = customTotal ?? _totalAmount;
+    final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
+
+    final itemsList = activeCart.map((item) => {
       'name': item.product.name,
       'qty': item.quantity,
       'price': item.unitPrice,
       'notes': item.preparationNotes,
     }).toList();
 
-    // 2. تجهيز بيانات الفاتورة كخريطة بيانات Map
     final invoiceData = {
       'id': invoiceId,
       'invoiceType': _isReturnMode ? 'return' : 'sale',
       'paymentType': (paymentMethod == 'آجل' || paymentMethod == 'أجل') ? 'credit' : 'cash',
-      'totalAmount': _totalAmount,
+      'totalAmount': activeTotal,
       'date': DateTime.now().toString().split('.')[0],
       'customerId': _selectedCustomer?.id,
-      'customerName': _selectedCustomer?.name ?? 'عميل نقدي',
+      'customerName': activeCustomer,
     };
 
-    // 3. طباعة فاتورة الزبون بمعزل عن المطبخ
+    // طباعة الزبون
     try {
       await PrinterService.printInvoice(
         invoice: invoiceData,
@@ -123,7 +125,7 @@ class _PosScreenState extends State<PosScreen> {
       debugPrint('خطأ في طباعة الزبون: $e');
     }
 
-    // 4. طباعة طلب المطبخ بمعزل (إذا لم تكن الطابعة موجودة لن تتعطل الطباعة الرئيسية)
+    // طباعة المطبخ
     try {
       await PrinterService.printInvoice(
         invoice: invoiceData,
@@ -131,69 +133,111 @@ class _PosScreenState extends State<PosScreen> {
         usageType: 'مطبخ',
       );
     } catch (e) {
-      debugPrint('خطأ في طباعة المطبخ (ربما لا توجد طابعة مطبخ معرفة): $e');
+      debugPrint('خطأ في طباعة المطبخ: $e');
     }
   }
 
-  // حساب أبعاد كروت أصناف الـ POS بحسب الإعداد المحفوظ
+  // دالة عرض الفواتير السابقة مع إمكانية طباعتها من جديد
+  void _showInvoicesHistoryDialog() async {
+    // جلب آخر الفواتير من قاعدة البيانات
+    final invoices = await DBHelper.getAllInvoices(); // تأكد من توفر هذه الدالة في DBHelper أو استبدلها بالدالة المتاحة لديك
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('سجل الفواتير السابقة والطباعة'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: invoices.isEmpty
+              ? const Center(child: Text('لا توجد فواتير مسجلة بعد'))
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: invoices.length,
+                  itemBuilder: (context, index) {
+                    final inv = invoices[index];
+                    return Card(
+                      child: ListTile(
+                        title: Text('فاتورة رقم: ${inv.id} - ${_formatNum(inv.totalAmount)}'),
+                        subtitle: Text('العميل: ${inv.customerName} \nالتاريخ: ${inv.date}'),
+                        isThreeLine: true,
+                        trailing: IconButton(
+                          icon: const Icon(Icons.print, color: Colors.blue),
+                          tooltip: 'إعادة طباعة الفاتورة',
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('جاري إعادة طباعة الفاتورة...')),
+                            );
+                            
+                            // محاولة طباعة الفاتورة باستخدام بيانات رأس الفاتورة
+                            await PrinterService.printInvoice(
+                              invoice: {
+                                'id': inv.id,
+                                'invoiceType': inv.invoiceType,
+                                'paymentType': inv.paymentType,
+                                'totalAmount': inv.totalAmount,
+                                'date': inv.date,
+                                'customerName': inv.customerName,
+                              },
+                              items: [], // أو جلب الأصناف التابعة لهذه الفاتورة إن وجد جدول تفاصيل
+                              usageType: 'زبون',
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
   int _getGridCrossAxisCount() {
     if (_isProductsFullScreen) {
       switch (_posItemSizeSetting) {
-        case 'صغير':
-          return 6;
-        case 'كبير':
-          return 4;
-        case 'وسط':
-        default:
-          return 5;
+        case 'صغير': return 6;
+        case 'كبير': return 4;
+        case 'وسط': default: return 5;
       }
     } else {
       switch (_posItemSizeSetting) {
-        case 'صغير':
-          return 4;
-        case 'كبير':
-          return 2;
-        case 'وسط':
-        default:
-          return 3;
+        case 'صغير': return 4;
+        case 'كبير': return 2;
+        case 'وسط': default: return 3;
       }
     }
   }
 
   double _getItemFontSize() {
     switch (_posItemSizeSetting) {
-      case 'صغير':
-        return 12.0;
-      case 'كبير':
-        return 16.0;
-      case 'وسط':
-      default:
-        return 14.0;
+      case 'صغير': return 12.0;
+      case 'كبير': return 16.0;
+      case 'وسط': default: return 14.0;
     }
   }
 
-  // حساب ارتفاع وبادنج أزرار أسفل الشاشة الرئيسية بحسب الإعداد المحفوظ
   double _getBottomButtonHeight() {
     switch (_mainButtonSizeSetting) {
-      case 'صغير':
-        return 40.0;
-      case 'كبير':
-        return 56.0;
-      case 'وسط':
-      default:
-        return 48.0;
+      case 'صغير': return 40.0;
+      case 'كبير': return 56.0;
+      case 'وسط': default: return 48.0;
     }
   }
 
   double _getBottomButtonFontSize() {
     switch (_mainButtonSizeSetting) {
-      case 'صغير':
-        return 13.0;
-      case 'كبير':
-        return 18.0;
-      case 'وسط':
-      default:
-        return 15.0;
+      case 'صغير': return 13.0;
+      case 'كبير': return 18.0;
+      case 'وسط': default: return 15.0;
     }
   }
 
@@ -405,7 +449,7 @@ class _PosScreenState extends State<PosScreen> {
                 ),
                 icon: const Icon(Icons.print, color: Colors.white),
                 label: Text(
-                  _isReturnMode ? 'حفظ وطباعة المرتجع' : 'حفظ وطباعة الفاتورة',
+                  _isReturnMode ? 'طباعة وحفظ المرتجع' : 'طباعة وحفظ الفاتورة',
                   style: const TextStyle(color: Colors.white),
                 ),
                 onPressed: () {
@@ -421,6 +465,11 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Future<void> _processCheckout(String paymentMethod) async {
+    // نسخ مؤقت لعناصر السلة لضمان استمرار الطباعة حتى لو تفريغت السلة فوراً
+    final cartSnapshot = List<CartItem>.from(_cart);
+    final totalSnapshot = _totalAmount;
+    final customerNameSnapshot = _selectedCustomer?.name ?? 'عميل نقدي';
+    
     final now = DateTime.now().toString().split('.')[0];
     final shiftId = await DBHelper.getCurrentShiftId();
     final customerId = _selectedCustomer?.id ?? 'cash_default';
@@ -432,19 +481,39 @@ class _PosScreenState extends State<PosScreen> {
       id: invoiceId,
       invoiceType: invoiceType,
       paymentType: isCredit ? 'credit' : 'cash',
-      totalAmount: _totalAmount,
+      totalAmount: totalSnapshot,
       date: now,
       customerId: customerId,
-      customerName: _selectedCustomer?.name ?? 'عميل نقدي',
+      customerName: customerNameSnapshot,
       shiftId: shiftId,
       isClosed: false,
     );
 
-    // 1. حفظ الفاتورة في الداتا بيز
+    // 1. **الطباعة أولاً لتكون فورية وسريعة جداً للمستخدم**
+    if (_isPrinterConnected) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('جاري الطباعة الفورية...'),
+            duration: Duration(milliseconds: 800),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+
+      await _printReceipt(
+        invoiceId: invoiceId,
+        paymentMethod: paymentMethod,
+        customCart: cartSnapshot,
+        customerName: customerNameSnapshot,
+        customTotal: totalSnapshot,
+      );
+    }
+
+    // 2. **الحفظ في قاعدة البيانات بعد بدء الطباعة**
     await DBHelper.saveInvoice(invoice);
 
-    // 2. تحديث المخزون
-    for (var item in _cart) {
+    for (var item in cartSnapshot) {
       double stockDelta = _isReturnMode ? item.quantity : -item.quantity;
       await DBHelper.updateProductStock(item.product.id, stockDelta);
     }
@@ -457,20 +526,6 @@ class _PosScreenState extends State<PosScreen> {
           backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green,
         ),
       );
-    }
-
-    // 3. إرسال أمر الطباعة فوراً إذا كانت الطابعة مفعلة
-    if (_isPrinterConnected) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('جاري إرسال الفاتورة للطابعة الحرارية...'),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      }
-
-      await _printReceipt(invoiceId: invoiceId, paymentMethod: paymentMethod);
     }
 
     await _loadData();
@@ -493,10 +548,7 @@ class _PosScreenState extends State<PosScreen> {
                 children: [
                   Text(
                     _isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 4),
                   Switch(
@@ -511,6 +563,12 @@ class _PosScreenState extends State<PosScreen> {
           ],
         ),
         actions: [
+          // زر استعراض السجل وطباعة الفواتير السابقة
+          IconButton(
+            tooltip: 'سجل الفواتير السابقة',
+            icon: const Icon(Icons.receipt_long, color: Colors.amberAccent),
+            onPressed: _showInvoicesHistoryDialog,
+          ),
           IconButton(
             tooltip: _isPrinterConnected ? 'الطابعة متصلة' : 'الطابعة مفصولة',
             icon: Icon(
@@ -522,17 +580,11 @@ class _PosScreenState extends State<PosScreen> {
             },
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
             child: TextButton.icon(
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
               icon: Icon(_isReturnMode ? Icons.shopping_cart : Icons.assignment_return, color: Colors.amber),
-              label: Text(
-                _isReturnMode ? 'وضع البيع' : 'مرتجع',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
+              label: Text(_isReturnMode ? 'وضع البيع' : 'مرتجع', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               onPressed: () {
                 setState(() {
                   _isReturnMode = !_isReturnMode;
@@ -640,15 +692,11 @@ class _PosScreenState extends State<PosScreen> {
                                           child: ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor,
-                                              elevation: isSelected ? 4 : 1,
                                             ),
                                             onPressed: () => _filterByCategory(cat.id),
                                             child: Text(
                                               cat.name,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                             ),
                                           ),
                                         );
@@ -904,9 +952,7 @@ class _PosScreenState extends State<PosScreen> {
             child: SizedBox(
               height: btnHeight,
               child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade700,
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade700),
                 onPressed: _clearInvoice,
                 icon: const Icon(Icons.delete_sweep, color: Colors.white),
                 label: Text(
