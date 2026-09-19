@@ -88,7 +88,7 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // دالة الطباعة المحدثة المتوافقة مع PrinterService المرن
+  // دالة الطباعة الآمنة والمحدثة لتفادي أي أخطاء متتالية
   Future<void> _printReceipt({
     required String invoiceId,
     required String paymentMethod,
@@ -101,7 +101,7 @@ class _PosScreenState extends State<PosScreen> {
       'notes': item.preparationNotes,
     }).toList();
 
-    // 2. تجهيز بيانات الفاتورة كخريطة بيانات Map بدلاً من الكائن الوهمي
+    // 2. تجهيز بيانات الفاتورة كخريطة بيانات Map
     final invoiceData = {
       'id': invoiceId,
       'invoiceType': _isReturnMode ? 'return' : 'sale',
@@ -112,18 +112,27 @@ class _PosScreenState extends State<PosScreen> {
       'customerName': _selectedCustomer?.name ?? 'عميل نقدي',
     };
 
-    // 3. إرسال أمر الطباعة للزبون وللمطبخ عبر PrinterService
-    await PrinterService.printInvoice(
-      invoice: invoiceData,
-      items: itemsList,
-      usageType: 'زبون',
-    );
+    // 3. طباعة فاتورة الزبون بمعزل عن المطبخ
+    try {
+      await PrinterService.printInvoice(
+        invoice: invoiceData,
+        items: itemsList,
+        usageType: 'زبون',
+      );
+    } catch (e) {
+      debugPrint('خطأ في طباعة الزبون: $e');
+    }
 
-    await PrinterService.printInvoice(
-      invoice: invoiceData,
-      items: itemsList,
-      usageType: 'مطبخ',
-    );
+    // 4. طباعة طلب المطبخ بمعزل (إذا لم تكن الطابعة موجودة لن تتعطل الطباعة الرئيسية)
+    try {
+      await PrinterService.printInvoice(
+        invoice: invoiceData,
+        items: itemsList,
+        usageType: 'مطبخ',
+      );
+    } catch (e) {
+      debugPrint('خطأ في طباعة المطبخ (ربما لا توجد طابعة مطبخ معرفة): $e');
+    }
   }
 
   // حساب أبعاد كروت أصناف الـ POS بحسب الإعداد المحفوظ
@@ -450,7 +459,7 @@ class _PosScreenState extends State<PosScreen> {
       );
     }
 
-    // 3. إرسال أمره الطباعة فوراً إذا كانت الطابعة مفعلة
+    // 3. إرسال أمر الطباعة فوراً إذا كانت الطابعة مفعلة
     if (_isPrinterConnected) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
