@@ -152,9 +152,15 @@ class PrinterService {
         final ip = (printer['ip'] ?? '').trim();
         if (ip.isNotEmpty) {
           debugPrint('جاري الطباعة عبر الواي فاي للطابعة ${printer['name']} على IP: $ip...');
-          final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
+          
+          // زيادة المهلة إلى 10 ثوانٍ لضمان استقرار الاتصال بالشبكة
+          final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 10));
           socket.add(bytes);
           await socket.flush();
+          
+          // مهلة انتظار كافية لكي تستوعب الطابعة كامل بيانات الفاتورة وتطبعها قبل إغلاق السوكيت
+          await Future.delayed(const Duration(milliseconds: 800));
+          
           await socket.close();
           debugPrint('تمت الطباعة عبر الواي فاي بنجاح.');
         } else {
