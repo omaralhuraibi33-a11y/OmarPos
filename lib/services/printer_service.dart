@@ -5,41 +5,16 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:omar_pos/db_helper.dart';
 
-// تعريف كلاس الفاتورة ليتوافق مع الاستدعاء في شاشة البيع
-class Invoice {
-  final String id;
-  final String invoiceType;
-  final String paymentType;
-  final double totalAmount;
-  final String date;
-  final String? customerId;
-  final String customerName;
-  final String? shiftId;
-  final bool isClosed;
-
-  Invoice({
-    required this.id,
-    required this.invoiceType,
-    required this.paymentType,
-    required this.totalAmount,
-    required this.date,
-    this.customerId,
-    required this.customerName,
-    this.shiftId,
-    this.isClosed = true,
-  });
-}
-
 class PrinterService {
   
   // دالة توليد محتوى الفاتورة وإرسالها للطابعات المطابقة للاستخدام (زبون أو مطبخ)
   static Future<void> printInvoice({
-    required Invoice invoice,
+    required dynamic invoice, // استخدام dynamic لمنع تضارب تعريف كلاس Invoice
     required List<Map<String, dynamic>> items,
     required String usageType, // 'زبون' أو 'مطبخ'
   }) async {
     try {
-      // 1. جلب الطابعات المفظلة من قاعدة البيانات
+      // 1. جلب الطابعات المفضلة من قاعدة البيانات
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
       if (savedPrintersJson == null || savedPrintersJson.isEmpty) {
         debugPrint('لا توجد طابعات مضافة في الإعدادات.');
@@ -49,7 +24,7 @@ class PrinterService {
       final List<dynamic> decoded = jsonDecode(savedPrintersJson);
       final List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
 
-      // تصفية الطابعات التي تطابق نوع الاستخدام المطلوبة (مثلاً طابعة "مطبخ" أو "زبون")
+      // تصفية الطابعات التي تطابق نوع الاستخدام المطلوب (طابعة "مطبخ" أو "زبون")
       final targetPrinters = printers.where((p) => p['usage'] == usageType).toList();
 
       if (targetPrinters.isEmpty) {
@@ -68,7 +43,7 @@ class PrinterService {
   // دالة إرسال البيانات الفعلية للطابعة الفردية
   static Future<void> _sendToPrinter(
     Map<String, dynamic> printer,
-    Invoice invoice,
+    dynamic invoice,
     List<Map<String, dynamic>> items,
     String usageType,
   ) async {
@@ -115,7 +90,7 @@ class PrinterService {
         ]);
 
         if (notes.isNotEmpty) {
-          bytes += generator.text('  (ملاحظة: $notes)', styles: const PosStyles(italic: true, align: PosAlign.right));
+          bytes += generator.text('  (ملاحظة: $notes)', styles: const PosStyles(align: PosAlign.right));
         }
       }
 
