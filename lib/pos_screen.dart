@@ -88,12 +88,12 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // دالة الطباعة المحدثة المعتمدة على PrinterService
+  // دالة الطباعة المحدثة المتوافقة مع PrinterService المرن
   Future<void> _printReceipt({
     required String invoiceId,
     required String paymentMethod,
   }) async {
-    // 1. تحويل عناصر السلة إلى قائمة مع الخصائص المحددة
+    // 1. تحويل عناصر السلة إلى قائمة خريطة (Map)
     final itemsList = _cart.map((item) => {
       'name': item.product.name,
       'qty': item.quantity,
@@ -101,18 +101,18 @@ class _PosScreenState extends State<PosScreen> {
       'notes': item.preparationNotes,
     }).toList();
 
-    // 2. إنشاء كائن وهمي للفاتورة ليقرأه PrinterService
-    final invoiceData = Invoice(
-      id: invoiceId,
-      invoiceType: _isReturnMode ? 'return' : 'sale',
-      paymentType: (paymentMethod == 'آجل' || paymentMethod == 'أجل') ? 'credit' : 'cash',
-      totalAmount: _totalAmount,
-      date: DateTime.now().toString().split('.')[0],
-      customerId: _selectedCustomer?.id,
-      customerName: _selectedCustomer?.name ?? 'عميل نقدي',
-    );
+    // 2. تجهيز بيانات الفاتورة كخريطة بيانات Map بدلاً من الكائن الوهمي
+    final invoiceData = {
+      'id': invoiceId,
+      'invoiceType': _isReturnMode ? 'return' : 'sale',
+      'paymentType': (paymentMethod == 'آجل' || paymentMethod == 'أجل') ? 'credit' : 'cash',
+      'totalAmount': _totalAmount,
+      'date': DateTime.now().toString().split('.')[0],
+      'customerId': _selectedCustomer?.id,
+      'customerName': _selectedCustomer?.name ?? 'عميل نقدي',
+    };
 
-    // 3. إرسال أمره الطباعة للزبون وللمطبخ عبر PrinterService
+    // 3. إرسال أمر الطباعة للزبون وللمطبخ عبر PrinterService
     await PrinterService.printInvoice(
       invoice: invoiceData,
       items: itemsList,
@@ -454,8 +454,8 @@ class _PosScreenState extends State<PosScreen> {
     if (_isPrinterConnected) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('جاري إرسال $actionName للطابعة الحرارية...'),
+          const SnackBar(
+            content: Text('جاري إرسال الفاتورة للطابعة الحرارية...'),
             backgroundColor: Colors.blue,
           ),
         );
