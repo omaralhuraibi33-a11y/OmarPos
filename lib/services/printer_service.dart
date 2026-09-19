@@ -9,7 +9,7 @@ class PrinterService {
   
   // دالة توليد محتوى الفاتورة وإرسالها للطابعات المطابقة للاستخدام (زبون أو مطبخ)
   static Future<void> printInvoice({
-    required dynamic invoice, // استخدام dynamic لمنع تضارب تعريف كلاس Invoice
+    required dynamic invoice, // يمكن أن تكون Map أو كائن عادي
     required List<Map<String, dynamic>> items,
     required String usageType, // 'زبون' أو 'مطبخ'
   }) async {
@@ -56,6 +56,28 @@ class PrinterService {
 
       List<int> bytes = [];
 
+      // استخراج البيانات بمرونة سواء كانت Map أو Object لمنع أي أخطاء
+      String invoiceId = '';
+      String invoiceDate = '';
+      String customerName = '';
+      double totalAmount = 0.0;
+      String paymentType = '';
+
+      if (invoice is Map) {
+        invoiceId = invoice['id']?.toString() ?? '';
+        invoiceDate = invoice['date']?.toString() ?? '';
+        customerName = invoice['customerName']?.toString() ?? 'عميل نقدي';
+        totalAmount = double.tryParse(invoice['totalAmount']?.toString() ?? '0') ?? 0.0;
+        paymentType = invoice['paymentType']?.toString() ?? 'cash';
+      } else {
+        // في حال تم تمرير كائن Invoice تقليدي
+        invoiceId = invoice.id?.toString() ?? '';
+        invoiceDate = invoice.date?.toString() ?? '';
+        customerName = invoice.customerName?.toString() ?? 'عميل نقدي';
+        totalAmount = double.tryParse(invoice.totalAmount?.toString() ?? '0') ?? 0.0;
+        paymentType = invoice.paymentType?.toString() ?? 'cash';
+      }
+
       // تصميم رأس الوصل (يختلف حسب إذا كان للزبون أو للمطبخ)
       bytes += generator.text(
         usageType == 'مطبخ' ? '*** طلب مطبخ تحضير ***' : 'OMAR POS',
@@ -63,9 +85,9 @@ class PrinterService {
       );
       
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text('رقم الفاتورة: ${invoice.id}', styles: const PosStyles(align: PosAlign.right));
-      bytes += generator.text('التاريخ: ${invoice.date}', styles: const PosStyles(align: PosAlign.right));
-      bytes += generator.text('العميل: ${invoice.customerName}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('التاريخ: $invoiceDate', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('العميل: $customerName', styles: const PosStyles(align: PosAlign.right));
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
 
       // جدول الأصناف
@@ -98,10 +120,10 @@ class PrinterService {
 
       if (usageType == 'زبون') {
         bytes += generator.text(
-          'المبلغ الإجمالي: ${invoice.totalAmount.toStringAsFixed(2)}',
+          'المبلغ الإجمالي: ${totalAmount.toStringAsFixed(2)}',
           styles: const PosStyles(align: PosAlign.right, bold: true, height: PosTextSize.size1),
         );
-        bytes += generator.text('طريقة الدفع: ${invoice.paymentType}', styles: const PosStyles(align: PosAlign.right));
+        bytes += generator.text('طريقة الدفع: $paymentType', styles: const PosStyles(align: PosAlign.right));
         bytes += generator.text('شكراً لزيارتكم!', styles: const PosStyles(align: PosAlign.center, bold: true));
       } else {
         bytes += generator.text('يرجى التجهيز بسرعة!', styles: const PosStyles(align: PosAlign.center, bold: true));
@@ -115,11 +137,14 @@ class PrinterService {
       if (connectionType == 'واي فاي') {
         final ip = (printer['ip'] ?? '').trim();
         if (ip.isNotEmpty) {
+          // اتصال عبر مأخذ الشبكة Socket للطابعة على المنفذ القياسي 9100
           final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
           socket.add(bytes);
           await socket.flush();
           await socket.close();
           debugPrint('تمت الطباعة عبر الواي فاي بنجاح للطابعة: ${printer['name']}');
+        } else {
+          debugPrint('عنوان الـ IP غير مسجل للطابعة الواي فاي: ${printer['name']}');
         }
       } else {
         // بلوتوث
