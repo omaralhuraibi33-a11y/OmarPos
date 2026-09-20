@@ -54,7 +54,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
   }
 
-  // دالة تجربة الطباعة المباشرة
+  // دالة تجربة الطباعة المباشرة (معدلة لتتفادي أخطاء الحروف العربية في مقطع الاختبار)
   Future<void> _testPrint(Map<String, dynamic> printer) async {
     setState(() => _isTesting = true);
 
@@ -67,7 +67,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       bytes += generator.text('OMAR POS TEST',
           styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text('طريقة الطباعة: ${printer['printMode'] ?? 'نص'}', styles: const PosStyles(align: PosAlign.center));
+      
+      // استخدام نص إنجليزي لتجنب مشاكل الترميز والحروف العربية في التجربة
+      final modeText = printer['printMode'] == 'صورة' ? 'Mode: Image' : 'Mode: Text';
+      bytes += generator.text(modeText, styles: const PosStyles(align: PosAlign.center));
+      
       bytes += generator.text('SUCCESSFUL PRINT TEST!', styles: const PosStyles(align: PosAlign.center, bold: true));
       bytes += generator.feed(2);
       bytes += generator.cut();
@@ -250,7 +254,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     'connection': connection,
                     'usage': usage,
                     'paperSize': paperSize,
-                    'printMode': printMode, // حفظ طريقة الطباعة (نص / صورة)
+                    'printMode': printMode,
                     'btDevice': selectedBtDevice,
                     'macAddress': macCtrl.text.trim(),
                     'ip': ipCtrl.text.trim(),
