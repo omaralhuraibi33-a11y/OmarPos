@@ -54,7 +54,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
   }
 
-  // دالة تجربة الطباعة المباشرة (معدلة لتتفادي أخطاء الحروف العربية في مقطع الاختبار)
+  // دالة تجربة الطباعة المباشرة (مع تثبيت المنفذ 9100 وتجنب أخطاء الحروف العربية)
   Future<void> _testPrint(Map<String, dynamic> printer) async {
     setState(() => _isTesting = true);
 
@@ -80,6 +80,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
         final String ip = (printer['ip'] ?? '').trim();
         if (ip.isEmpty) throw 'عنوان الـ IP غير مدخل!';
 
+        // تثبيت المنفذ بشكل إجباري على 9100 حصراً لتجنب أي منافذ خاطئة
         final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
         socket.add(bytes);
         await socket.flush();
