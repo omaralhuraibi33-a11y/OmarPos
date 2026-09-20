@@ -54,7 +54,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
   }
 
-  // دالة تجربة الطباعة المباشرة (مع تثبيت المنفذ 9100 وتجنب أخطاء الحروف العربية)
+  // دالة تجربة الطباعة المباشرة مع قراءة الـ IP والـ Port المدخل بدقة مطلقة
   Future<void> _testPrint(Map<String, dynamic> printer) async {
     setState(() => _isTesting = true);
 
@@ -68,7 +68,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
       
-      // استخدام نص إنجليزي لتجنب مشاكل الترميز والحروف العربية في التجربة
       final modeText = printer['printMode'] == 'صورة' ? 'Mode: Image' : 'Mode: Text';
       bytes += generator.text(modeText, styles: const PosStyles(align: PosAlign.center));
       
@@ -80,8 +79,10 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
         final String ip = (printer['ip'] ?? '').trim();
         if (ip.isEmpty) throw 'عنوان الـ IP غير مدخل!';
 
-        // تثبيت المنفذ بشكل إجباري على 9100 حصراً لتجنب أي منافذ خاطئة
-        final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
+        // قراءة الـ Port المدخل أو جعله 9100 كقيمة افتراضية صارمة
+        final int port = int.tryParse(printer['port']?.toString() ?? '') ?? 9100;
+
+        final socket = await Socket.connect(ip, port, timeout: const Duration(seconds: 5));
         socket.add(bytes);
         await socket.flush();
         await socket.close();
@@ -122,12 +123,13 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   void _showPrinterDialog({Map<String, dynamic>? printerToEdit, int? editIndex}) {
     final nameCtrl = TextEditingController(text: printerToEdit?['name'] ?? '');
     final ipCtrl = TextEditingController(text: printerToEdit?['ip'] ?? '');
+    final portCtrl = TextEditingController(text: printerToEdit?['port']?.toString() ?? '9100');
     final macCtrl = TextEditingController(text: printerToEdit?['macAddress'] ?? '');
 
     String connection = printerToEdit?['connection'] ?? 'بلوتوث';
     String usage = printerToEdit?['usage'] ?? 'زبون';
     String paperSize = printerToEdit?['paperSize'] ?? '80';
-    String printMode = printerToEdit?['printMode'] ?? 'نص'; // خيار نص أو صورة
+    String printMode = printerToEdit?['printMode'] ?? 'نص';
     String selectedBtDevice = printerToEdit?['btDevice'] ?? '';
 
     showDialog(
@@ -228,7 +230,13 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     TextField(
                       controller: ipCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'عنوان IP للطابعة (مثال: 192.168.1.100)', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(labelText: 'عنوان IP للطابعة (مثال: 192.168.1.145)', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: portCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'منفذ الطابعة (Port) - افتراضي 9100', border: OutlineInputBorder()),
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -259,6 +267,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     'btDevice': selectedBtDevice,
                     'macAddress': macCtrl.text.trim(),
                     'ip': ipCtrl.text.trim(),
+                    'port': portCtrl.text.trim().isEmpty ? '9100' : portCtrl.text.trim(),
                   };
                   setState(() {
                     if (editIndex == null) {
@@ -363,7 +372,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         ),
                         title: Text('${p['name']} (${p['usage']})', style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                          'الاتصال: ${p['connection']} | الوضع: ${p['printMode']} | المقاس: ${p['paperSize']}mm',
+                          'الاتصال: ${p['connection']} | IP: ${p['ip']}:${p['port'] ?? '9100'}',
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
