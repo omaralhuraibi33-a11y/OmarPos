@@ -1,14 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:omar_pos/db_helper.dart';
 
 class PrinterService {
   
-  // دالة توليد محتوى الفاتورة وإرسالها للطابعات المطابقة للاستخدام (زبون أو مطبخ)
+  // دالة توليد محتوى الفاتورة وإرسالها للطابعات مع إظهار نافذة منبثقة بالنتيجة
   static Future<void> printInvoice({
+    required BuildContext context,
     required dynamic invoice, 
     required List<Map<String, dynamic>> items,
     required String usageType, // 'زبون' أو 'مطبخ'
@@ -16,7 +17,7 @@ class PrinterService {
     try {
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
       if (savedPrintersJson == null || savedPrintersJson.isEmpty) {
-        debugPrint('خطأ طباعة: لا توجد طابعات مضافة في الإعدادات.');
+        _showAlertDialog(context, 'تنبيه طباعة', 'لا توجد طابعات مضافة في الإعدادات.');
         return;
       }
 
@@ -27,19 +28,20 @@ class PrinterService {
       final targetPrinters = printers.where((p) => p['usage'] == usageType).toList();
 
       if (targetPrinters.isEmpty) {
-        debugPrint('خطأ طباعة: لا توجد طابعة مُعرّفة لنوع الاستخدام: $usageType');
+        _showAlertDialog(context, 'تنبيه طباعة', 'لا توجد طابعة مُعرّفة لنوع الاستخدام: "$usageType" في الإعدادات.');
         return;
       }
 
       for (var printer in targetPrinters) {
-        await _sendToPrinter(printer, invoice, items, usageType);
+        await _sendToPrinter(context, printer, invoice, items, usageType);
       }
     } catch (e) {
-      debugPrint('خطأ عام في PrinterService.printInvoice: $e');
+      _showAlertDialog(context, 'خطأ عام في الطباعة', '$e');
     }
   }
 
   static Future<void> _sendToPrinter(
+    BuildContext context,
     Map<String, dynamic> printer,
     dynamic invoice,
     List<Map<String, dynamic>> items,
@@ -143,43 +145,70 @@ class PrinterService {
       bytes += generator.feed(2);
       bytes += generator.cut();
 
-      // --- التوجيه والاتصال مع التقاط أسباب الفشل بالتفصيل ---
+      // --- إرسال البيانات والتقاط الخطأ لعرضه كـ نافذة منبثقة ---
       final ip = (printer['ip'] ?? '').trim();
       final mac = (printer['macAddress'] ?? '').trim();
 
       if (ip.isNotEmpty && ip != '0.0.0.0' && ip != 'null') {
         try {
-          debugPrint('محاولة الاتصال بالطابعة ($printerName) عبر الـ IP: $ip (منفذ 9100)...');
+          debugPrint('محاولة الاتصال بالطابعة ($printerName) عبر الـ IP: $ip...');
           final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
           socket.add(bytes);
           await socket.flush();
           await Future.delayed(const Duration(milliseconds: 500));
           await socket.close();
-          debugPrint('نجاح: تمت الطباعة عبر الشبكة للطابعة ($printerName).');
+          
+          // إذا تمت الطباعة بنجاح
+          _showAlertDialog(context, 'نجاح الطباعة', 'تم إرسال الفاتورة إلى الطابعة ($printerName) بنجاح عبر الشبكة.');
         } catch (socketErr) {
-          debugPrint('❌ فشل الاتصال الشبكي للطابعة ($printerName) على الـ IP ($ip): $socketErr');
+          // إذا فشل الاتصال بالشبكة، نعرض رسالة الخطأ للمستخدم
+          _showAlertDialog(
+            context, 
+            'فشل الاتصال بالطابعة ($printerName)', 
+                  'تعذر الاتصال بعنوان الـ IP ($ip).\n\nالسبب التفصيلي:\n$socketErr\n\nتأكد أن الطابعة متصلة بنفس شبكة الواي فاي وأن الـ IP صحيح.'
+          );
         }
       } else if (mac.isNotEmpty) {
         try {
           await PrintBluetoothThermal.disconnect;
         } catch (_) {}
 
-        debugPrint('محاولة الاتصال بالطابعة ($printerName) عبر البلوتوث MAC: $mac...');
         bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
         if (connected) {
           await Future.delayed(const Duration(milliseconds: 300));
           await PrintBluetoothThermal.writeBytes(bytes);
           await Future.delayed(const Duration(milliseconds: 500));
           await PrintBluetoothThermal.disconnect;
-          debugPrint('نجاح: تمت الطباعة عبر البلوتوث للطابعة ($printerName).');
+          
+          _showAlertDialog(context, 'نجاح الطباعة', 'تمت الطباعة عبر البلوتوث للطابعة ($printerName) بنجاح.');
         } else {
-          debugPrint('❌ فشل: لم يتمكن النظام من ربط البلوتوث مع العنوان ($mac).');
+          _showAlertDialog(context, 'فشل البلوتوث', 'لم يتمكن التطبيق من الاتصال بالطابعة عبر عنوان الـ MAC: $mac');
         }
       } else {
-        debugPrint('❌ خطأ إعدادات: الطابعة ($printerName) لا تحتوي على عنوان IP أو MAC صالح.');
+        _showAlertDialog(context, 'خطأ في إعدادات الطابعة', 'الطابعة ($printerName) لا تحتوي على عنوان IP أو MAC صالح.');
       }
     } catch (e) {
-      debugPrint('❌ خطأ غير متوقع أثناء معالجة البيانات للطابعة ($printerName): $e');
+      _showAlertDialog(context, 'خطأ في معالجة الطباعة', 'حدث خطأ أثناء إعداد بيانات الطابعة ($printerName):\n$e');
     }
+  }
+
+  // دالة مساعدة لإظهار النافذة المنبثقة
+  static void _showAlertDialog(BuildContext context, String title, String message) {
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('حسناً'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
