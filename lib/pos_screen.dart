@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'db_helper.dart';
-import 'services/printer_service.dart';
 
 class CartItem {
   final Product product;
@@ -86,8 +87,8 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  /// [دالة الطباعة المُحدثة]: تفحص إعدادات التشغيل التلقائي (auto_customer و auto_kitchen) من قاعدة البيانات أولاً
-  Future<void> _printReceipt({
+  /// [دالة الطباعة المباشرة والمحدثة]: تقرأ الطابعات من قاعدة البيانات وتطبع دايركت دون ملفات خارجية
+  Future<void> _printReceiptDirect({
     required String invoiceId,
     required String paymentMethod,
     List<CartItem>? customCart,
@@ -96,56 +97,82 @@ class _PosScreenState extends State<PosScreen> {
   }) async {
     if (!_isPrinterConnected) return;
 
-    final activeCart = customCart ?? _cart;
-    final activeTotal = customTotal ?? _totalAmount;
-    final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
-
-    final itemsList = activeCart.map((item) => {
-      'name': item.product.name,
-      'qty': item.quantity,
-      'price': item.unitPrice,
-      'notes': item.preparationNotes,
-    }).toList();
-
-    final invoiceData = {
-      'id': invoiceId,
-      'invoiceType': _isReturnMode ? 'return' : 'sale',
-      'paymentType': (paymentMethod == 'آجل' || paymentMethod == 'أجل') ? 'credit' : 'cash',
-      'totalAmount': activeTotal,
-      'date': DateTime.now().toString().split('.')[0],
-      'customerId': _selectedCustomer?.id,
-      'customerName': activeCustomer,
-    };
-
     try {
-      // 1. فحص إعداد طباعة الزبون تلقائياً من جدول الإعدادات
-      final autoCustomer = await DBHelper.getSetting('auto_customer');
-      if (autoCustomer == 'true') {
-        await PrinterService.printInvoice(
-          invoice: invoiceData,
-          items: itemsList,
-          usageType: 'زبون',
-        );
-      }
+      // 1. جلب قائمة الطابعات المخزنة في قاعدة البيانات
+      final savedPrintersJson = await DBHelper.getSetting('printers_list');
+      if (savedPrintersJson == null || savedPrintersJson.isEmpty) return; // لا توجد طابعات، نتخطى بصمت تام
 
-      // 2. فحص إعداد طباعة المطبخ تلقائياً من جدول الإعدادات
-      final autoKitchen = await DBHelper.getSetting('auto_kitchen');
-      if (autoKitchen == 'true') {
-        await PrinterService.printInvoice(
-          invoice: invoiceData,
-          items: itemsList,
-          usageType: 'مطبخ',
-        );
+      final List<dynamic> decoded = jsonDecode(savedPrintersJson);
+      List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      if (printers.isEmpty) return;
+
+      // 2. التحقق من الإعدادات التلقائية
+      final autoCustomer = await DBHelper.getSetting('auto_customer') == 'true';
+      final autoKitchen = await DBHelper.getSetting('auto_kitchen') == 'true';
+
+      final activeCart = customCart ?? _cart;
+      final activeTotal = customTotal ?? _totalAmount;
+      final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
+
+      // تجهيز مصفوفة بايتات الطباعة بنظام ESC/POS
+      final profile = await CapabilityProfile.load();
+
+      for (var printer in printers) {
+        final usage = printer['usage'] ?? 'زبون'; // زبون أو مطبخ
+
+        // إذا كان نوع الطابعة زبون ولم تكن مفعلة تلقائياً، أو مطبخ ولم تكن مفعلة، نتخطاها
+        if (usage == 'زبون' && !autoCustomer) continue;
+        if (usage == 'مطبخ' && !autoKitchen) continue;
+
+        final paperSizeVal = printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80;
+        final generator = Generator(paperSizeVal, profile);
+
+        List<int> bytes = [];
+        bytes += generator.text('OMAR POS', styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
+        bytes += generator.text('فاتورة مبيعات: $invoiceId', styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text('العميل: $activeCustomer', styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+
+        for (var item in activeCart) {
+          bytes += generator.text('${item.product.name} (${item.quantity} x ${item.unitPrice})');
+          if (item.preparationNotes.isNotEmpty) {
+            bytes += generator.text('  ملاحظات: ${item.preparationNotes}', styles: const PosStyles(fontType: PosFontType.fontB));
+          }
+        }
+
+        bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+        bytes += generator.text('الإجمالي: ${_formatNum(activeTotal)}', styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
+        bytes += generator.feed(2);
+        bytes += generator.cut();
+
+        // إرسال الأمر حسب نوع الاتصال (واي فاي أو بلوتوث)
+        if (printer['connection'] == 'واي فاي') {
+          final String ip = (printer['ip'] ?? '').trim();
+          if (ip.isNotEmpty) {
+            final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 3));
+            socket.add(bytes);
+            await socket.flush();
+            await socket.close();
+          }
+        } else if (printer['connection'] == 'بلوتوث') {
+          final String mac = (printer['macAddress'] ?? '').trim();
+          if (mac.isNotEmpty) {
+            bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+            if (connected) {
+              await PrintBluetoothThermal.writeBytes(bytes);
+              await PrintBluetoothThermal.disconnect;
+            }
+          }
+        }
       }
     } catch (e) {
-      debugPrint('خطأ في إرسال أمر الطباعة التلقائية: $e');
+      debugPrint('خطأ في الطباعة المباشرة: $e');
     }
   }
 
-  // دالة عرض الفواتير السابقة مع إمكانية طباعتها من جديد
+  // دالة عرض الفواتير السابقة
   void _showInvoicesHistoryDialog() async {
     final invoices = await DBHelper.getAllInvoices();
-
     if (!mounted) return;
 
     showDialog(
@@ -171,21 +198,12 @@ class _PosScreenState extends State<PosScreen> {
                           tooltip: 'إعادة طباعة الفاتورة',
                           onPressed: () async {
                             Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('جاري إعادة طباعة الفاتورة...')),
-                            );
-                            
-                            await PrinterService.printInvoice(
-                              invoice: {
-                                'id': inv.id,
-                                'invoiceType': inv.invoiceType,
-                                'paymentType': inv.paymentType,
-                                'totalAmount': inv.totalAmount,
-                                'date': inv.date,
-                                'customerName': inv.customerName,
-                              },
-                              items: [],
-                              usageType: 'زبون',
+                            await _printReceiptDirect(
+                              invoiceId: inv.id,
+                              paymentMethod: inv.paymentType,
+                              customCart: [],
+                              customerName: inv.customerName,
+                              customTotal: inv.totalAmount,
                             );
                           },
                         ),
@@ -195,10 +213,7 @@ class _PosScreenState extends State<PosScreen> {
                 ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إغلاق'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
         ],
       ),
     );
@@ -315,9 +330,7 @@ class _PosScreenState extends State<PosScreen> {
                 title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(isCash ? 'عميل نقدي افتراضي' : 'هاتف: ${c.phone} | الرصيد: ${_formatNum(c.balance)}'),
                 onTap: () {
-                  setState(() {
-                    _selectedCustomer = c;
-                  });
+                  setState(() => _selectedCustomer = c);
                   Navigator.pop(ctx);
                 },
               );
@@ -365,10 +378,7 @@ class _PosScreenState extends State<PosScreen> {
                   const Divider(),
                   TextField(
                     controller: customNoteCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'إضافة ملاحظة جديدة',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(labelText: 'إضافة ملاحظة جديدة', border: OutlineInputBorder()),
                   ),
                 ],
               ),
@@ -414,21 +424,14 @@ class _PosScreenState extends State<PosScreen> {
               children: [
                 Text(
                   'المبلغ الإجمالي: ${_formatNum(_totalAmount)}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    color: _isReturnMode ? Colors.orange.shade800 : Colors.green,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: _isReturnMode ? Colors.orange.shade800 : Colors.green),
                 ),
                 const SizedBox(height: 12),
                 Text('العميل الحالي: ${_selectedCustomer?.name ?? "عميل نقدي"}'),
                 if (_isCashCustomer)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 6.0),
-                    child: Text(
-                      'تنبيه: العميل النقدي لا يقبل سوى الدفع النقدي.',
-                      style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
+                    child: Text('تنبيه: العميل النقدي لا يقبل سوى الدفع النقدي.', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
@@ -442,19 +445,11 @@ class _PosScreenState extends State<PosScreen> {
               ],
             ),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('إلغاء'),
-              ),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green,
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green),
                 icon: const Icon(Icons.print, color: Colors.white),
-                label: Text(
-                  _isReturnMode ? 'طباعة وحفظ المرتجع' : 'طباعة وحفظ الفاتورة',
-                  style: const TextStyle(color: Colors.white),
-                ),
+                label: Text(_isReturnMode ? 'طباعة وحفظ المرتجع' : 'طباعة وحفظ الفاتورة', style: const TextStyle(color: Colors.white)),
                 onPressed: () {
                   Navigator.pop(ctx);
                   _processCheckout(selectedMethod);
@@ -491,19 +486,9 @@ class _PosScreenState extends State<PosScreen> {
       isClosed: false,
     );
 
-    // 1. استدعاء الطباعة الفورية المرتبطة بفحص إعدادات (auto_customer و auto_kitchen)
+    // 1. تنفيذ الطباعة المباشرة إذا كانت الطابعة متصلة
     if (_isPrinterConnected) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('جاري الطباعة الفورية...'),
-            duration: Duration(milliseconds: 800),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      }
-
-      await _printReceipt(
+      await _printReceiptDirect(
         invoiceId: invoiceId,
         paymentMethod: paymentMethod,
         customCart: cartSnapshot,
@@ -512,7 +497,7 @@ class _PosScreenState extends State<PosScreen> {
       );
     }
 
-    // 2. الحفظ في قاعدة البيانات وتحديث المخزون
+    // 2. الحفظ في قاعدة البيانات وتحديث المخزون فوراً
     await DBHelper.saveInvoice(invoice);
 
     for (var item in cartSnapshot) {
@@ -548,16 +533,9 @@ class _PosScreenState extends State<PosScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    _isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
+                  Text(_isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 4),
-                  Switch(
-                    value: _isTouchMode,
-                    onChanged: (val) => setState(() => _isTouchMode = val),
-                    activeColor: Colors.amber,
-                  ),
+                  Switch(value: _isTouchMode, onChanged: (val) => setState(() => _isTouchMode = val), activeColor: Colors.amber),
                 ],
               )
             else
@@ -572,13 +550,8 @@ class _PosScreenState extends State<PosScreen> {
           ),
           IconButton(
             tooltip: _isPrinterConnected ? 'الطابعة متصلة' : 'الطابعة مفصولة',
-            icon: Icon(
-              Icons.print,
-              color: _isPrinterConnected ? Colors.greenAccent : Colors.redAccent,
-            ),
-            onPressed: () {
-              setState(() => _isPrinterConnected = !_isPrinterConnected);
-            },
+            icon: Icon(Icons.print, color: _isPrinterConnected ? Colors.greenAccent : Colors.redAccent),
+            onPressed: () => setState(() => _isPrinterConnected = !_isPrinterConnected),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -605,15 +578,9 @@ class _PosScreenState extends State<PosScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: Row(
                     children: [
-                      Icon(
-                        _isReturnMode ? Icons.assignment_return : Icons.account_circle,
-                        color: _isReturnMode ? Colors.orange.shade800 : Colors.blue,
-                      ),
+                      Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
                       const SizedBox(width: 8),
-                      Text(
-                        'العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
+                      Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                       const Spacer(),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
@@ -649,15 +616,8 @@ class _PosScreenState extends State<PosScreen> {
                                       ),
                                     ),
                                     IconButton(
-                                      icon: Icon(
-                                        _isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                                        color: Colors.indigo,
-                                      ),
-                                      onPressed: () {
-                                        setState(() {
-                                          _isProductsFullScreen = !_isProductsFullScreen;
-                                        });
-                                      },
+                                      icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.indigo),
+                                      onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
                                     ),
                                   ],
                                 ),
@@ -691,14 +651,9 @@ class _PosScreenState extends State<PosScreen> {
                                         return Padding(
                                           padding: const EdgeInsets.only(right: 4.0),
                                           child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor,
-                                            ),
+                                            style: ElevatedButton.styleFrom(backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor),
                                             onPressed: () => _filterByCategory(cat.id),
-                                            child: Text(
-                                              cat.name,
-                                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                            ),
+                                            child: Text(cat.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                           ),
                                         );
                                       }),
@@ -713,27 +668,19 @@ class _PosScreenState extends State<PosScreen> {
                         ),
                       if (!_isProductsFullScreen)
                         InkWell(
-                          onTap: () {
-                            setState(() => _isInvoiceExpanded = !_isInvoiceExpanded);
-                          },
+                          onTap: () => setState(() => _isInvoiceExpanded = !_isInvoiceExpanded),
                           child: Container(
                             width: 24,
                             color: Colors.grey.shade300,
                             child: Center(
-                              child: Icon(
-                                _isInvoiceExpanded ? Icons.arrow_forward_ios : Icons.arrow_back_ios,
-                                size: 16,
-                              ),
+                              child: Icon(_isInvoiceExpanded ? Icons.arrow_forward_ios : Icons.arrow_back_ios, size: 16),
                             ),
                           ),
                         ),
                       if (!_isProductsFullScreen)
                         Expanded(
                           flex: _isInvoiceExpanded ? 1 : 2,
-                          child: Container(
-                            color: Colors.grey.shade100,
-                            child: _buildInvoicePanel(),
-                          ),
+                          child: Container(color: Colors.grey.shade100, child: _buildInvoicePanel()),
                         ),
                     ],
                   ),
@@ -774,27 +721,13 @@ class _PosScreenState extends State<PosScreen> {
                     prod.name,
                     textAlign: TextAlign.center,
                     maxLines: 2,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: itemFontSize,
-                      color: Colors.white,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: itemFontSize, color: Colors.white),
                   ),
                   const SizedBox(height: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black26,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _formatNum(prod.sellPrice),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: itemFontSize - 1,
-                      ),
-                    ),
+                    decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4)),
+                    child: Text(_formatNum(prod.sellPrice), style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: itemFontSize - 1)),
                   ),
                 ],
               ),
@@ -814,10 +747,7 @@ class _PosScreenState extends State<PosScreen> {
           title: Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text('السعر: ${_formatNum(prod.sellPrice)} | الكمية: ${_formatNum(prod.quantity)}'),
           trailing: IconButton(
-            icon: Icon(
-              _isReturnMode ? Icons.remove_shopping_cart : Icons.add_shopping_cart,
-              color: _isReturnMode ? Colors.orange.shade800 : Colors.blue,
-            ),
+            icon: Icon(_isReturnMode ? Icons.remove_shopping_cart : Icons.add_shopping_cart, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
             onPressed: () => _addToCart(prod),
           ),
         );
@@ -927,11 +857,7 @@ class _PosScreenState extends State<PosScreen> {
               Text(_isReturnMode ? 'إجمالي المسترجع:' : 'الإجمالي العام:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               Text(
                 _formatNum(_totalAmount),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _isReturnMode ? Colors.orange.shade800 : Colors.blue,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
               ),
             ],
           ),
@@ -956,10 +882,7 @@ class _PosScreenState extends State<PosScreen> {
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade700),
                 onPressed: _clearInvoice,
                 icon: const Icon(Icons.delete_sweep, color: Colors.white),
-                label: Text(
-                  _isReturnMode ? 'تفريغ المرتجع' : 'فاتورة جديدة',
-                  style: TextStyle(color: Colors.white, fontSize: btnFontSize),
-                ),
+                label: Text(_isReturnMode ? 'تفريغ المرتجع' : 'فاتورة جديدة', style: TextStyle(color: Colors.white, fontSize: btnFontSize)),
               ),
             ),
           ),
