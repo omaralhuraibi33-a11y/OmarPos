@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io'; // لاستخدام Socket للواي فاي
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
@@ -54,34 +54,28 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
   }
 
-  // دالة تجربة الطباعة الحقيقية (سواء واي فاي أو بلوتوث)
+  // دالة تجربة الطباعة المباشرة
   Future<void> _testPrint(Map<String, dynamic> printer) async {
     setState(() => _isTesting = true);
 
     try {
-      // تجهيز بيانات الصفحة التجريبية ببروتوكول ESC/POS
       final profile = await CapabilityProfile.load();
-      final generator = Generator(
-        printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80,
-        profile,
-      );
+      final paperSize = (printer['paperSize'] == '57' || printer['paperSize'] == '58') ? PaperSize.mm58 : PaperSize.mm80;
+      final generator = Generator(paperSize, profile);
 
       List<int> bytes = [];
       bytes += generator.text('OMAR POS TEST',
           styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('طريقة الطباعة: ${printer['printMode'] ?? 'نص'}', styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('SUCCESSFUL PRINT TEST!', styles: const PosStyles(align: PosAlign.center, bold: true));
-      bytes += generator.text('IP: ${printer['ip']}', styles: const PosStyles(align: PosAlign.center));
       bytes += generator.feed(2);
       bytes += generator.cut();
 
       if (printer['connection'] == 'واي فاي') {
         final String ip = (printer['ip'] ?? '').trim();
-        if (ip.isEmpty) {
-          throw 'عنوان الـ IP غير مدخل!';
-        }
+        if (ip.isEmpty) throw 'عنوان الـ IP غير مدخل!';
 
-        // الاتصال المباشر بالمنفذ القياسي للطباعة الحرارية الشبكية 9100 مع تحديد مهلة انتظار
         final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
         socket.add(bytes);
         await socket.flush();
@@ -93,11 +87,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           );
         }
       } else {
-        // طباعة البلوتوث
         final String mac = (printer['macAddress'] ?? '').trim();
-        if (mac.isEmpty) {
-          throw 'عنوان MAC الخاص بالبلوتوث غير مدخل!';
-        }
+        if (mac.isEmpty) throw 'عنوان MAC الخاص بالبلوتوث غير مدخل!';
 
         bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
         if (connected) {
@@ -131,6 +122,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     String connection = printerToEdit?['connection'] ?? 'بلوتوث';
     String usage = printerToEdit?['usage'] ?? 'زبون';
     String paperSize = printerToEdit?['paperSize'] ?? '80';
+    String printMode = printerToEdit?['printMode'] ?? 'نص'; // خيار نص أو صورة
     String selectedBtDevice = printerToEdit?['btDevice'] ?? '';
 
     showDialog(
@@ -156,17 +148,21 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     items: ['بلوتوث', 'واي فاي'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                     onChanged: (val) => setDlgState(() => connection = val!),
                   ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: printMode,
+                    decoration: const InputDecoration(labelText: 'طريقة الطباعة'),
+                    items: ['نص', 'صورة'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                    onChanged: (val) => setDlgState(() => printMode = val!),
+                  ),
                   const SizedBox(height: 12),
                   if (connection == 'بلوتوث') ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo,
-                          foregroundColor: Colors.white,
-                        ),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
                         icon: const Icon(Icons.bluetooth_searching),
-                        label: const Text('البحث عن الأجهزة المقترنة (Bluetooth)'),
+                        label: const Text('البحث عن أجهزة البلوتوث المقترنة'),
                         onPressed: () async {
                           final List<BluetoothInfo> pairedBtDevices = await PrintBluetoothThermal.pairedBluetooths;
                           if (!context.mounted) return;
@@ -180,15 +176,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
-                                      'اختر طابعة من أجهزة البلوتوث المقترنة:',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                    ),
+                                    const Text('اختر طابعة بلوتوث:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                     const Divider(),
                                     pairedBtDevices.isEmpty
                                         ? const Padding(
                                             padding: EdgeInsets.all(16.0),
-                                            child: Text('لم يتم العثور على أجهزة بلوتوث مقترنة بالجوال.'),
+                                            child: Text('لا توجد أجهزة بلوتوث مقترنة.'),
                                           )
                                         : Expanded(
                                             child: ListView.builder(
@@ -204,9 +197,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                                                     setDlgState(() {
                                                       selectedBtDevice = dev.name;
                                                       macCtrl.text = dev.macAdress;
-                                                      if (nameCtrl.text.isEmpty) {
-                                                        nameCtrl.text = dev.name;
-                                                      }
+                                                      if (nameCtrl.text.isEmpty) nameCtrl.text = dev.name;
                                                     });
                                                     Navigator.pop(bContext);
                                                   },
@@ -226,32 +217,25 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     TextField(
                       controller: macCtrl,
                       readOnly: true,
-                      decoration: const InputDecoration(
-                        labelText: 'عنوان MAC للبلوتوث (ينضاف تلقائياً)',
-                        prefixIcon: Icon(Icons.pin, color: Colors.indigo),
-                        border: OutlineInputBorder(),
-                      ),
+                      decoration: const InputDecoration(labelText: 'عنوان MAC للبلوتوث', border: OutlineInputBorder()),
                     ),
                   ] else ...[
                     TextField(
                       controller: ipCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'عنوان IP للطابعة (مثال: 192.168.1.100)',
-                        border: OutlineInputBorder(),
-                      ),
+                      decoration: const InputDecoration(labelText: 'عنوان IP للطابعة (مثال: 192.168.1.100)', border: OutlineInputBorder()),
                     ),
                   ],
                   const SizedBox(height: 8),
                   TextField(
                     controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'اسم الطابعة (تلقائي/تعديل)'),
+                    decoration: const InputDecoration(labelText: 'اسم الطابعة'),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     value: paperSize,
                     decoration: const InputDecoration(labelText: 'مقاس الورق'),
-                    items: ['57', '78', '80'].map((e) => DropdownMenuItem(value: e, child: Text('$e mm'))).toList(),
+                    items: ['57', '80'].map((e) => DropdownMenuItem(value: e, child: Text('$e mm'))).toList(),
                     onChanged: (val) => setDlgState(() => paperSize = val!),
                   ),
                 ],
@@ -266,6 +250,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     'connection': connection,
                     'usage': usage,
                     'paperSize': paperSize,
+                    'printMode': printMode, // حفظ طريقة الطباعة (نص / صورة)
                     'btDevice': selectedBtDevice,
                     'macAddress': macCtrl.text.trim(),
                     'ip': ipCtrl.text.trim(),
@@ -373,9 +358,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         ),
                         title: Text('${p['name']} (${p['usage']})', style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                          p['connection'] == 'بلوتوث'
-                              ? 'الاتصال: بلوتوث (${p['macAddress']}) | المقاس: ${p['paperSize']}mm'
-                              : 'الاتصال: IP (${p['ip']}) | المقاس: ${p['paperSize']}mm',
+                          'الاتصال: ${p['connection']} | الوضع: ${p['printMode']} | المقاس: ${p['paperSize']}mm',
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
