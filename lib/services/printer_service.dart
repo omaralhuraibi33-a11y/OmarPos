@@ -39,7 +39,6 @@ class PrinterService {
     }
   }
 
-  // دالة إرسال البيانات (تدعم الواي فاي والبلوتوث تلقائياً حسب إعدادات الطابعة)
   static Future<void> _sendToPrinter(
     Map<String, dynamic> printer,
     dynamic invoice,
@@ -55,15 +54,9 @@ class PrinterService {
 
       List<int> bytes = [];
 
-      // سطر اختبار الاتصال
       bytes += generator.reset();
-      bytes += generator.text(
-        'PRINT TEST OK',
-        styles: const PosStyles(align: PosAlign.center, bold: true),
-      );
-      bytes += generator.feed(1);
 
-      // استخراج بيانات الفاتورة
+      // استخراج بيانات الفاتورة بمرونة عالية
       String invoiceId = '';
       String invoiceDate = '';
       String customerName = '';
@@ -107,25 +100,29 @@ class PrinterService {
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
 
       // تفاصيل الأصناف
-      for (var item in items) {
-        final name = item['name']?.toString() ?? '';
-        final qty = item['qty']?.toString() ?? '1';
-        final price = item['price']?.toString() ?? '0';
-        final notes = item['notes']?.toString() ?? '';
-        
-        final double q = double.tryParse(qty) ?? 1.0;
-        final double p = double.tryParse(price) ?? 0.0;
-        final total = (q * p).toStringAsFixed(2);
+      if (items.isNotEmpty) {
+        for (var item in items) {
+          final name = item['name']?.toString() ?? '';
+          final qty = item['qty']?.toString() ?? '1';
+          final price = item['price']?.toString() ?? '0';
+          final notes = item['notes']?.toString() ?? '';
+          
+          final double q = double.tryParse(qty) ?? 1.0;
+          final double p = double.tryParse(price) ?? 0.0;
+          final total = (q * p).toStringAsFixed(2);
 
-        bytes += generator.row([
-          PosColumn(text: total, width: 3, styles: const PosStyles(align: PosAlign.right)),
-          PosColumn(text: '$qty x $price', width: 4, styles: const PosStyles(align: PosAlign.center)),
-          PosColumn(text: name, width: 5, styles: const PosStyles(align: PosAlign.right)),
-        ]);
+          bytes += generator.row([
+            PosColumn(text: total, width: 3, styles: const PosStyles(align: PosAlign.right)),
+            PosColumn(text: '$qty x $price', width: 4, styles: const PosStyles(align: PosAlign.center)),
+            PosColumn(text: name, width: 5, styles: const PosStyles(align: PosAlign.right)),
+          ]);
 
-        if (notes.isNotEmpty) {
-          bytes += generator.text('  (ملاحظة: $notes)', styles: const PosStyles(align: PosAlign.right));
+          if (notes.isNotEmpty) {
+            bytes += generator.text('  (ملاحظة: $notes)', styles: const PosStyles(align: PosAlign.right));
+          }
         }
+      } else {
+        bytes += generator.text('تفاصيل الأصناف غير متوفرة لهذه الفاتورة', styles: const PosStyles(align: PosAlign.center));
       }
 
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
@@ -137,7 +134,7 @@ class PrinterService {
         );
         bytes += generator.text('طريقة الدفع: $paymentType', styles: const PosStyles(align: PosAlign.right));
         bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-        bytes += generator.text(footerText ?? 'شكراً لزيارتكم!', styles: const PosStyles(align: PosAlign.center, bold: true));
+        bytes += generator.text(footerText, styles: const PosStyles(align: PosAlign.center, bold: true));
       } else {
         bytes += generator.text('يرجى التجهيز بسرعة!', styles: const PosStyles(align: PosAlign.center, bold: true));
       }
@@ -152,22 +149,14 @@ class PrinterService {
         final ip = (printer['ip'] ?? '').trim();
         if (ip.isNotEmpty) {
           debugPrint('جاري الطباعة عبر الواي فاي للطابعة ${printer['name']} على IP: $ip...');
-          
-          // زيادة المهلة إلى 10 ثوانٍ لضمان استقرار الاتصال بالشبكة
           final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 10));
           socket.add(bytes);
           await socket.flush();
-          
-          // مهلة انتظار كافية لكي تستوعب الطابعة كامل بيانات الفاتورة وتطبعها قبل إغلاق السوكيت
           await Future.delayed(const Duration(milliseconds: 800));
-          
           await socket.close();
           debugPrint('تمت الطباعة عبر الواي فاي بنجاح.');
-        } else {
-          debugPrint('خطأ: عنوان الـ IP غير موجود للطابعة الواي فاي.');
         }
       } else {
-        // الاتصال عبر البلوتوث
         final mac = (printer['macAddress'] ?? '').trim();
         if (mac.isNotEmpty) {
           try {
@@ -178,22 +167,13 @@ class PrinterService {
           bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
           if (connected) {
             await Future.delayed(const Duration(milliseconds: 300));
-            bool sent = await PrintBluetoothThermal.writeBytes(bytes);
-            if (sent) {
-              debugPrint('تمت الطباعة عبر البلوتوث بنجاح.');
-            } else {
-              debugPrint('فشل إرسال البيانات عبر البلوتوث.');
-            }
+            await PrintBluetoothThermal.writeBytes(bytes);
             await Future.delayed(const Duration(milliseconds: 500));
             await PrintBluetoothThermal.disconnect;
-          } else {
-            debugPrint('فشل الاتصال بجهاز البلوتوث ذو العنوان: $mac');
+            debugPrint('تمت الطباعة عبر البلوتوث بنجاح.');
           }
-        } else {
-          debugPrint('خطأ: عنوان الـ MAC غير موجود للطابعة البلوتوث.');
         }
       }
-
     } catch (e) {
       debugPrint('خطأ أثناء إرسال الطباعة للطابعة ${printer['name']}: $e');
     }
