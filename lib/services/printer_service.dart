@@ -143,37 +143,38 @@ class PrinterService {
       bytes += generator.feed(2);
       bytes += generator.cut();
 
-      // --- التوجيه التلقائي حسب نوع الاتصال المخزن في إعدادات الطابعة ---
-      final connectionType = printer['connection'] ?? 'واي فاي';
+      // --- التوجيه التلقائي المحدث والآمن (يعتمد على الـ IP مباشرة إن وجد) ---
+      final ip = (printer['ip'] ?? '').trim();
+      final mac = (printer['macAddress'] ?? '').trim();
 
-      if (connectionType == 'واي فاي' || connectionType == 'Network' || connectionType == 'LAN') {
-        final ip = (printer['ip'] ?? '').trim();
-        if (ip.isNotEmpty) {
-          debugPrint('جاري الطباعة عبر الواي فاي للطابعة ${printer['name']} على IP: $ip...');
+      if (ip.isNotEmpty && ip != '0.0.0.0' && ip != 'null') {
+        try {
+          debugPrint('جاري الطباعة عبر الشبكة (IP) للطابعة ${printer['name']} على العنوان: $ip...');
           final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 10));
           socket.add(bytes);
           await socket.flush();
           await Future.delayed(const Duration(milliseconds: 800));
           await socket.close();
-          debugPrint('تمت الطباعة عبر الواي فاي بنجاح.');
+          debugPrint('تمت الطباعة عبر الشبكة بنجاح.');
+        } catch (socketErr) {
+          debugPrint('فشل الاتصال بالـ IP الخاص بالطابعة: $socketErr');
+        }
+      } else if (mac.isNotEmpty) {
+        try {
+          await PrintBluetoothThermal.disconnect;
+        } catch (_) {}
+
+        debugPrint('جاري الاتصال بالطابعة عبر البلوتوث MAC: $mac...');
+        bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+        if (connected) {
+          await Future.delayed(const Duration(milliseconds: 300));
+          await PrintBluetoothThermal.writeBytes(bytes);
+          await Future.delayed(const Duration(milliseconds: 500));
+          await PrintBluetoothThermal.disconnect;
+          debugPrint('تمت الطباعة عبر البلوتوث بنجاح.');
         }
       } else {
-        final mac = (printer['macAddress'] ?? '').trim();
-        if (mac.isNotEmpty) {
-          try {
-            await PrintBluetoothThermal.disconnect;
-          } catch (_) {}
-
-          debugPrint('جاري الاتصال بالطابعة عبر البلوتوث MAC: $mac...');
-          bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
-          if (connected) {
-            await Future.delayed(const Duration(milliseconds: 300));
-            await PrintBluetoothThermal.writeBytes(bytes);
-            await Future.delayed(const Duration(milliseconds: 500));
-            await PrintBluetoothThermal.disconnect;
-            debugPrint('تمت الطباعة عبر البلوتوث بنجاح.');
-          }
-        }
+        debugPrint('خطأ: لم يتم العثور على عنوان IP أو MAC صالح للطابعة ${printer['name']}.');
       }
     } catch (e) {
       debugPrint('خطأ أثناء إرسال الطباعة للطابعة ${printer['name']}: $e');
