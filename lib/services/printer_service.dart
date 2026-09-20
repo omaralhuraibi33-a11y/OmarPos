@@ -7,9 +7,9 @@ import 'package:omar_pos/db_helper.dart';
 
 class PrinterService {
   
-  // دالة توليد محتوى الفاتورة وإرسالها للطابعات مع إظهار نافذة منبثقة بالنتيجة
+  // دالة توليد محتوى الفاتورة وإرسالها للطابعات (الـ context أصبح اختيارياً لكي لا يتوقف الـ Build)
   static Future<void> printInvoice({
-    required BuildContext context,
+    BuildContext? context,
     required dynamic invoice, 
     required List<Map<String, dynamic>> items,
     required String usageType, // 'زبون' أو 'مطبخ'
@@ -41,7 +41,7 @@ class PrinterService {
   }
 
   static Future<void> _sendToPrinter(
-    BuildContext context,
+    BuildContext? context,
     Map<String, dynamic> printer,
     dynamic invoice,
     List<Map<String, dynamic>> items,
@@ -145,7 +145,7 @@ class PrinterService {
       bytes += generator.feed(2);
       bytes += generator.cut();
 
-      // --- إرسال البيانات والتقاط الخطأ لعرضه كـ نافذة منبثقة ---
+      // --- إرسال البيانات والاتصال ---
       final ip = (printer['ip'] ?? '').trim();
       final mac = (printer['macAddress'] ?? '').trim();
 
@@ -158,14 +158,14 @@ class PrinterService {
           await Future.delayed(const Duration(milliseconds: 500));
           await socket.close();
           
-          // إذا تمت الطباعة بنجاح
-          _showAlertDialog(context, 'نجاح الطباعة', 'تم إرسال الفاتورة إلى الطابعة ($printerName) بنجاح عبر الشبكة.');
+          debugPrint('نجاح: تمت الطباعة عبر الشبكة للطابعة ($printerName).');
+          _showAlertDialog(context, 'نجاح الطباعة', 'تم إرسال الفاتورة إلى الطابعة ($printerName) بنجاح.');
         } catch (socketErr) {
-          // إذا فشل الاتصال بالشبكة، نعرض رسالة الخطأ للمستخدم
+          debugPrint('❌ فشل الاتصال الشبكي للطابعة ($printerName): $socketErr');
           _showAlertDialog(
             context, 
             'فشل الاتصال بالطابعة ($printerName)', 
-                  'تعذر الاتصال بعنوان الـ IP ($ip).\n\nالسبب التفصيلي:\n$socketErr\n\nتأكد أن الطابعة متصلة بنفس شبكة الواي فاي وأن الـ IP صحيح.'
+            'تعذر الاتصال بالـ IP ($ip).\nالسبب: $socketErr'
           );
         }
       } else if (mac.isNotEmpty) {
@@ -180,21 +180,22 @@ class PrinterService {
           await Future.delayed(const Duration(milliseconds: 500));
           await PrintBluetoothThermal.disconnect;
           
-          _showAlertDialog(context, 'نجاح الطباعة', 'تمت الطباعة عبر البلوتوث للطابعة ($printerName) بنجاح.');
+          _showAlertDialog(context, 'نجاح الطباعة', 'تمت الطباعة عبر البلوتوث للطابعة ($printerName).');
         } else {
-          _showAlertDialog(context, 'فشل البلوتوث', 'لم يتمكن التطبيق من الاتصال بالطابعة عبر عنوان الـ MAC: $mac');
+          _showAlertDialog(context, 'فشل البلوتوث', 'لم يتمكن التطبيق من الاتصال عبر MAC: $mac');
         }
       } else {
-        _showAlertDialog(context, 'خطأ في إعدادات الطابعة', 'الطابعة ($printerName) لا تحتوي على عنوان IP أو MAC صالح.');
+        _showAlertDialog(context, 'خطأ إعدادات', 'الطابعة ($printerName) لا تحتوي على IP أو MAC صالح.');
       }
     } catch (e) {
-      _showAlertDialog(context, 'خطأ في معالجة الطباعة', 'حدث خطأ أثناء إعداد بيانات الطابعة ($printerName):\n$e');
+      _showAlertDialog(context, 'خطأ معالجة', 'حدث خطأ للطابعة ($printerName):\n$e');
     }
   }
 
-  // دالة مساعدة لإظهار النافذة المنبثقة
-  static void _showAlertDialog(BuildContext context, String title, String message) {
-    if (!context.mounted) return;
+  // دالة آمنة لإظهار النافذة المنبثقة فقط إذا كان الـ context موجوداً
+  static void _showAlertDialog(BuildContext? context, String title, String message) {
+    debugPrint('[$title]: $message');
+    if (context == null || !context.mounted) return;
     showDialog(
       context: context,
       builder: (BuildContext context) {
