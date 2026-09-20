@@ -77,7 +77,8 @@ class PrinterService {
         paymentType = invoice.paymentType?.toString() ?? 'cash';
       }
 
-      final footerText = await DBHelper.getSetting('invoice_footer', defaultValue: 'شكراً لزيارتكم! نأمل رؤيتكم مجدداً.');
+      // جلب تذييل الفاتورة مع ضمان عدم إرجاع قيمة null لمنع أخطاء الترجمة
+      final String footerText = await DBHelper.getSetting('invoice_footer', defaultValue: 'شكراً لزيارتكم! نأمل رؤيتكم مجدداً.') ?? 'شكراً لزيارتكم!';
 
       // --- تصميم الوصل ---
       bytes += generator.text(
