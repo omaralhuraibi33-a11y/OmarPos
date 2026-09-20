@@ -16,7 +16,7 @@ class PrinterService {
     try {
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
       if (savedPrintersJson == null || savedPrintersJson.isEmpty) {
-        debugPrint('لا توجد طابعات مضافة في الإعدادات.');
+        debugPrint('خطأ طباعة: لا توجد طابعات مضافة في الإعدادات.');
         return;
       }
 
@@ -27,7 +27,7 @@ class PrinterService {
       final targetPrinters = printers.where((p) => p['usage'] == usageType).toList();
 
       if (targetPrinters.isEmpty) {
-        debugPrint('لا توجد طابعة مُعرّفة لنوع الاستخدام: $usageType');
+        debugPrint('خطأ طباعة: لا توجد طابعة مُعرّفة لنوع الاستخدام: $usageType');
         return;
       }
 
@@ -35,7 +35,7 @@ class PrinterService {
         await _sendToPrinter(printer, invoice, items, usageType);
       }
     } catch (e) {
-      debugPrint('خطأ عام في PrinterService: $e');
+      debugPrint('خطأ عام في PrinterService.printInvoice: $e');
     }
   }
 
@@ -45,6 +45,7 @@ class PrinterService {
     List<Map<String, dynamic>> items,
     String usageType,
   ) async {
+    String printerName = printer['name']?.toString() ?? 'طابعة غير محددة';
     try {
       final paperSizeStr = printer['paperSize'] ?? '80';
       final paperSize = (paperSizeStr == '57' || paperSizeStr == '58') ? PaperSize.mm58 : PaperSize.mm80;
@@ -77,7 +78,6 @@ class PrinterService {
         paymentType = invoice.paymentType?.toString() ?? 'cash';
       }
 
-      // جلب تذييل الفاتورة مع ضمان عدم إرجاع قيمة null لمنع أخطاء الترجمة
       final String footerText = await DBHelper.getSetting('invoice_footer', defaultValue: 'شكراً لزيارتكم! نأمل رؤيتكم مجدداً.') ?? 'شكراً لزيارتكم!';
 
       // --- تصميم الوصل ---
@@ -143,41 +143,43 @@ class PrinterService {
       bytes += generator.feed(2);
       bytes += generator.cut();
 
-      // --- التوجيه التلقائي المحدث والآمن (يعتمد على الـ IP مباشرة إن وجد) ---
+      // --- التوجيه والاتصال مع التقاط أسباب الفشل بالتفصيل ---
       final ip = (printer['ip'] ?? '').trim();
       final mac = (printer['macAddress'] ?? '').trim();
 
       if (ip.isNotEmpty && ip != '0.0.0.0' && ip != 'null') {
         try {
-          debugPrint('جاري الطباعة عبر الشبكة (IP) للطابعة ${printer['name']} على العنوان: $ip...');
-          final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 10));
+          debugPrint('محاولة الاتصال بالطابعة ($printerName) عبر الـ IP: $ip (منفذ 9100)...');
+          final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
           socket.add(bytes);
           await socket.flush();
-          await Future.delayed(const Duration(milliseconds: 800));
+          await Future.delayed(const Duration(milliseconds: 500));
           await socket.close();
-          debugPrint('تمت الطباعة عبر الشبكة بنجاح.');
+          debugPrint('نجاح: تمت الطباعة عبر الشبكة للطابعة ($printerName).');
         } catch (socketErr) {
-          debugPrint('فشل الاتصال بالـ IP الخاص بالطابعة: $socketErr');
+          debugPrint('❌ فشل الاتصال الشبكي للطابعة ($printerName) على الـ IP ($ip): $socketErr');
         }
       } else if (mac.isNotEmpty) {
         try {
           await PrintBluetoothThermal.disconnect;
         } catch (_) {}
 
-        debugPrint('جاري الاتصال بالطابعة عبر البلوتوث MAC: $mac...');
+        debugPrint('محاولة الاتصال بالطابعة ($printerName) عبر البلوتوث MAC: $mac...');
         bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
         if (connected) {
           await Future.delayed(const Duration(milliseconds: 300));
           await PrintBluetoothThermal.writeBytes(bytes);
           await Future.delayed(const Duration(milliseconds: 500));
           await PrintBluetoothThermal.disconnect;
-          debugPrint('تمت الطباعة عبر البلوتوث بنجاح.');
+          debugPrint('نجاح: تمت الطباعة عبر البلوتوث للطابعة ($printerName).');
+        } else {
+          debugPrint('❌ فشل: لم يتمكن النظام من ربط البلوتوث مع العنوان ($mac).');
         }
       } else {
-        debugPrint('خطأ: لم يتم العثور على عنوان IP أو MAC صالح للطابعة ${printer['name']}.');
+        debugPrint('❌ خطأ إعدادات: الطابعة ($printerName) لا تحتوي على عنوان IP أو MAC صالح.');
       }
     } catch (e) {
-      debugPrint('خطأ أثناء إرسال الطباعة للطابعة ${printer['name']}: $e');
+      debugPrint('❌ خطأ غير متوقع أثناء معالجة البيانات للطابعة ($printerName): $e');
     }
   }
 }
