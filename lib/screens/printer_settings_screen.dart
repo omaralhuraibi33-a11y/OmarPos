@@ -52,12 +52,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
   }
 
-  // دالة تجربة الطباعة الحقيقية (سواء واي فاي أو بلوتوث)
+  // دالة تجربة الطباعة مع طباعة اسم الطابعة أولاً ثم الـ IP تحتها
   Future<void> _testPrint(Map<String, dynamic> printer) async {
     setState(() => _isTesting = true);
 
     try {
-      // تجهيز بيانات الصفحة التجريبية ببروتوكول ESC/POS
       final profile = await CapabilityProfile.load();
       final generator = Generator(
         printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80,
@@ -69,7 +68,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('SUCCESSFUL PRINT TEST!', styles: const PosStyles(align: PosAlign.center, bold: true));
+      
+      // هنا التعديل: طباعة اسم الطابعة أولاً، وتحتها الـ IP مباشرة
       bytes += generator.text('Printer: ${printer['name']}', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('IP: ${printer['ip']}', styles: const PosStyles(align: PosAlign.center));
+      
       bytes += generator.feed(2);
       bytes += generator.cut();
 
@@ -79,7 +82,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           throw 'عنوان الـ IP غير مدخل!';
         }
 
-        // الاتصال المباشر بالمنفذ القياسي للطباعة الحرارية الشبكية 9100 مع تحديد مهلة انتظار
         final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 5));
         socket.add(bytes);
         await socket.flush();
@@ -351,7 +353,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // زر تجربة الطباعة الخاص بهذه الطابعة بالتحديد
+                            // زر تجربة الطباعة لكل طابعة منفصلة
                             IconButton(
                               icon: _isTesting 
                                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
