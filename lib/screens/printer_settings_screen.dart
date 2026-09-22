@@ -1,4 +1,3 @@
- 
 import 'dart:convert';
 import 'dart:io'; // لاستخدام Socket للواي فاي
 import 'package:flutter/material.dart';
@@ -15,8 +14,6 @@ class PrinterSettingsScreen extends StatefulWidget {
 
 class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   List<Map<String, dynamic>> _printers = [];
-  int? _selectedPrinterIndex;
-
   bool _autoKitchen = false;
   bool _autoCustomer = false;
   bool _isTesting = false;
@@ -72,7 +69,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('SUCCESSFUL PRINT TEST!', styles: const PosStyles(align: PosAlign.center, bold: true));
-      bytes += generator.text('IP: ${printer['ip']}', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('Printer: ${printer['name']}', styles: const PosStyles(align: PosAlign.center));
       bytes += generator.feed(2);
       bytes += generator.cut();
 
@@ -90,7 +87,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تمت الطباعة عبر الواي فاي بنجاح!'), backgroundColor: Colors.green),
+            SnackBar(content: Text('تمت طباعة التجربة على (${printer['name']}) بنجاح!'), backgroundColor: Colors.green),
           );
         }
       } else {
@@ -106,7 +103,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
           await PrintBluetoothThermal.disconnect;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('تمت الطباعة عبر البلوتوث بنجاح!'), backgroundColor: Colors.green),
+              SnackBar(content: Text('تمت طباعة التجربة على (${printer['name']}) بنجاح!'), backgroundColor: Colors.green),
             );
           }
         } else {
@@ -329,31 +326,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('الطابعات المضافة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _selectedPrinterIndex != null ? Colors.orange : Colors.grey,
-                ),
-                onPressed: (_selectedPrinterIndex == null || _isTesting)
-                    ? null
-                    : () {
-                        final p = _printers[_selectedPrinterIndex!];
-                        _testPrint(p);
-                      },
-                icon: _isTesting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Icon(Icons.print, color: Colors.white),
-                label: const Text('تجربة الطابعة', style: TextStyle(color: Colors.white)),
-              ),
-            ],
-          ),
+          const Text('الطابعات المضافة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const Divider(),
           _printers.isEmpty
               ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('لا توجد طابعات مضافة. اضغط + للإضافة')))
@@ -363,14 +336,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   itemCount: _printers.length,
                   itemBuilder: (ctx, i) {
                     final p = _printers[i];
-                    final isSelected = _selectedPrinterIndex == i;
                     return Card(
-                      color: isSelected ? Colors.blue.withOpacity(0.15) : null,
                       child: ListTile(
-                        onTap: () => setState(() => _selectedPrinterIndex = i),
                         leading: Icon(
                           p['connection'] == 'بلوتوث' ? Icons.bluetooth : Icons.wifi,
-                          color: isSelected ? Colors.blue : Colors.grey,
+                          color: Colors.blue,
                         ),
                         title: Text('${p['name']} (${p['usage']})', style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
@@ -381,16 +351,27 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            // زر تجربة الطباعة الخاص بهذه الطابعة بالتحديد
+                            IconButton(
+                              icon: _isTesting 
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.print, color: Colors.orange),
+                              tooltip: 'تجربة الطباعة',
+                              onPressed: _isTesting ? null : () => _testPrint(p),
+                            ),
+                            // زر التعديل
                             IconButton(
                               icon: const Icon(Icons.edit, color: Colors.blue),
+                              tooltip: 'تعديل',
                               onPressed: () => _showPrinterDialog(printerToEdit: p, editIndex: i),
                             ),
+                            // زر الحذف
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
+                              tooltip: 'حذف',
                               onPressed: () async {
                                 setState(() {
                                   _printers.removeAt(i);
-                                  if (_selectedPrinterIndex == i) _selectedPrinterIndex = null;
                                 });
                                 await _saveSettings();
                               },
