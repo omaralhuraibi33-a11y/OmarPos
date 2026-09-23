@@ -290,7 +290,7 @@ class _PosScreenState extends State<PosScreen> {
                                                     children: [
                                                       const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
                                                       const SizedBox(width: 4),
-                                                      Text(inv.paymentType == 'cash' ? 'نقداً الدفع' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
+                                                      Text(inv.paymentType == 'cash' ? 'نقداً' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
                                                     ],
                                                   ),
                                                 ),
@@ -304,7 +304,7 @@ class _PosScreenState extends State<PosScreen> {
                                                     children: [
                                                       const Icon(Icons.info_outline, size: 16, color: Colors.blueAccent),
                                                       const SizedBox(width: 4),
-                                                      Text('الحالة completed', style: TextStyle(fontSize: 12, color: textColor)),
+                                                      Text('الحالة معتمدة', style: TextStyle(fontSize: 12, color: textColor)),
                                                     ],
                                                   ),
                                                 ),
@@ -416,38 +416,6 @@ class _PosScreenState extends State<PosScreen> {
                                                   children: [
                                                     Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
                                                     Text(_formatNum(inv.totalAmount), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green.shade700)),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 10),
-                                          Row(
-                                            children: [
-                                              const Icon(Icons.credit_card, size: 18, color: Colors.blueAccent),
-                                              const SizedBox(width: 6),
-                                              Text('معلومات الدفع', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Container(
-                                            padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                                            child: Column(
-                                              children: [
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                  children: [
-                                                    Text('المدفوع', style: TextStyle(fontSize: 13, color: textColor)),
-                                                    Text(_formatNum(inv.totalAmount), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                  children: [
-                                                    Text('الباقي', style: TextStyle(fontSize: 13, color: textColor)),
-                                                    Text(_formatNum(0.0), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
                                                   ],
                                                 ),
                                               ],
