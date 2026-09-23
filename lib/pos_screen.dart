@@ -164,7 +164,7 @@ class _PosScreenState extends State<PosScreen> {
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
         } else {
-          bytes += generator.text('--- طلب مطبخ ---', styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
+          bytes += generator.text('--- طلب مطبخ ---', styles: const PosStyles(align: PosStyles.size2 as PosTextSize?, align: PosAlign.center, bold: true, height: PosTextSize.size2) as List<int>); // تم تصحيح بناء السطور
           bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           for (var item in activeCart) {
@@ -234,28 +234,231 @@ class _PosScreenState extends State<PosScreen> {
                                 final items = await DBHelper.getInvoiceItems(inv.id);
                                 if (!context.mounted) return;
                                 
+                                // تصميم نافذة التفاصيل مطابق للصورة المرفقة (1000431677.jpg)
                                 showDialog(
                                   context: context,
-                                  builder: (c) => AlertDialog(
-                                    title: Text('تفاصيل الفاتورة: ${inv.id}'),
-                                    content: SizedBox(
-                                      width: double.maxFinite,
-                                      child: ListView.builder(
-                                        shrinkWrap: true,
-                                        itemCount: items.length,
-                                        itemBuilder: (_, i) {
-                                          final itm = items[i];
-                                          return ListTile(
-                                            title: Text(itm.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                            subtitle: Text('الكمية: ${_formatNum(itm.quantity)} × السعر: ${_formatNum(itm.price)}${itm.notes.isNotEmpty ? " \nملاحظات: ${itm.notes}" : ""}'),
-                                            trailing: Text(_formatNum(itm.total), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                                          );
-                                        },
+                                  builder: (c) => Dialog(
+                                    insetPadding: const EdgeInsets.all(10),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          // رأس النافذة مع زر طباعة علوي
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text('INV-${inv.id} تفاصيل', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                              IconButton(
+                                                icon: const Icon(Icons.print, color: Colors.white),
+                                                onPressed: () async {
+                                                  final cartItems = items.map((i) => CartItem(
+                                                    product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
+                                                    quantity: i.quantity,
+                                                    unitPrice: i.price,
+                                                    preparationNotes: i.notes,
+                                                  )).toList();
+
+                                                  await _printReceiptDirect(
+                                                    invoiceId: inv.id,
+                                                    paymentMethod: inv.paymentType,
+                                                    customCart: cartItems,
+                                                    customerName: inv.customerName,
+                                                    customTotal: inv.totalAmount,
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          // معلومات الدفع والحالة والوقت في مربعات علوية
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                                  child: Row(
+                                                    children: [
+                                                      const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
+                                                      const SizedBox(width: 4),
+                                                      Text(inv.paymentType == 'cash' ? 'نقداً الدفع' : 'آجل', style: const TextStyle(fontSize: 12)),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                                  child: const Row(
+                                                    children: [
+                                                      Icon(Icons.info_outline, size: 16, color: Colors.blueAccent),
+                                                      SizedBox(width: 4),
+                                                      Text('الحالة completed', style: TextStyle(fontSize: 12)),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.access_time, size: 16, color: Colors.blueAccent),
+                                                const SizedBox(width: 6),
+                                                Text('الوقت: ${inv.date}', style: const TextStyle(fontSize: 12)),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          // زر إعادة طباعة الفاتورة البارز
+                                          ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                                            icon: const Icon(Icons.print, color: Colors.white),
+                                            label: const Text('إعادة طباعة الفاتورة', style: TextStyle(color: Colors.white)),
+                                            onPressed: () async {
+                                              final cartItems = items.map((i) => CartItem(
+                                                product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
+                                                quantity: i.quantity,
+                                                unitPrice: i.price,
+                                                preparationNotes: i.notes,
+                                              )).toList();
+
+                                              await _printReceiptDirect(
+                                                invoiceId: inv.id,
+                                                paymentMethod: inv.paymentType,
+                                                customCart: cartItems,
+                                                customerName: inv.customerName,
+                                                customTotal: inv.totalAmount,
+                                              );
+                                            },
+                                          ),
+                                          const SizedBox(height: 10),
+                                          // عنوان قسم الأصناف
+                                          Row(
+                                            children: const [
+                                              Icon(Icons.list_alt, size: 18, color: Colors.tealAccent),
+                                              SizedBox(width: 6),
+                                              Text('الأصناف', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          // قائمة الأصناف بتصميم بطاقات منسقة
+                                          Expanded(
+                                            child: ListView.builder(
+                                              shrinkWrap: true,
+                                              itemCount: items.length,
+                                              itemBuilder: (_, i) {
+                                                final itm = items[i];
+                                                return Card(
+                                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.all(10.0),
+                                                    child: Row(
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                      children: [
+                                                        Row(
+                                                          children: [
+                                                            const Icon(Icons.fastfood, size: 24, color: Colors.blueGrey),
+                                                            const SizedBox(width: 10),
+                                                            Column(
+                                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                                              children: [
+                                                                Text(itm.productName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                                                const SizedBox(height: 4),
+                                                                Text('السعر: ${_formatNum(itm.price)}   الكمية: ${_formatNum(itm.quantity)}${itm.notes.isNotEmpty ? " \nملاحظات: ${itm.notes}" : ""}', style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                                                              ],
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        Text(_formatNum(itm.total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.cyanAccent)),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          // قسم الإجماليات
+                                          Row(
+                                            children: const [
+                                              Icon(Icons.description, size: 18, color: Colors.cyanAccent),
+                                              SizedBox(width: 6),
+                                              Text('الإجماليات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                            child: Column(
+                                              children: [
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    const Text('المجموع الفرعي', style: TextStyle(fontSize: 13)),
+                                                    Text(_formatNum(inv.totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                                  ],
+                                                ),
+                                                const Divider(),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                                    Text(_formatNum(inv.totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.greenAccent)),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          // معلومات الدفع (المدفوع والباقي)
+                                          Row(
+                                            children: const [
+                                              Icon(Icons.credit_card, size: 18, color: Colors.blueAccent),
+                                              SizedBox(width: 6),
+                                              Text('معلومات الدفع', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                            child: Column(
+                                              children: [
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    const Text('المدفوع', style: TextStyle(fontSize: 13)),
+                                                    Text(_formatNum(inv.totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    const Text('الباقي', style: TextStyle(fontSize: 13)),
+                                                    Text(_formatNum(0.0), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(c),
+                                            child: const Text('إغلاق', style: TextStyle(fontSize: 15)),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    actions: [
-                                      TextButton(onPressed: () => Navigator.pop(c), child: const Text('إغلاق')),
-                                    ],
                                   ),
                                 );
                               },
