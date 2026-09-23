@@ -102,6 +102,55 @@ class Invoice {
   }
 }
 
+// ==================== نموذج صنف الفاتورة ====================
+class InvoiceItem {
+  String id;
+  String invoiceId;
+  String productId;
+  String productName;
+  double quantity;
+  double price;
+  double total;
+  String notes;
+
+  InvoiceItem({
+    required this.id,
+    required this.invoiceId,
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+    required this.price,
+    required this.total,
+    this.notes = '',
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'invoiceId': invoiceId,
+      'productId': productId,
+      'productName': productName,
+      'quantity': quantity,
+      'price': price,
+      'total': total,
+      'notes': notes,
+    };
+  }
+
+  factory InvoiceItem.fromMap(Map<String, dynamic> map) {
+    return InvoiceItem(
+      id: map['id'],
+      invoiceId: map['invoiceId'],
+      productId: map['productId'],
+      productName: map['productName'],
+      quantity: (map['quantity'] as num).toDouble(),
+      price: (map['price'] as num).toDouble(),
+      total: (map['total'] as num).toDouble(),
+      notes: map['notes'] ?? '',
+    );
+  }
+}
+
 // ==================== نموذج العميل ====================
 class Customer {
   String id;
@@ -403,7 +452,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 9,
+      version: 10,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -428,6 +477,19 @@ class DBHelper {
             notes TEXT,
             shiftId INTEGER DEFAULT 1,
             isClosed INTEGER DEFAULT 0
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE invoice_items(
+            id TEXT PRIMARY KEY,
+            invoiceId TEXT,
+            productId TEXT,
+            productName TEXT,
+            quantity REAL,
+            price REAL,
+            total REAL,
+            notes TEXT
           )
         ''');
 
@@ -628,6 +690,20 @@ class DBHelper {
             await db.execute('ALTER TABLE supplier_transactions ADD COLUMN notes TEXT');
           } catch (_) {}
         }
+        if (oldVersion < 10) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS invoice_items(
+              id TEXT PRIMARY KEY,
+              invoiceId TEXT,
+              productId TEXT,
+              productName TEXT,
+              quantity REAL,
+              price REAL,
+              total REAL,
+              notes TEXT
+            )
+          ''');
+        }
       },
     );
   }
@@ -723,7 +799,7 @@ class DBHelper {
     return maps.map((m) => Voucher.fromMap(m)).toList();
   }
 
-  // ==================== الفواتير ====================
+  // ==================== الفواتير وأصنافها ====================
   static Future<List<Invoice>> getAllInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('invoices', orderBy: 'date DESC');
@@ -758,6 +834,21 @@ class DBHelper {
         );
       }
     }
+  }
+
+  static Future<void> saveInvoiceItem(InvoiceItem item) async {
+    final db = await database;
+    await db.insert('invoice_items', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<InvoiceItem>> getInvoiceItems(String invoiceId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'invoice_items',
+      where: 'invoiceId = ?',
+      whereArgs: [invoiceId],
+    );
+    return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
   // ==================== المستخدمين والعملاء ====================
@@ -1045,7 +1136,7 @@ class DBHelper {
     return defaultValue;
   }
 
-  // ==================== دوال إدارة الطابعات (متوافقة تماماً مع PrinterSettingsScreen) ====================
+  // ==================== دوال إدارة الطابعات ====================
   static Future<List<Map<String, dynamic>>> getSavedPrinters() async {
     final savedJson = await getSetting('printers_list');
     if (savedJson == null || savedJson.isEmpty) return [];
@@ -1117,6 +1208,7 @@ class DBHelper {
   static Future<void> resetAllRecordsAndBalances() async {
     final db = await database;
     await db.delete('invoices');
+    await db.delete('invoice_items');
     await db.delete('customer_transactions');
     await db.delete('supplier_transactions');
     await db.delete('vouchers');
@@ -1129,6 +1221,7 @@ class DBHelper {
   static Future<void> resetFullSystemToDefault() async {
     final db = await database;
     await db.delete('invoices');
+    await db.delete('invoice_items');
     await db.delete('customer_transactions');
     await db.delete('supplier_transactions');
     await db.delete('vouchers');
