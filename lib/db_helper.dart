@@ -1045,6 +1045,23 @@ class DBHelper {
     return defaultValue;
   }
 
+  // ==================== دوال إدارة الطابعات (متوافقة تماماً مع PrinterSettingsScreen) ====================
+  static Future<List<Map<String, dynamic>>> getSavedPrinters() async {
+    final savedJson = await getSetting('printers_list');
+    if (savedJson == null || savedJson.isEmpty) return [];
+    try {
+      final List<dynamic> decoded = jsonDecode(savedJson);
+      return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> savePrintersList(List<Map<String, dynamic>> printers) async {
+    final jsonString = jsonEncode(printers);
+    await saveSetting('printers_list', jsonString);
+  }
+
   static Future<List<String>> getPaymentMethods() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('payment_methods');
@@ -1243,7 +1260,7 @@ class DBHelper {
   static Future<double> getCustomersTotalBalance() async {
     final db = await database;
     final result = await db.rawQuery("SELECT SUM(balance) as total FROM customers");
-    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+    return (result.first['total'] as num?)?.toDouble() -> toDouble() ?? 0.0;
   }
 
   static Future<double> getMainVaultBalance() async {
