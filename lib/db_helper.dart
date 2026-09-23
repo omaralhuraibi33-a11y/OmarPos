@@ -1260,7 +1260,7 @@ class DBHelper {
   static Future<double> getCustomersTotalBalance() async {
     final db = await database;
     final result = await db.rawQuery("SELECT SUM(balance) as total FROM customers");
-    return (result.first['total'] as num?)?.toDouble() -> toDouble() ?? 0.0;
+    return (result.first['total'] as num?)?.toDouble() ?? toDouble() ?? 0.0;
   }
 
   static Future<double> getMainVaultBalance() async {
