@@ -14,8 +14,6 @@ class PrinterSettingsScreen extends StatefulWidget {
 
 class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   List<Map<String, dynamic>> _printers = [];
-  bool _autoKitchen = false;
-  bool _autoCustomer = false;
   bool _isTesting = false;
 
   @override
@@ -26,20 +24,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
 
   Future<void> _loadSavedSettings() async {
     final savedPrintersJson = await DBHelper.getSetting('printers_list');
-    final savedAutoKitchen = await DBHelper.getSetting('auto_kitchen');
-    final savedAutoCustomer = await DBHelper.getSetting('auto_customer');
 
     if (mounted) {
       setState(() {
         if (savedPrintersJson != null && savedPrintersJson.isNotEmpty) {
           final List<dynamic> decoded = jsonDecode(savedPrintersJson);
           _printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-        }
-        if (savedAutoKitchen != null) {
-          _autoKitchen = savedAutoKitchen == 'true';
-        }
-        if (savedAutoCustomer != null) {
-          _autoCustomer = savedAutoCustomer == 'true';
         }
       });
     }
@@ -48,8 +38,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
   Future<void> _saveSettings() async {
     final printersJson = jsonEncode(_printers);
     await DBHelper.saveSetting('printers_list', printersJson);
-    await DBHelper.saveSetting('auto_kitchen', _autoKitchen.toString());
-    await DBHelper.saveSetting('auto_customer', _autoCustomer.toString());
   }
 
   // دالة تجربة الطباعة مع طباعة اسم الطابعة أولاً ثم الـ IP تحتها
@@ -69,9 +57,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('SUCCESSFUL PRINT TEST!', styles: const PosStyles(align: PosAlign.center, bold: true));
       
-      // هنا التعديل: طباعة اسم الطابعة أولاً، وتحتها الـ IP مباشرة
       bytes += generator.text('Printer: ${printer['name']}', styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text('IP: ${printer['ip']}', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('IP/MAC: ${printer['connection'] == 'واي فاي' ? printer['ip'] : printer['macAddress']}', styles: const PosStyles(align: PosAlign.center));
       
       bytes += generator.feed(2);
       bytes += generator.cut();
@@ -132,6 +119,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     String usage = printerToEdit?['usage'] ?? 'زبون';
     String paperSize = printerToEdit?['paperSize'] ?? '80';
     String selectedBtDevice = printerToEdit?['btDevice'] ?? '';
+    
+    // قيمة التفعيل التلقائي الخاصة بهذه الطابعة (افتراضياً مفعلة true)
+    bool printerAutoPrint = printerToEdit?['autoPrint'] ?? true;
 
     showDialog(
       context: context,
@@ -147,7 +137,21 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     value: usage,
                     decoration: const InputDecoration(labelText: 'نوع الطابعة (الاستخدام)'),
                     items: ['مطبخ', 'زبون'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                    onChanged: (val) => setDlgState(() => usage = val!),
+                    onChanged: (val) {
+                      setDlgState(() {
+                        usage = val!;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  // خيار الطباعة التلقائية الخاص بهذه الطابعة يظهر ويتغير نصه بناءً على نوعها (زبون أو مطبخ)
+                  SwitchListTile(
+                    title: Text(
+                      usage == 'زبون' ? 'طباعة الزبون تلقائياً لهذه الطابعة' : 'طباعة المطبخ تلقائياً لهذه الطابعة',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    value: printerAutoPrint,
+                    onChanged: (val) => setDlgState(() => printerAutoPrint = val),
                   ),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
@@ -269,6 +273,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     'btDevice': selectedBtDevice,
                     'macAddress': macCtrl.text.trim(),
                     'ip': ipCtrl.text.trim(),
+                    'autoPrint': printerAutoPrint, // حفظ حالة الطباعة التلقائية المستقلة لهذه الطابعة
                   };
                   setState(() {
                     if (editIndex == null) {
@@ -300,34 +305,6 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('الطباعة التلقائية حسب النوع', style: TextStyle(fontWeight: FontWeight.bold)),
-                  SwitchListTile(
-                    title: const Text('طباعة المطبخ تلقائياً'),
-                    value: _autoKitchen,
-                    onChanged: (val) async {
-                      setState(() => _autoKitchen = val);
-                      await _saveSettings();
-                    },
-                  ),
-                  SwitchListTile(
-                    title: const Text('طباعة الزبون تلقائياً'),
-                    value: _autoCustomer,
-                    onChanged: (val) async {
-                      setState(() => _autoCustomer = val);
-                      await _saveSettings();
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
           const Text('الطابعات المضافة:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const Divider(),
           _printers.isEmpty
@@ -338,6 +315,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   itemCount: _printers.length,
                   itemBuilder: (ctx, i) {
                     final p = _printers[i];
+                    bool isAuto = p['autoPrint'] ?? true;
                     return Card(
                       child: ListTile(
                         leading: Icon(
@@ -346,10 +324,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                         ),
                         title: Text('${p['name']} (${p['usage']})', style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(
-                          p['connection'] == 'بلوتوث'
+                          (p['connection'] == 'بلوتوث'
                               ? 'الاتصال: بلوتوث (${p['macAddress']}) | المقاس: ${p['paperSize']}mm'
-                              : 'الاتصال: IP (${p['ip']}) | المقاس: ${p['paperSize']}mm',
+                              : 'الاتصال: IP (${p['ip']}) | المقاس: ${p['paperSize']}mm') +
+                          '\nالحالة: ${isAuto ? "تلقائي (مفعل)" : "معطل"}',
                         ),
+                        isThreeLine: true,
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
