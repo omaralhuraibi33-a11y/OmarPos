@@ -164,7 +164,6 @@ class _PosScreenState extends State<PosScreen> {
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
         } else {
-          // تم تصحيح سطر طباعة المطبخ هنا بوضوح وسلاسة
           bytes += generator.text(
             '--- طلب مطبخ ---', 
             styles: const PosStyles(
@@ -214,14 +213,17 @@ class _PosScreenState extends State<PosScreen> {
     final invoices = await DBHelper.getAllInvoices();
     if (!mounted) return;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black;
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('سجل الفواتير السابقة وتفاصيلها'),
+        title: Text('سجل الفواتير السابقة وتفاصيلها', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: double.maxFinite,
           child: invoices.isEmpty
-              ? const Center(child: Text('لا توجد فواتير مسجلة بعد'))
+              ? Center(child: Text('لا توجد فواتير مسجلة بعد', style: TextStyle(color: textColor)))
               : ListView.builder(
                   shrinkWrap: true,
                   itemCount: invoices.length,
@@ -229,8 +231,8 @@ class _PosScreenState extends State<PosScreen> {
                     final inv = invoices[index];
                     return Card(
                       child: ListTile(
-                        title: Text('فاتورة رقم: ${inv.id} - ${_formatNum(inv.totalAmount)}'),
-                        subtitle: Text('العميل: ${inv.customerName} \nالتاريخ: ${inv.date}'),
+                        title: Text('فاتورة رقم: ${inv.id} - ${_formatNum(inv.totalAmount)}', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                        subtitle: Text('العميل: ${inv.customerName} \nالتاريخ: ${inv.date}', style: TextStyle(color: isDark ? Colors.white70 : Colors.black87)),
                         isThreeLine: true,
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -255,9 +257,9 @@ class _PosScreenState extends State<PosScreen> {
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              Text('INV-${inv.id} تفاصيل', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                              Text('INV-${inv.id} تفاصيل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
                                               IconButton(
-                                                icon: const Icon(Icons.print, color: Colors.white),
+                                                icon: Icon(Icons.print, color: textColor),
                                                 onPressed: () async {
                                                   final cartItems = items.map((i) => CartItem(
                                                     product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
@@ -283,12 +285,12 @@ class _PosScreenState extends State<PosScreen> {
                                               Expanded(
                                                 child: Container(
                                                   padding: const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                                  decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
                                                   child: Row(
                                                     children: [
                                                       const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
                                                       const SizedBox(width: 4),
-                                                      Text(inv.paymentType == 'cash' ? 'نقداً الدفع' : 'آجل', style: const TextStyle(fontSize: 12)),
+                                                      Text(inv.paymentType == 'cash' ? 'نقداً الدفع' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
                                                     ],
                                                   ),
                                                 ),
@@ -297,12 +299,12 @@ class _PosScreenState extends State<PosScreen> {
                                               Expanded(
                                                 child: Container(
                                                   padding: const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
-                                                  child: const Row(
+                                                  decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
+                                                  child: Row(
                                                     children: [
-                                                      Icon(Icons.info_outline, size: 16, color: Colors.blueAccent),
-                                                      SizedBox(width: 4),
-                                                      Text('الحالة completed', style: TextStyle(fontSize: 12)),
+                                                      const Icon(Icons.info_outline, size: 16, color: Colors.blueAccent),
+                                                      const SizedBox(width: 4),
+                                                      Text('الحالة completed', style: TextStyle(fontSize: 12, color: textColor)),
                                                     ],
                                                   ),
                                                 ),
@@ -312,12 +314,12 @@ class _PosScreenState extends State<PosScreen> {
                                           const SizedBox(height: 6),
                                           Container(
                                             padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                            decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
                                             child: Row(
                                               children: [
                                                 const Icon(Icons.access_time, size: 16, color: Colors.blueAccent),
                                                 const SizedBox(width: 6),
-                                                Text('الوقت: ${inv.date}', style: const TextStyle(fontSize: 12)),
+                                                Text('الوقت: ${inv.date}', style: TextStyle(fontSize: 12, color: textColor)),
                                               ],
                                             ),
                                           ),
@@ -345,10 +347,10 @@ class _PosScreenState extends State<PosScreen> {
                                           ),
                                           const SizedBox(height: 10),
                                           Row(
-                                            children: const [
-                                              Icon(Icons.list_alt, size: 18, color: Colors.tealAccent),
-                                              SizedBox(width: 6),
-                                              Text('الأصناف', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            children: [
+                                              const Icon(Icons.list_alt, size: 18, color: Colors.teal),
+                                              const SizedBox(width: 6),
+                                              Text('الأصناف', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
                                             ],
                                           ),
                                           const SizedBox(height: 6),
@@ -372,14 +374,14 @@ class _PosScreenState extends State<PosScreen> {
                                                             Column(
                                                               crossAxisAlignment: CrossAxisAlignment.start,
                                                               children: [
-                                                                Text(itm.productName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                                                Text(itm.productName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
                                                                 const SizedBox(height: 4),
-                                                                Text('السعر: ${_formatNum(itm.price)}   الكمية: ${_formatNum(itm.quantity)}${itm.notes.isNotEmpty ? " \nملاحظات: ${itm.notes}" : ""}', style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                                                                Text('السعر: ${_formatNum(itm.price)}   الكمية: ${_formatNum(itm.quantity)}${itm.notes.isNotEmpty ? " \nملاحظات: ${itm.notes}" : ""}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
                                                               ],
                                                             ),
                                                           ],
                                                         ),
-                                                        Text(_formatNum(itm.total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.cyanAccent)),
+                                                        Text(_formatNum(itm.total), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isDark ? Colors.cyanAccent : Colors.blue.shade800)),
                                                       ],
                                                     ),
                                                   ),
@@ -389,31 +391,31 @@ class _PosScreenState extends State<PosScreen> {
                                           ),
                                           const SizedBox(height: 10),
                                           Row(
-                                            children: const [
-                                              Icon(Icons.description, size: 18, color: Colors.cyanAccent),
-                                              SizedBox(width: 6),
-                                              Text('الإجماليات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            children: [
+                                              const Icon(Icons.description, size: 18, color: Colors.cyan),
+                                              const SizedBox(width: 6),
+                                              Text('الإجماليات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
                                             ],
                                           ),
                                           const SizedBox(height: 6),
                                           Container(
                                             padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                            decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
                                             child: Column(
                                               children: [
                                                 Row(
                                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
-                                                    const Text('المجموع الفرعي', style: TextStyle(fontSize: 13)),
-                                                    Text(_formatNum(inv.totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                                    Text('المجموع الفرعي', style: TextStyle(fontSize: 13, color: textColor)),
+                                                    Text(_formatNum(inv.totalAmount), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
                                                   ],
                                                 ),
                                                 const Divider(),
                                                 Row(
                                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
-                                                    const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                                    Text(_formatNum(inv.totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.greenAccent)),
+                                                    Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
+                                                    Text(_formatNum(inv.totalAmount), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green.shade700)),
                                                   ],
                                                 ),
                                               ],
@@ -421,31 +423,31 @@ class _PosScreenState extends State<PosScreen> {
                                           ),
                                           const SizedBox(height: 10),
                                           Row(
-                                            children: const [
-                                              Icon(Icons.credit_card, size: 18, color: Colors.blueAccent),
-                                              SizedBox(width: 6),
-                                              Text('معلومات الدفع', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                            children: [
+                                              const Icon(Icons.credit_card, size: 18, color: Colors.blueAccent),
+                                              const SizedBox(width: 6),
+                                              Text('معلومات الدفع', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
                                             ],
                                           ),
                                           const SizedBox(height: 6),
                                           Container(
                                             padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)),
+                                            decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
                                             child: Column(
                                               children: [
                                                 Row(
                                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
-                                                    const Text('المدفوع', style: TextStyle(fontSize: 13)),
-                                                    Text(_formatNum(inv.totalAmount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                                    Text('المدفوع', style: TextStyle(fontSize: 13, color: textColor)),
+                                                    Text(_formatNum(inv.totalAmount), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
                                                   ],
                                                 ),
                                                 const SizedBox(height: 4),
                                                 Row(
                                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
-                                                    const Text('الباقي', style: TextStyle(fontSize: 13)),
-                                                    Text(_formatNum(0.0), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                                    Text('الباقي', style: TextStyle(fontSize: 13, color: textColor)),
+                                                    Text(_formatNum(0.0), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
                                                   ],
                                                 ),
                                               ],
@@ -454,7 +456,7 @@ class _PosScreenState extends State<PosScreen> {
                                           const SizedBox(height: 12),
                                           TextButton(
                                             onPressed: () => Navigator.pop(c),
-                                            child: const Text('إغلاق', style: TextStyle(fontSize: 15)),
+                                            child: Text('إغلاق', style: TextStyle(fontSize: 15, color: textColor)),
                                           ),
                                         ],
                                       ),
@@ -493,7 +495,7 @@ class _PosScreenState extends State<PosScreen> {
                 ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('إغلاق', style: TextStyle(color: textColor))),
         ],
       ),
     );
