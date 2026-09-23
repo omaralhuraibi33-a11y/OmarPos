@@ -209,7 +209,7 @@ class _PosScreenState extends State<PosScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('سجل الفواتير السابقة والطباعة'),
+        title: const Text('سجل الفواتير السابقة وتفاصيلها'),
         content: SizedBox(
           width: double.maxFinite,
           child: invoices.isEmpty
@@ -224,19 +224,65 @@ class _PosScreenState extends State<PosScreen> {
                         title: Text('فاتورة رقم: ${inv.id} - ${_formatNum(inv.totalAmount)}'),
                         subtitle: Text('العميل: ${inv.customerName} \nالتاريخ: ${inv.date}'),
                         isThreeLine: true,
-                        trailing: IconButton(
-                          icon: const Icon(Icons.print, color: Colors.blue),
-                          tooltip: 'إعادة طباعة الفاتورة',
-                          onPressed: () async {
-                            Navigator.pop(ctx);
-                            await _printReceiptDirect(
-                              invoiceId: inv.id,
-                              paymentMethod: inv.paymentType,
-                              customCart: [],
-                              customerName: inv.customerName,
-                              customTotal: inv.totalAmount,
-                            );
-                          },
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.visibility, color: Colors.teal),
+                              tooltip: 'استعراض تفاصيل الأصناف',
+                              onPressed: () async {
+                                final items = await DBHelper.getInvoiceItems(inv.id);
+                                if (!context.mounted) return;
+                                
+                                showDialog(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    title: Text('تفاصيل الفاتورة: ${inv.id}'),
+                                    content: SizedBox(
+                                      width: double.maxFinite,
+                                      child: ListView.builder(
+                                        shrinkWrap: true,
+                                        itemCount: items.length,
+                                        itemBuilder: (_, i) {
+                                          final itm = items[i];
+                                          return ListTile(
+                                            title: Text(itm.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                            subtitle: Text('الكمية: ${_formatNum(itm.quantity)} × السعر: ${_formatNum(itm.price)}${itm.notes.isNotEmpty ? " \nملاحظات: ${itm.notes}" : ""}'),
+                                            trailing: Text(_formatNum(itm.total), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(c), child: const Text('إغلاق')),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.print, color: Colors.blue),
+                              tooltip: 'إعادة طباعة الفاتورة',
+                              onPressed: () async {
+                                Navigator.pop(ctx);
+                                final items = await DBHelper.getInvoiceItems(inv.id);
+                                final cartItems = items.map((i) => CartItem(
+                                  product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
+                                  quantity: i.quantity,
+                                  unitPrice: i.price,
+                                  preparationNotes: i.notes,
+                                )).toList();
+
+                                await _printReceiptDirect(
+                                  invoiceId: inv.id,
+                                  paymentMethod: inv.paymentType,
+                                  customCart: cartItems,
+                                  customerName: inv.customerName,
+                                  customTotal: inv.totalAmount,
+                                );
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -516,6 +562,24 @@ class _PosScreenState extends State<PosScreen> {
       shiftId: shiftId,
       isClosed: false,
     );
+    await DBHelper.saveInvoice(invoice);
+
+    for (var item in cartSnapshot) {
+      final invoiceItem = InvoiceItem(
+        id: '${invoiceId}_${item.product.id}',
+        invoiceId: invoiceId,
+        productId: item.product.id,
+        productName: item.product.name,
+        quantity: item.quantity,
+        price: item.unitPrice,
+        total: item.total,
+        notes: item.preparationNotes,
+      );
+      await DBHelper.saveInvoiceItem(invoiceItem);
+
+      double stockDelta = _isReturnMode ? item.quantity : -item.quantity;
+      await DBHelper.updateProductStock(item.product.id, stockDelta);
+    }
 
     if (_isPrinterConnected) {
       await _printReceiptDirect(
@@ -525,13 +589,6 @@ class _PosScreenState extends State<PosScreen> {
         customerName: customerNameSnapshot,
         customTotal: totalSnapshot,
       );
-    }
-
-    await DBHelper.saveInvoice(invoice);
-
-    for (var item in cartSnapshot) {
-      double stockDelta = _isReturnMode ? item.quantity : -item.quantity;
-      await DBHelper.updateProductStock(item.product.id, stockDelta);
     }
 
     final actionName = _isReturnMode ? 'مرتجع المبيعات' : 'الفاتورة';
