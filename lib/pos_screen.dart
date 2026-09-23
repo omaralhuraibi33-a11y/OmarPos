@@ -164,7 +164,15 @@ class _PosScreenState extends State<PosScreen> {
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
         } else {
-          bytes += generator.text('--- طلب مطبخ ---', styles: const PosStyles(align: PosStyles.size2 as PosTextSize?, align: PosAlign.center, bold: true, height: PosTextSize.size2) as List<int>); // تم تصحيح بناء السطور
+          // تم تصحيح سطر طباعة المطبخ هنا بوضوح وسلاسة
+          bytes += generator.text(
+            '--- طلب مطبخ ---', 
+            styles: const PosStyles(
+              align: PosAlign.center, 
+              bold: true, 
+              height: PosTextSize.size2,
+            ),
+          );
           bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           for (var item in activeCart) {
@@ -234,7 +242,6 @@ class _PosScreenState extends State<PosScreen> {
                                 final items = await DBHelper.getInvoiceItems(inv.id);
                                 if (!context.mounted) return;
                                 
-                                // تصميم نافذة التفاصيل مطابق للصورة المرفقة (1000431677.jpg)
                                 showDialog(
                                   context: context,
                                   builder: (c) => Dialog(
@@ -245,7 +252,6 @@ class _PosScreenState extends State<PosScreen> {
                                         mainAxisSize: MainAxisSize.min,
                                         crossAxisAlignment: CrossAxisAlignment.stretch,
                                         children: [
-                                          // رأس النافذة مع زر طباعة علوي
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
@@ -272,7 +278,6 @@ class _PosScreenState extends State<PosScreen> {
                                             ],
                                           ),
                                           const SizedBox(height: 8),
-                                          // معلومات الدفع والحالة والوقت في مربعات علوية
                                           Row(
                                             children: [
                                               Expanded(
@@ -317,7 +322,6 @@ class _PosScreenState extends State<PosScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 10),
-                                          // زر إعادة طباعة الفاتورة البارز
                                           ElevatedButton.icon(
                                             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                                             icon: const Icon(Icons.print, color: Colors.white),
@@ -340,7 +344,6 @@ class _PosScreenState extends State<PosScreen> {
                                             },
                                           ),
                                           const SizedBox(height: 10),
-                                          // عنوان قسم الأصناف
                                           Row(
                                             children: const [
                                               Icon(Icons.list_alt, size: 18, color: Colors.tealAccent),
@@ -349,7 +352,6 @@ class _PosScreenState extends State<PosScreen> {
                                             ],
                                           ),
                                           const SizedBox(height: 6),
-                                          // قائمة الأصناف بتصميم بطاقات منسقة
                                           Expanded(
                                             child: ListView.builder(
                                               shrinkWrap: true,
@@ -386,7 +388,6 @@ class _PosScreenState extends State<PosScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 10),
-                                          // قسم الإجماليات
                                           Row(
                                             children: const [
                                               Icon(Icons.description, size: 18, color: Colors.cyanAccent),
@@ -419,7 +420,6 @@ class _PosScreenState extends State<PosScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 10),
-                                          // معلومات الدفع (المدفوع والباقي)
                                           Row(
                                             children: const [
                                               Icon(Icons.credit_card, size: 18, color: Colors.blueAccent),
