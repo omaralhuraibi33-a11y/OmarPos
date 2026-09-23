@@ -87,7 +87,6 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  /// [دالة الطباعة المباشرة والمحدثة بمعايير إعدادات الفاتورة الجديدة]
   Future<void> _printReceiptDirect({
     required String invoiceId,
     required String paymentMethod,
@@ -98,7 +97,6 @@ class _PosScreenState extends State<PosScreen> {
     if (!_isPrinterConnected) return;
 
     try {
-      // 1. جلب قائمة الطابعات المخزنة في قاعدة البيانات
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
       if (savedPrintersJson == null || savedPrintersJson.isEmpty) return; 
 
@@ -106,11 +104,9 @@ class _PosScreenState extends State<PosScreen> {
       List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
       if (printers.isEmpty) return;
 
-      // 2. التحقق من الإعدادات التلقائية
       final autoCustomer = await DBHelper.getSetting('auto_customer') == 'true';
       final autoKitchen = await DBHelper.getSetting('auto_kitchen') == 'true';
 
-      // 3. جلب إعدادات ترويسة وتصميم الفاتورة المحفوظة
       final storeName = await DBHelper.getSetting('store_name') ?? 'متجري';
       final storePhone = await DBHelper.getSetting('store_phone') ?? '';
       final taxNumber = await DBHelper.getSetting('tax_number') ?? '';
@@ -121,11 +117,10 @@ class _PosScreenState extends State<PosScreen> {
       final activeTotal = customTotal ?? _totalAmount;
       final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
 
-      // تجهيز مصفوفة بايتات الطباعة بنظام ESC/POS
       final profile = await CapabilityProfile.load();
 
       for (var printer in printers) {
-        final usage = printer['usage'] ?? 'زبون'; // زبون أو مطبخ
+        final usage = printer['usage'] ?? 'زبون';
 
         if (usage == 'زبون' && !autoCustomer) continue;
         if (usage == 'مطبخ' && !autoKitchen) continue;
@@ -136,7 +131,6 @@ class _PosScreenState extends State<PosScreen> {
         List<int> bytes = [];
 
         if (usage == 'زبون') {
-          // طباعة الترويسة المخصصة للزبون
           bytes += generator.text(storeName, styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
           if (storePhone.isNotEmpty) {
             bytes += generator.text('هاتف: $storePhone', styles: const PosStyles(align: PosAlign.center));
@@ -151,7 +145,6 @@ class _PosScreenState extends State<PosScreen> {
           bytes += generator.text('التاريخ: ${DateTime.now().toString().split('.')[0]}', styles: const PosStyles(align: PosAlign.right));
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
 
-          // الأصناف
           for (var item in activeCart) {
             bytes += generator.text('${item.product.name} (${item.quantity} x ${item.unitPrice}) = ${_formatNum(item.total)}', styles: const PosStyles(align: PosAlign.right));
             if (item.preparationNotes.isNotEmpty) {
@@ -171,7 +164,6 @@ class _PosScreenState extends State<PosScreen> {
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
         } else {
-          // تصميم فاتورة المطبخ (مبسط)
           bytes += generator.text('--- طلب مطبخ ---', styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
           bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
@@ -186,7 +178,6 @@ class _PosScreenState extends State<PosScreen> {
         bytes += generator.feed(2);
         bytes += generator.cut();
 
-        // إرسال الأمر حسب نوع الاتصال (واي فاي أو بلوتوث)
         if (printer['connection'] == 'واي فاي') {
           final String ip = (printer['ip'] ?? '').trim();
           if (ip.isNotEmpty) {
@@ -211,7 +202,6 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
-  // دالة عرض الفواتير السابقة
   void _showInvoicesHistoryDialog() async {
     final invoices = await DBHelper.getAllInvoices();
     if (!mounted) return;
@@ -527,7 +517,6 @@ class _PosScreenState extends State<PosScreen> {
       isClosed: false,
     );
 
-    // 1. تنفيذ الطباعة المباشرة إذا كانت الطابعة متصلة
     if (_isPrinterConnected) {
       await _printReceiptDirect(
         invoiceId: invoiceId,
@@ -538,7 +527,6 @@ class _PosScreenState extends State<PosScreen> {
       );
     }
 
-    // 2. الحفظ في قاعدة البيانات وتحديث المخزون فوراً
     await DBHelper.saveInvoice(invoice);
 
     for (var item in cartSnapshot) {
@@ -915,4 +903,45 @@ class _PosScreenState extends State<PosScreen> {
       padding: const EdgeInsets.all(8),
       color: Colors.white,
       child: Row(
-    ... [عرض الأزرار بالأسفل كما هي]
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: btnHeight,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade700),
+                icon: const Icon(Icons.cleaning_services, color: Colors.white, size: 20),
+                label: Text('تعليق', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
+                onPressed: _clearInvoice,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: SizedBox(
+              height: btnHeight,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+                icon: const Icon(Icons.delete_forever, color: Colors.white, size: 20),
+                label: Text('إلغاء', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
+                onPressed: _clearInvoice,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            flex: 2,
+            child: SizedBox(
+              height: btnHeight,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green.shade700),
+                icon: Icon(_isReturnMode ? Icons.assignment_return : Icons.payment, color: Colors.white, size: 22),
+                label: Text(_isReturnMode ? 'إتمام المرتجع' : 'دفع وطباعة', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
+                onPressed: _cart.isEmpty ? null : _showPaymentDialog,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
