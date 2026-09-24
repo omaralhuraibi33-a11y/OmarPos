@@ -738,7 +738,7 @@ class _PosScreenState extends State<PosScreen> {
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     final invoiceType = _isReturnMode ? 'return' : 'sale';
     
-    // التعديل الآمن: الاعتماد على أكبر معرف موجود (maxId) بدلاً من العدد الكلي (length)
+    // استقلالية تامة: جلب الفواتير الخاصة بنوعها فقط (مبيعات أو مرتجع) وتحديد أكبر رقم ID لمنع التداخل
     final allInvoices = await DBHelper.getAllInvoices();
     final sameTypeInvoices = allInvoices.where((inv) => inv.invoiceType == invoiceType).toList();
     
@@ -778,6 +778,7 @@ class _PosScreenState extends State<PosScreen> {
       );
       await DBHelper.saveInvoiceItem(invoiceItem);
 
+      // تأثير المخزن: المبيعات تخصم (-) والمرتجع يضيف (+)
       double stockDelta = _isReturnMode ? item.quantity : -item.quantity;
       await DBHelper.updateProductStock(item.product.id, stockDelta);
     }
