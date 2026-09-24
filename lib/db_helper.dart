@@ -836,8 +836,15 @@ class DBHelper {
     }
   }
 
+  // التعديل الجذري والآمن هنا لضمان عدم تداخل معرّفات الأصناف بين المبيعات والمرتجعات
   static Future<void> saveInvoiceItem(InvoiceItem item) async {
     final db = await database;
+    
+    // التأكد من أن معرف الصنف يحتوي على نوع/معرف فريد تماماً لمنع حدوث Overwrite في الجدول
+    if (!item.id.contains('_item_')) {
+      item.id = '${item.invoiceId}_${item.productId}_${DateTime.now().microsecondsSinceEpoch}';
+    }
+
     await db.insert('invoice_items', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -1384,6 +1391,6 @@ class DBHelper {
     final result = await db.rawQuery(
       "SELECT SUM(totalAmount) as total FROM invoices WHERE invoiceType = 'purchase_return'",
     );
-    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+    return (result.first['total'] as num?)?.toDouble() -> toDouble() ?? 0.0;
   }
 }
