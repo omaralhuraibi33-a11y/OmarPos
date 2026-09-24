@@ -209,7 +209,6 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
-  // شاشة استعراض الفواتير المطابقة للتصميم المطلوب
   void _showInvoicesHistoryDialog() async {
     final invoices = await DBHelper.getAllInvoices();
     if (!mounted) return;
@@ -230,7 +229,6 @@ class _PosScreenState extends State<PosScreen> {
               padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
-                  // شريط العنوان وزر التحديث
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -252,7 +250,6 @@ class _PosScreenState extends State<PosScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  // خانة البحث برقم الفاتورة
                   TextField(
                     onChanged: (val) {
                       setDialogState(() {
@@ -271,7 +268,6 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  // قائمة الفواتير المفلترة
                   Expanded(
                     child: Builder(
                       builder: (context) {
@@ -334,7 +330,6 @@ class _PosScreenState extends State<PosScreen> {
                                             ],
                                           ),
                                           const SizedBox(height: 8),
-                                          // تفاصيل إضافية داخل الحوار
                                           Row(
                                             children: [
                                               Expanded(
@@ -743,10 +738,18 @@ class _PosScreenState extends State<PosScreen> {
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     final invoiceType = _isReturnMode ? 'return' : 'sale';
     
-    // توليد معرف مستقل ومنفصل لكل نمط ترقيم (مبيعات تبدأ من 1، ومرتجع يبدأ من 1)
+    // التعديل الآمن: الاعتماد على أكبر معرف موجود (maxId) بدلاً من العدد الكلي (length)
     final allInvoices = await DBHelper.getAllInvoices();
     final sameTypeInvoices = allInvoices.where((inv) => inv.invoiceType == invoiceType).toList();
-    final nextNumber = sameTypeInvoices.length + 1;
+    
+    int maxId = 0;
+    for (var inv in sameTypeInvoices) {
+      int? parsedId = int.tryParse(inv.id);
+      if (parsedId != null && parsedId > maxId) {
+        maxId = parsedId;
+      }
+    }
+    final nextNumber = maxId + 1;
     final invoiceId = nextNumber.toString();
 
     final invoice = Invoice(
