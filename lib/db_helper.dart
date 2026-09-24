@@ -811,7 +811,8 @@ class DBHelper {
     if (invoice.shiftId <= 0) {
       invoice.shiftId = await getCurrentShiftId();
     }
-    await db.insert('invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    // استخدام ConflictAlgorithm.abort لمنع استبدال الفاتورة القديمة بالخطأ
+    await db.insert('invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
       if (invoice.invoiceType == 'sale') {
