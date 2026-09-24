@@ -738,7 +738,7 @@ class _PosScreenState extends State<PosScreen> {
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     final invoiceType = _isReturnMode ? 'return' : 'sale';
     
-    // استقلالية تامة: جلب الفواتير الخاصة بنوعها فقط (مبيعات أو مرتجع) وتحديد أكبر رقم ID لمنع التداخل
+    // جلب جميع الفواتير وفلترتها بدقة حسب النوع الحالي فقط لمنع تداخل أرقام المبيعات والمرتجع نهائياً
     final allInvoices = await DBHelper.getAllInvoices();
     final sameTypeInvoices = allInvoices.where((inv) => inv.invoiceType == invoiceType).toList();
     
@@ -749,6 +749,8 @@ class _PosScreenState extends State<PosScreen> {
         maxId = parsedId;
       }
     }
+    
+    // الرقم التسلسلي الجديد مستقل تماماً (كل نوع يبدأ تسلسله الخاص من 1 وصاعداً)
     final nextNumber = maxId + 1;
     final invoiceId = nextNumber.toString();
 
