@@ -235,6 +235,60 @@ class _PosScreenState extends State<PosScreen> {
           builder: (context, setDialogState) {
             String salesSearchQuery = '';
             String returnsSearchQuery = '';
+            
+            // فلاتر التواريخ (الافتراضي: اليوم)
+            String dateFilterType = 'today'; // options: today, yesterday, week, month, year, custom
+            DateTime? customStartDate;
+            DateTime? customEndDate;
+
+            bool isDateMatching(String dateStr) {
+              try {
+                final invDate = DateTime.parse(dateStr);
+                final now = DateTime.now();
+                final today = DateTime(now.year, now.month, now.day);
+
+                if (dateFilterType == 'today') {
+                  final invDay = DateTime(invDate.year, invDate.month, invDate.day);
+                  return invDay.isAtSameMomentAs(today);
+                } else if (dateFilterType == 'yesterday') {
+                  final yesterday = today.subtract(const Duration(days: 1));
+                  final invDay = DateTime(invDate.year, invDate.month, invDate.day);
+                  return invDay.isAtSameMomentAs(yesterday);
+                } else if (dateFilterType == 'week') {
+                  final weekAgo = today.subtract(const Duration(days: 7));
+                  return invDate.isAfter(weekAgo) || invDate.isAtSameMomentAs(weekAgo);
+                } else if (dateFilterType == 'month') {
+                  final monthAgo = today.subtract(const Duration(days: 30));
+                  return invDate.isAfter(monthAgo) || invDate.isAtSameMomentAs(monthAgo);
+                } else if (dateFilterType == 'year') {
+                  final yearAgo = today.subtract(const Duration(days: 365));
+                  return invDate.isAfter(yearAgo) || invDate.isAtSameMomentAs(yearAgo);
+                } else if (dateFilterType == 'custom') {
+                  if (customStartDate == null || customEndDate == null) return true;
+                  final start = DateTime(customStartDate!.year, customStartDate!.month, customStartDate!.day);
+                  final end = DateTime(customEndDate!.year, customEndDate!.month, customEndDate!.day, 23, 59, 59);
+                  return (invDate.isAfter(start) || invDate.isAtSameMomentAs(start)) &&
+                         (invDate.isBefore(end) || invDate.isAtSameMomentAs(end));
+                }
+              } catch (_) {}
+              return true;
+            }
+
+            String getDateFilterLabel() {
+              switch (dateFilterType) {
+                case 'today': return 'اليوم';
+                case 'yesterday': return 'أمس';
+                case 'week': return 'آخر أسبوع';
+                case 'month': return 'آخر شهر';
+                case 'year': return 'آخر سنة';
+                case 'custom':
+                  if (customStartDate != null && customEndDate != null) {
+                    return '${customStartDate.toString().split(' ')[0]} إلى ${customEndDate.toString().split(' ')[0]}';
+                  }
+                  return 'مخصص';
+                default: return 'الكل';
+              }
+            }
 
             return Dialog(
               backgroundColor: isDark ? const Color(0xFF1E1E2C) : Colors.white,
@@ -271,6 +325,67 @@ class _PosScreenState extends State<PosScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
+                    
+                    // شريط الفلترة الزمنية
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.filter_list, size: 18, color: Colors.blueAccent),
+                              const SizedBox(width: 6),
+                              Text('الفترة: ', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade800,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(getDateFilterLabel(), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                          PopupMenuButton<String>(
+                            icon: Icon(Icons.calendar_month, color: textColor),
+                            tooltip: 'تغيير الفترة الزمنية',
+                            onSelected: (val) async {
+                              if (val == 'custom') {
+                                final picked = await showDateRangePicker(
+                                  context: context,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (picked != null) {
+                                  setDialogState(() {
+                                    dateFilterType = 'custom';
+                                    customStartDate = picked.start;
+                                    customEndDate = picked.end;
+                                  });
+                                }
+                              } else {
+                                setDialogState(() => dateFilterType = val);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(value: 'today', child: Text('اليوم')),
+                              const PopupMenuItem(value: 'yesterday', child: Text('أمس')),
+                              const PopupMenuItem(value: 'week', child: Text('خلال أسبوع')),
+                              const PopupMenuItem(value: 'month', child: Text('خلال شهر')),
+                              const PopupMenuItem(value: 'year', child: Text('خلال سنة')),
+                              const PopupMenuItem(value: 'custom', child: Text('تحديد فترة مخصصة...')),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
                     Container(
                       decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
@@ -290,7 +405,7 @@ class _PosScreenState extends State<PosScreen> {
                               children: [
                                 const Icon(Icons.receipt, size: 18),
                                 const SizedBox(width: 6),
-                                Text('فواتير المبيعات (${salesInvoices.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text('فواتير المبيعات', style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
@@ -300,7 +415,7 @@ class _PosScreenState extends State<PosScreen> {
                               children: [
                                 const Icon(Icons.assignment_return, size: 18),
                                 const SizedBox(width: 6),
-                                Text('سجل المرتجعات (${returnInvoices.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text('سجل المرتجعات', style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
@@ -331,12 +446,14 @@ class _PosScreenState extends State<PosScreen> {
                                 child: Builder(
                                   builder: (context) {
                                     final filteredSales = salesInvoices.where((inv) {
+                                      final matchesDate = isDateMatching(inv.date);
+                                      if (!matchesDate) return false;
                                       if (salesSearchQuery.isEmpty) return true;
                                       return inv.id.toLowerCase().contains(salesSearchQuery.toLowerCase());
                                     }).toList();
 
                                     if (filteredSales.isEmpty) {
-                                      return Center(child: Text('لا توجد مبيعات مطابقة', style: TextStyle(color: textColor)));
+                                      return Center(child: Text('لا توجد مبيعات مطابقة للفترة المحددة', style: TextStyle(color: textColor)));
                                     }
 
                                     return ListView.builder(
@@ -372,12 +489,14 @@ class _PosScreenState extends State<PosScreen> {
                                 child: Builder(
                                   builder: (context) {
                                     final filteredReturns = returnInvoices.where((inv) {
+                                      final matchesDate = isDateMatching(inv.date);
+                                      if (!matchesDate) return false;
                                       if (returnsSearchQuery.isEmpty) return true;
                                       return inv.id.toLowerCase().contains(returnsSearchQuery.toLowerCase());
                                     }).toList();
 
                                     if (filteredReturns.isEmpty) {
-                                      return Center(child: Text('لا توجد مرتجعات مطابقة', style: TextStyle(color: textColor)));
+                                      return Center(child: Text('لا توجد مرتجعات مطابقة للفترة المحددة', style: TextStyle(color: textColor)));
                                     }
 
                                     return ListView.builder(
