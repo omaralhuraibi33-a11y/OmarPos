@@ -35,6 +35,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   final TextEditingController _supplierController = TextEditingController();
   final TextEditingController _invoiceDiscountController = TextEditingController(text: '0.0');
+  final TextEditingController _notesController = TextEditingController();
 
   bool _isLoading = true;
 
@@ -65,6 +66,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       _selectedSupplier = null;
       _supplierController.clear();
       _invoiceDiscountController.text = '0.0';
+      _notesController.clear();
     });
   }
 
@@ -226,6 +228,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
+  // ==================== حفظ فاتورة المشتريات أو المرتجع في الجداول المستقلة ====================
   Future<void> _savePurchaseProcess() async {
     if (_purchaseItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -234,38 +237,77 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return;
     }
 
+    final invoiceId = 'PUR_${DateTime.now().millisecondsSinceEpoch}';
+    final nowStr = DateTime.now().toString().split('.')[0];
+    final shiftId = await DBHelper.getCurrentShiftId();
+
     if (_isReturnMode) {
+      // 1. حفظ فاتورة مرتجع المشتريات الأساسية في جدول purchase_return_invoices
+      final returnInvoice = Invoice(
+        id: invoiceId,
+        invoiceType: 'purchase_return',
+        paymentType: _selectedSupplier != null ? 'credit' : 'cash',
+        totalAmount: _finalTotal,
+        date: nowStr,
+        supplierId: _selectedSupplier?.id,
+        supplierName: _selectedSupplier?.name ?? 'مورد نقدي / عام',
+        notes: _notesController.text,
+        shiftId: shiftId,
+      );
+
+      await DBHelper.savePurchaseReturnInvoice(returnInvoice);
+
+      // 2. حفظ الأصناف وتخفيض المخزون
       for (var item in _purchaseItems) {
+        final retItem = InvoiceItem(
+          id: '${invoiceId}_${item.product.id}',
+          invoiceId: invoiceId,
+          productId: item.product.id,
+          productName: item.product.name,
+          quantity: item.quantity,
+          price: item.purchasePrice,
+          total: item.total,
+        );
+        await DBHelper.savePurchaseReturnInvoiceItem(retItem);
         await DBHelper.updateProductStock(item.product.id, -item.quantity);
       }
 
-      if (_selectedSupplier != null) {
-        await DBHelper.addSupplierTransaction(
-          supplierId: _selectedSupplier!.id,
-          type: 'مرتجع مشتريات',
-          credit: 0.0,
-          debit: _finalTotal,
-        );
-      }
-
-      _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتقييده بنجاح');
+      _finishInvoiceProcess('تم حفظ وطباعة مرتجع المشتريات وتقييده بنجاح');
     } else {
+      // 1. حفظ فاتورة المشتريات الأساسية في جدول purchase_invoices
+      final purchaseInvoice = Invoice(
+        id: invoiceId,
+        invoiceType: 'purchase',
+        paymentType: _selectedSupplier != null ? 'credit' : 'cash',
+        totalAmount: _finalTotal,
+        date: nowStr,
+        supplierId: _selectedSupplier?.id,
+        supplierName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
+        notes: _notesController.text,
+        shiftId: shiftId,
+      );
+
+      await DBHelper.savePurchaseInvoice(purchaseInvoice);
+
+      // 2. حفظ الأصناف، زيادة المخزون، وتحديث سعر الشراء إن تغير
       for (var item in _purchaseItems) {
+        final purItem = InvoiceItem(
+          id: '${invoiceId}_${item.product.id}',
+          invoiceId: invoiceId,
+          productId: item.product.id,
+          productName: item.product.name,
+          quantity: item.quantity,
+          price: item.purchasePrice,
+          total: item.total,
+        );
+        await DBHelper.savePurchaseInvoiceItem(purItem);
+        
         await DBHelper.updateProductStock(item.product.id, item.quantity);
 
         if (item.purchasePrice != item.product.purchasePrice) {
           item.product.purchasePrice = item.purchasePrice;
           await DBHelper.saveProduct(item.product);
         }
-      }
-
-      if (_selectedSupplier != null) {
-        await DBHelper.addSupplierTransaction(
-          supplierId: _selectedSupplier!.id,
-          type: 'فاتورة مشتريات',
-          credit: _finalTotal,
-          debit: 0.0,
-        );
       }
 
       _finishInvoiceProcess('تم حفظ فاتورة المشتريات وتحديث المخزون بنجاح');
@@ -281,10 +323,17 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       ),
     );
     _resetInvoice();
-    if (_isReturnMode) {
-      setState(() => _isReturnMode = false);
-    }
     _loadData();
+  }
+
+  // ==================== شاشة سجل الفواتير (مثل سجل المبيعات) ====================
+  void _openPurchasesHistory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PurchasesHistoryScreen(),
+      ),
+    );
   }
 
   @override
@@ -300,6 +349,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
         centerTitle: true,
         actions: [
+          // زر الانتقال لسجل المشتريات
+          IconButton(
+            icon: const Icon(Icons.history, color: Colors.white),
+            tooltip: 'سجل الفواتير',
+            onPressed: _openPurchasesHistory,
+          ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: _isReturnMode ? theme.colorScheme.primary : theme.colorScheme.error,
@@ -518,6 +573,160 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     ],
                   ),
                 ),
+              ],
+            ),
+    );
+  }
+}
+
+// ==================== شاشة سجل المشتريات والمرتجعات ====================
+class PurchasesHistoryScreen extends StatefulWidget {
+  const PurchasesHistoryScreen({Key? key}) : super(key: key);
+
+  @override
+  State<PurchasesHistoryScreen> createState() => _PurchasesHistoryScreenState();
+}
+
+class _PurchasesHistoryScreenState extends State<PurchasesHistoryScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  List<Invoice> _purchaseInvoices = [];
+  List<Invoice> _returnInvoices = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() => _isLoading = true);
+    final purchases = await DBHelper.getAllPurchaseInvoices();
+    final returns = await DBHelper.getAllPurchaseReturnInvoices();
+    setState(() {
+      _purchaseInvoices = purchases;
+      _returnInvoices = returns;
+      _isLoading = false;
+    });
+  }
+
+  void _showInvoiceDetails(Invoice invoice, bool isReturn) async {
+    final items = isReturn 
+        ? await DBHelper.getPurchaseReturnInvoiceItems(invoice.id)
+        : await DBHelper.getPurchaseInvoiceItems(invoice.id);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isReturn ? 'تفاصيل مرتجع مشتريات #${invoice.id}' : 'تفاصيل فاتورة مشتريات #${invoice.id}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('التاريخ: ${invoice.date}'),
+              Text('المورد: ${invoice.supplierName ?? "غير محدد"}'),
+              Text('نوع الدفع: ${invoice.paymentType}'),
+              const Divider(),
+              const Text('الأصناف:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 5),
+              SizedBox(
+                height: 200,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: items.length,
+                  itemBuilder: (_, i) {
+                    final item = items[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text(item.productName),
+                      subtitle: Text('الكمية: ${item.quantity} × السعر: ${item.price}'),
+                      trailing: Text('${item.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    );
+                  },
+                ),
+              ),
+              const Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('الإجمالي النهائي:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('${invoice.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('سجل المشتريات والمرتجعات'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'فواتير المشتريات'),
+            Tab(text: 'مرتجعات المشتريات'),
+          ],
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                // فواتير الشراء
+                _purchaseInvoices.isEmpty
+                    ? const Center(child: Text('لا توجد فواتير مشتريات مسجلة'))
+                    : ListView.builder(
+                        itemCount: _purchaseInvoices.length,
+                        itemBuilder: (context, index) {
+                          final inv = _purchaseInvoices[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            child: ListTile(
+                              leading: const Icon(Icons.receipt_long, color: Colors.blue),
+                              title: Text('المورد: ${inv.supplierName ?? "نقدي"}'),
+                              subtitle: Text('التاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                              isThreeLine: true,
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () => _showInvoiceDetails(inv, false),
+                            ),
+                          );
+                        },
+                      ),
+                // مرتجعات الشراء
+                _returnInvoices.isEmpty
+                    ? const Center(child: Text('لا توجد مرتجعات مشتريات مسجلة'))
+                    : ListView.builder(
+                        itemCount: _returnInvoices.length,
+                        itemBuilder: (context, index) {
+                          final inv = _returnInvoices[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            child: ListTile(
+                              leading: const Icon(Icons.assignment_return, color: Colors.red),
+                              title: Text('المورد: ${inv.supplierName ?? "نقدي"}'),
+                              subtitle: Text('التاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                              isThreeLine: true,
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () => _showInvoiceDetails(inv, true),
+                            ),
+                          );
+                        },
+                      ),
               ],
             ),
     );
