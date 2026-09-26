@@ -48,8 +48,8 @@ class AppUser {
 // ==================== نموذج الفاتورة (مبيعات ومشتريات) ====================
 class Invoice {
   String id;
-  String invoiceType; // 'sale' (بيع)، 'return' (مرتجع مبيعات)، 'purchase' (شراء)، 'purchase_return' (مرتجع مشتريات)
-  String paymentType; // 'cash' (نقدي) أو 'credit' (آجل)
+  String invoiceType; // 'sale', 'return', 'purchase', 'purchase_return'
+  String paymentType; // 'cash' or 'credit'
   double totalAmount;
   String date;
   String? customerId;
@@ -200,55 +200,6 @@ class Customer {
   }
 }
 
-// ==================== نموذج حركة العميل ====================
-class CustomerTransaction {
-  String id;
-  String customerId;
-  String type;
-  String date;
-  double credit;
-  double debit;
-  double runningBalance;
-  String? notes;
-
-  CustomerTransaction({
-    required this.id,
-    required this.customerId,
-    required this.type,
-    required this.date,
-    this.credit = 0.0,
-    this.debit = 0.0,
-    required this.runningBalance,
-    this.notes,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'customerId': customerId,
-      'type': type,
-      'date': date,
-      'credit': credit,
-      'debit': debit,
-      'runningBalance': runningBalance,
-      'notes': notes ?? '',
-    };
-  }
-
-  factory CustomerTransaction.fromMap(Map<String, dynamic> map) {
-    return CustomerTransaction(
-      id: map['id'],
-      customerId: map['customerId'],
-      type: map['type'],
-      date: map['date'],
-      credit: (map['credit'] as num).toDouble(),
-      debit: (map['debit'] as num).toDouble(),
-      runningBalance: (map['runningBalance'] as num).toDouble(),
-      notes: map['notes'],
-    );
-  }
-}
-
 // ==================== نموذج المورد ====================
 class Supplier {
   String id;
@@ -347,7 +298,7 @@ class Voucher {
   }
 }
 
-// ==================== نموذج المجموعة (التصنيف) ====================
+// ==================== نموذج التصنيف ====================
 class Category {
   String id;
   String name;
@@ -460,7 +411,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 12, // رفع الإصدار إلى 12 لدعم جداول المشتريات والمرتجع المستقلة
+      version: 12,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -473,7 +424,6 @@ class DBHelper {
           )
         ''');
 
-        // جدول فواتير المبيعات
         await db.execute('''
           CREATE TABLE invoices(
             id TEXT PRIMARY KEY,
@@ -502,7 +452,6 @@ class DBHelper {
           )
         ''');
 
-        // جدول مرتجعات المبيعات المستقل
         await db.execute('''
           CREATE TABLE return_invoices(
             id TEXT PRIMARY KEY,
@@ -531,7 +480,7 @@ class DBHelper {
           )
         ''');
 
-        // ==================== جداول المشتريات والمرتجع المستقلة تماماً ====================
+        // جداول المشتريات والمرتجع المستقلة
         await db.execute('''
           CREATE TABLE purchase_invoices(
             id TEXT PRIMARY KEY,
@@ -727,28 +676,20 @@ class DBHelper {
           )
         ''');
 
-        // إضافة المستخدمين الافتراضيين
+        // البيانات الافتراضية
         final allPerms = {for (var m in allModules) m: true};
-        final cashierPerms = {
-          for (var m in allModules) m: (m == 'نقطة البيع' || m == 'إغلاق الصندوق / الوردية')
-        };
-        final supervisorPerms = {
-          for (var m in allModules) m: (m != 'إدارة المستخدمين' && m != 'إعدادات النظام')
-        };
+        final cashierPerms = {for (var m in allModules) m: (m == 'نقطة البيع' || m == 'إغلاق الصندوق / الوردية')};
+        final supervisorPerms = {for (var m in allModules) m: (m != 'إدارة المستخدمين' && m != 'إعدادات النظام')};
 
         await db.insert('users', AppUser(id: '1', name: 'المدير العام', pin: '1234', isAdmin: true, showInLogin: true, permissions: allPerms).toMap());
         await db.insert('users', AppUser(id: '2', name: 'كاشير 1', pin: '0000', isAdmin: false, showInLogin: true, permissions: cashierPerms).toMap());
         await db.insert('users', AppUser(id: '3', name: 'كاشير 2', pin: '0000', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
         await db.insert('users', AppUser(id: '4', name: 'مشرف', pin: '1111', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
 
-        // عميل نقدي افتراضي
         await db.insert('customers', Customer(id: 'cash_default', name: 'عميل نقدي', phone: '', balance: 0.0).toMap());
-
-        // إضافة طرق دفع افتراضية
         await db.insert('payment_methods', {'id': '1', 'name': 'نقدي'});
         await db.insert('payment_methods', {'id': '2', 'name': 'آجل'});
 
-        // إنشاء الوردية الأولى
         await db.insert('shifts', {
           'startTime': DateTime.now().toString(),
           'userId': '1',
@@ -761,65 +702,35 @@ class DBHelper {
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 12) {
-          // إنشاء جداول المشتريات والمرتجع المستقلة عند التحديث
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS purchase_invoices(
-              id TEXT PRIMARY KEY,
-              invoiceType TEXT,
-              paymentType TEXT,
-              totalAmount REAL,
-              date TEXT,
-              supplierId TEXT,
-              supplierName TEXT,
-              notes TEXT,
-              shiftId INTEGER DEFAULT 1,
-              isClosed INTEGER DEFAULT 0
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS purchase_invoice_items(
-              id TEXT PRIMARY KEY,
-              invoiceId TEXT,
-              productId TEXT,
-              productName TEXT,
-              quantity REAL,
-              price REAL,
-              total REAL,
-              notes TEXT
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS purchase_return_invoices(
-              id TEXT PRIMARY KEY,
-              invoiceType TEXT,
-              paymentType TEXT,
-              totalAmount REAL,
-              date TEXT,
-              supplierId TEXT,
-              supplierName TEXT,
-              notes TEXT,
-              shiftId INTEGER DEFAULT 1,
-              isClosed INTEGER DEFAULT 0
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS purchase_return_invoice_items(
-              id TEXT PRIMARY KEY,
-              invoiceId TEXT,
-              productId TEXT,
-              productName TEXT,
-              quantity REAL,
-              price REAL,
-              total REAL,
-              notes TEXT
-            )
-          ''');
+          await db.execute('CREATE TABLE IF NOT EXISTS purchase_invoices (id TEXT PRIMARY KEY, invoiceType TEXT, paymentType TEXT, totalAmount REAL, date TEXT, supplierId TEXT, supplierName TEXT, notes TEXT, shiftId INTEGER DEFAULT 1, isClosed INTEGER DEFAULT 0)');
+          await db.execute('CREATE TABLE IF NOT EXISTS purchase_invoice_items (id TEXT PRIMARY KEY, invoiceId TEXT, productId TEXT, productName TEXT, quantity REAL, price REAL, total REAL, notes TEXT)');
+          await db.execute('CREATE TABLE IF NOT EXISTS purchase_return_invoices (id TEXT PRIMARY KEY, invoiceType TEXT, paymentType TEXT, totalAmount REAL, date TEXT, supplierId TEXT, supplierName TEXT, notes TEXT, shiftId INTEGER DEFAULT 1, isClosed INTEGER DEFAULT 0)');
+          await db.execute('CREATE TABLE IF NOT EXISTS purchase_return_invoice_items (id TEXT PRIMARY KEY, invoiceId TEXT, productId TEXT, productName TEXT, quantity REAL, price REAL, total REAL, notes TEXT)');
         }
       },
     );
   }
 
-  // ==================== الوردية الحالية وإغلاق الوردية ====================
+  // ==================== الإعدادات (Settings) ====================
+  static Future<String?> getSetting(String key, {String? defaultValue}) async {
+    final db = await database;
+    final res = await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    if (res.isNotEmpty) {
+      return res.first['value'] as String?;
+    }
+    return defaultValue;
+  }
+
+  static Future<void> saveSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // ==================== إدارة الوردية ====================
   static Future<int> getCurrentShiftId() async {
     final db = await database;
     final res = await db.query('shifts', where: "status = 'open'", orderBy: 'id DESC', limit: 1);
@@ -835,6 +746,15 @@ class DBHelper {
       'transferredToMainVault': 0.0,
       'status': 'open'
     });
+  }
+
+  static Future<int> getNextShiftNumber() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT MAX(id) as max_id FROM shifts');
+    if (res.isNotEmpty && res.first['max_id'] != null) {
+      return (res.first['max_id'] as int) + 1;
+    }
+    return 1;
   }
 
   static Future<void> closeShift({
@@ -880,7 +800,7 @@ class DBHelper {
     });
   }
 
-  // ==================== فواتير المبيعات ====================
+  // ==================== المبيعات ====================
   static Future<List<Invoice>> getAllInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('invoices', orderBy: 'date DESC');
@@ -889,9 +809,7 @@ class DBHelper {
 
   static Future<void> saveInvoice(Invoice invoice) async {
     final db = await database;
-    if (invoice.shiftId <= 0) {
-      invoice.shiftId = await getCurrentShiftId();
-    }
+    if (invoice.shiftId <= 0) invoice.shiftId = await getCurrentShiftId();
     await db.insert('invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
@@ -918,15 +836,11 @@ class DBHelper {
 
   static Future<List<InvoiceItem>> getInvoiceItems(String invoiceId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'invoice_items',
-      where: 'invoiceId = ?',
-      whereArgs: [invoiceId],
-    );
+    final List<Map<String, dynamic>> maps = await db.query('invoice_items', where: 'invoiceId = ?', whereArgs: [invoiceId]);
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير المرتجعات (مبيعات) ====================
+  // ==================== مرتجع المبيعات ====================
   static Future<List<Invoice>> getAllReturnInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('return_invoices', orderBy: 'date DESC');
@@ -935,9 +849,7 @@ class DBHelper {
 
   static Future<void> saveReturnInvoice(Invoice invoice) async {
     final db = await database;
-    if (invoice.shiftId <= 0) {
-      invoice.shiftId = await getCurrentShiftId();
-    }
+    if (invoice.shiftId <= 0) invoice.shiftId = await getCurrentShiftId();
     await db.insert('return_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
@@ -962,15 +874,11 @@ class DBHelper {
 
   static Future<List<InvoiceItem>> getReturnInvoiceItems(String invoiceId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'return_invoice_items',
-      where: 'invoiceId = ?',
-      whereArgs: [invoiceId],
-    );
+    final List<Map<String, dynamic>> maps = await db.query('return_invoice_items', where: 'invoiceId = ?', whereArgs: [invoiceId]);
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير المشتريات (الجدول المستقل الجديد) ====================
+  // ==================== فواتير المشتريات ====================
   static Future<List<Invoice>> getAllPurchaseInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('purchase_invoices', orderBy: 'date DESC');
@@ -979,13 +887,10 @@ class DBHelper {
 
   static Future<void> savePurchaseInvoice(Invoice invoice) async {
     final db = await database;
-    if (invoice.shiftId <= 0) {
-      invoice.shiftId = await getCurrentShiftId();
-    }
+    if (invoice.shiftId <= 0) invoice.shiftId = await getCurrentShiftId();
     await db.insert('purchase_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.supplierId != null) {
-      // إذا كانت مشتريات آجل نزيد مديونية المورد (credit على المورد) أو حسب هيكل حسابات الموردين لديك
       await addSupplierTransaction(
         supplierId: invoice.supplierId!,
         type: invoice.paymentType == 'credit' ? 'فاتورة مشتريات أجلة' : 'فاتورة مشتريات نقدية',
@@ -1007,15 +912,11 @@ class DBHelper {
 
   static Future<List<InvoiceItem>> getPurchaseInvoiceItems(String invoiceId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'purchase_invoice_items',
-      where: 'invoiceId = ?',
-      whereArgs: [invoiceId],
-    );
+    final List<Map<String, dynamic>> maps = await db.query('purchase_invoice_items', where: 'invoiceId = ?', whereArgs: [invoiceId]);
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير مرتجع المشتريات (الجدول المستقل الجديد) ====================
+  // ==================== مرتجع المشتريات ====================
   static Future<List<Invoice>> getAllPurchaseReturnInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('purchase_return_invoices', orderBy: 'date DESC');
@@ -1024,9 +925,7 @@ class DBHelper {
 
   static Future<void> savePurchaseReturnInvoice(Invoice invoice) async {
     final db = await database;
-    if (invoice.shiftId <= 0) {
-      invoice.shiftId = await getCurrentShiftId();
-    }
+    if (invoice.shiftId <= 0) invoice.shiftId = await getCurrentShiftId();
     await db.insert('purchase_return_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.supplierId != null) {
@@ -1051,49 +950,75 @@ class DBHelper {
 
   static Future<List<InvoiceItem>> getPurchaseReturnInvoiceItems(String invoiceId) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'purchase_return_invoice_items',
-      where: 'invoiceId = ?',
-      whereArgs: [invoiceId],
-    );
+    final List<Map<String, dynamic>> maps = await db.query('purchase_return_invoice_items', where: 'invoiceId = ?', whereArgs: [invoiceId]);
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== حركات حسابات الموردين ====================
-  static Future<void> addSupplierTransaction({
-    required String supplierId,
-    required String type,
-    required double credit,
-    required double debit,
-    String? date,
-    String? notes,
-  }) async {
+  // ==================== الأصناف والمخزن ====================
+  static Future<List<Product>> getAllProducts() async {
     final db = await database;
-    final supList = await db.query('suppliers', where: 'id = ?', whereArgs: [supplierId]);
-    if (supList.isEmpty) return;
-
-    double currentBalance = (supList.first['balance'] as num).toDouble();
-    double newBalance = currentBalance + credit - debit;
-
-    await db.update('suppliers', {'balance': newBalance}, where: 'id = ?', whereArgs: [supplierId]);
-
-    await db.insert('supplier_transactions', {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-      'supplierId': supplierId,
-      'type': type,
-      'date': date ?? DateTime.now().toString().split('.')[0],
-      'credit': credit,
-      'debit': debit,
-      'runningBalance': newBalance,
-      'notes': notes ?? '',
-    });
+    final List<Map<String, dynamic>> maps = await db.query('products');
+    return maps.map((m) => Product.fromMap(m)).toList();
   }
 
-  // ==================== إدارة العملاء والحركات ====================
+  static Future<void> saveProduct(Product product) async {
+    final db = await database;
+    await db.insert('products', product.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteProduct(String id) async {
+    final db = await database;
+    await db.delete('products', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<void> updateProductStock(String id, double deltaQuantity) async {
+    final db = await database;
+    await db.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [deltaQuantity, id]);
+  }
+
+  // ==================== التصنيفات (Categories) ====================
+  static Future<List<Category>> getAllCategories() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('categories');
+    return maps.map((m) => Category.fromMap(m)).toList();
+  }
+
+  static Future<void> saveCategory(Category category) async {
+    final db = await database;
+    await db.insert('categories', category.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteCategory(String id) async {
+    final db = await database;
+    await db.delete('categories', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ==================== العملاء والحركات ====================
   static Future<List<Customer>> getAllCustomers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('customers');
     return maps.map((m) => Customer.fromMap(m)).toList();
+  }
+
+  static Future<void> saveCustomer(Customer customer) async {
+    final db = await database;
+    await db.insert('customers', customer.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteCustomer(String id) async {
+    final db = await database;
+    await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<Customer> getOrCreateDefaultCustomer() async {
+    final db = await database;
+    final res = await db.query('customers', where: "id = 'cash_default'");
+    if (res.isNotEmpty) {
+      return Customer.fromMap(res.first);
+    }
+    final defaultCust = Customer(id: 'cash_default', name: 'عميل نقدي', phone: '', balance: 0.0);
+    await db.insert('customers', defaultCust.toMap());
+    return defaultCust;
   }
 
   static Future<void> addCustomerTransaction({
@@ -1125,22 +1050,244 @@ class DBHelper {
     });
   }
 
-  // ==================== إدارة الموردين الأصناف وغيرها ====================
+  static Future<List<CustomerTransaction>> getCustomerTransactions(String customerId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'customer_transactions',
+      where: 'customerId = ?',
+      whereArgs: [customerId],
+      orderBy: 'date DESC',
+    );
+    return maps.map((m) => CustomerTransaction.fromMap(m)).toList();
+  }
+
+  // ==================== الموردين والحركات ====================
   static Future<List<Supplier>> getAllSuppliers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('suppliers');
     return maps.map((m) => Supplier.fromMap(m)).toList();
   }
 
-  static Future<List<Product>> getAllProducts() async {
+  static Future<void> saveSupplier(Supplier supplier) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('products');
-    return maps.map((m) => Product.fromMap(m)).toList();
+    await db.insert('suppliers', supplier.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<void> updateProductStock(String id, double deltaQuantity) async {
+  static Future<void> deleteSupplier(String id) async {
     final db = await database;
-    await db.rawUpdate('UPDATE products SET quantity = quantity + ? WHERE id = ?', [deltaQuantity, id]);
+    await db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<void> addSupplierTransaction({
+    required String supplierId,
+    required String type,
+    required double credit,
+    required double debit,
+    String? date,
+    String? notes,
+  }) async {
+    final db = await database;
+    final supList = await db.query('suppliers', where: 'id = ?', whereArgs: [supplierId]);
+    if (supList.isEmpty) return;
+
+    double currentBalance = (supList.first['balance'] as num).toDouble();
+    double newBalance = currentBalance + credit - debit;
+
+    await db.update('suppliers', {'balance': newBalance}, where: 'id = ?', whereArgs: [supplierId]);
+
+    await db.insert('supplier_transactions', {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'supplierId': supplierId,
+      'type': type,
+      'date': date ?? DateTime.now().toString().split('.')[0],
+      'credit': credit,
+      'debit': debit,
+      'runningBalance': newBalance,
+      'notes': notes ?? '',
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getSupplierStatement(String supplierId) async {
+    final db = await database;
+    return await db.query('supplier_transactions', where: 'supplierId = ?', whereArgs: [supplierId], orderBy: 'date DESC');
+  }
+
+  // ==================== السندات (Vouchers) ====================
+  static Future<List<Voucher>> getAllVouchers() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('vouchers', orderBy: 'date DESC');
+    return maps.map((m) => Voucher.fromMap(m)).toList();
+  }
+
+  static Future<void> addVoucher(Voucher voucher) async {
+    final db = await database;
+    if (voucher.shiftId <= 0) voucher.shiftId = await getCurrentShiftId();
+    await db.insert('vouchers', voucher.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ==================== المستخدمين والصلاحيات ====================
+  static Future<List<AppUser>> getAllUsers() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('users');
+    return maps.map((m) => AppUser.fromMap(m)).toList();
+  }
+
+  static Future<void> saveUser(AppUser user) async {
+    final db = await database;
+    await db.insert('users', user.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> deleteUser(String id) async {
+    final db = await database;
+    await db.delete('users', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ==================== التقارير المالية والإحصائيات ====================
+  static Future<double> getTotalSales() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT SUM(totalAmount) as total FROM invoices WHERE invoiceType = ?', ['sale']);
+    if (res.isNotEmpty && res.first['total'] != null) {
+      return (res.first['total'] as num).toDouble();
+    }
+    return 0.0;
+  }
+
+  static Future<double> getTotalPurchases() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT SUM(totalAmount) as total FROM purchase_invoices');
+    if (res.isNotEmpty && res.first['total'] != null) {
+      return (res.first['total'] as num).toDouble();
+    }
+    return 0.0;
+  }
+
+  static Future<double> getSalesCost() async {
+    return 0.0; // يمكن تعديلها حسب رغبتك لحساب التكلفة الفعلية
+  }
+
+  static Future<double> getTotalRevenues() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT SUM(amount) as total FROM vouchers WHERE voucherType = 'سند قبض'");
+    if (res.isNotEmpty && res.first['total'] != null) {
+      return (res.first['total'] as num).toDouble();
+    }
+    return 0.0;
+  }
+
+  static Future<double> getTotalExpenses() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT SUM(amount) as total FROM vouchers WHERE voucherType = 'سند صرف' OR voucherType = 'مصروفات'");
+    if (res.isNotEmpty && res.first['total'] != null) {
+      return (res.first['total'] as num).toDouble();
+    }
+    return 0.0;
+  }
+
+  static Future<double> getSuppliersTotalBalance() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT SUM(balance) as total FROM suppliers');
+    if (res.isNotEmpty && res.first['total'] != null) {
+      return (res.first['total'] as num).toDouble();
+    }
+    return 0.0;
+  }
+
+  static Future<double> getCustomersTotalBalance() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT SUM(balance) as total FROM customers');
+    if (res.isNotEmpty && res.first['total'] != null) {
+      return (res.first['total'] as num).toDouble();
+    }
+    return 0.0;
+  }
+
+  static Future<double> getMainVaultBalance() async {
+    final sales = await getTotalSales();
+    final revenues = await getTotalRevenues();
+    final expenses = await getTotalExpenses();
+    return sales + revenues - expenses;
+  }
+
+  static Future<double> getSalesReturnsTotal() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT SUM(totalAmount) as total FROM return_invoices');
+    if (res.isNotEmpty && res.first['total'] != null) {
+      return (res.first['total'] as num).toDouble();
+    }
+    return 0.0;
+  }
+
+  static Future<double> getPurchasesReturnsTotal() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT SUM(totalAmount) as total FROM purchase_return_invoices');
+    if (res.isNotEmpty && res.first['total'] != null) {
+      return (res.first['total'] as num).toDouble();
+    }
+    return 0.0;
+  }
+
+  // ==================== الملاحظات وطرق الدفع والطابعات ====================
+  static Future<List<Map<String, dynamic>>> getPreparationNotes() async {
+    final db = await database;
+    return await db.query('prep_notes');
+  }
+
+  static Future<void> addPreparationNote(String note) async {
+    final db = await database;
+    await db.insert('prep_notes', {'id': DateTime.now().millisecondsSinceEpoch.toString(), 'note': note});
+  }
+
+  static Future<List<Map<String, dynamic>>> getPaymentMethods() async {
+    final db = await database;
+    return await db.query('payment_methods');
+  }
+
+  static Future<List<Map<String, dynamic>>> getUnclosedInvoices() async {
+    final db = await database;
+    return await db.query('invoices', where: 'isClosed = 0');
+  }
+
+  static Future<List<Map<String, dynamic>>> getUnclosedVouchers() async {
+    final db = await database;
+    return await db.query('vouchers', where: 'isClosed = 0');
+  }
+
+  static Future<void> resetAllRecordsAndBalances() async {
+    final db = await database;
+    await db.delete('invoices');
+    await db.delete('invoice_items');
+    await db.delete('return_invoices');
+    await db.delete('return_invoice_items');
+    await db.delete('purchase_invoices');
+    await db.delete('purchase_invoice_items');
+    await db.delete('purchase_return_invoices');
+    await db.delete('purchase_return_invoice_items');
+    await db.delete('vouchers');
+    await db.delete('customer_transactions');
+    await db.delete('supplier_transactions');
+    await db.update('customers', {'balance': 0.0});
+    await db.update('suppliers', {'balance': 0.0});
+    await db.update('products', {'quantity': 0.0});
+  }
+
+  static Future<void> resetFullSystemToDefault() async {
+    final db = await database;
+    await db.delete('invoices');
+    await db.delete('invoice_items');
+    await db.delete('return_invoices');
+    await db.delete('return_invoice_items');
+    await db.delete('purchase_invoices');
+    await db.delete('purchase_invoice_items');
+    await db.delete('purchase_return_invoices');
+    await db.delete('purchase_return_invoice_items');
+    await db.delete('vouchers');
+    await db.delete('customers');
+    await db.delete('suppliers');
+    await db.delete('products');
+    await db.delete('categories');
+    
+    // إعادة إنشاء العميل النقدي الافتراضي
+    await db.insert('customers', Customer(id: 'cash_default', name: 'عميل نقدي', phone: '', balance: 0.0).toMap());
   }
 
   // ==================== النسخ الاحتياطي ====================
