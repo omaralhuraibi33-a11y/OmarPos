@@ -218,18 +218,9 @@ class _PosScreenState extends State<PosScreen> {
   void _showInvoicesHistoryDialog() async {
     final salesInvoices = await DBHelper.getAllInvoices();
     final returnInvoices = await DBHelper.getAllReturnInvoices();
-    
-    // دمج القائمتين مع تمييز النوع
-    List<Map<String, dynamic>> combinedList = [];
-    for (var inv in salesInvoices) {
-      combinedList.add({'invoice': inv, 'isReturn': false});
-    }
-    for (var inv in returnInvoices) {
-      combinedList.add({'invoice': inv, 'isReturn': true});
-    }
 
-    // ترتيب تنازلي حسب التاريخ
-    combinedList.sort((a, b) => (b['invoice'] as Invoice).date.compareTo((a['invoice'] as Invoice).date));
+    salesInvoices.sort((a, b) => b.date.compareTo(a.date));
+    returnInvoices.sort((a, b) => b.date.compareTo(a.date));
 
     if (!mounted) return;
 
@@ -238,282 +229,368 @@ class _PosScreenState extends State<PosScreen> {
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          String searchQuery = '';
-          return Dialog(
-            backgroundColor: isDark ? const Color(0xFF1E1E2C) : Colors.white,
-            insetPadding: const EdgeInsets.all(12),
+      builder: (ctx) => DefaultTabController(
+        length: 2,
+        child: StatefulBuilder(
+          builder: (context, setDialogState) {
+            String salesSearchQuery = '';
+            String returnsSearchQuery = '';
+
+            return Dialog(
+              backgroundColor: isDark ? const Color(0xFF1E1E2C) : Colors.white,
+              insetPadding: const EdgeInsets.all(12),
+              child: Container(
+                width: double.maxFinite,
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.refresh, color: textColor),
+                          tooltip: 'تحديث السجلات',
+                          onPressed: () async {
+                            final freshSales = await DBHelper.getAllInvoices();
+                            final freshReturns = await DBHelper.getAllReturnInvoices();
+                            freshSales.sort((a, b) => b.date.compareTo(a.date));
+                            freshReturns.sort((a, b) => b.date.compareTo(a.date));
+                            setDialogState(() {
+                              salesInvoices.clear();
+                              salesInvoices.addAll(freshSales);
+                              returnInvoices.clear();
+                              returnInvoices.addAll(freshReturns);
+                            });
+                          },
+                        ),
+                        Text('سجل الفواتير والمرتجعات', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 18)),
+                        IconButton(
+                          icon: Icon(Icons.arrow_forward, color: textColor),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: TabBar(
+                        indicator: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.blue.shade800,
+                        ),
+                        labelColor: Colors.white,
+                        unselectedLabelColor: textColor,
+                        tabs: [
+                          Tab(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.receipt, size: 18),
+                                const SizedBox(width: 6),
+                                Text('فواتير المبيعات (${salesInvoices.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                          Tab(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.assignment_return, size: 18),
+                                const SizedBox(width: 6),
+                                Text('سجل المرتجعات (${returnInvoices.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          Column(
+                            children: [
+                              TextField(
+                                onChanged: (val) => setDialogState(() => salesSearchQuery = val),
+                                style: TextStyle(color: textColor),
+                                decoration: InputDecoration(
+                                  hintText: 'بحث برقم فاتورة المبيعات...',
+                                  hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
+                                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                                  filled: true,
+                                  fillColor: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: Builder(
+                                  builder: (context) {
+                                    final filteredSales = salesInvoices.where((inv) {
+                                      if (salesSearchQuery.isEmpty) return true;
+                                      return inv.id.toLowerCase().contains(salesSearchQuery.toLowerCase());
+                                    }).toList();
+
+                                    if (filteredSales.isEmpty) {
+                                      return Center(child: Text('لا توجد مبيعات مطابقة', style: TextStyle(color: textColor)));
+                                    }
+
+                                    return ListView.builder(
+                                      itemCount: filteredSales.length,
+                                      itemBuilder: (context, index) {
+                                        final inv = filteredSales[index];
+                                        final formattedId = 'INV-${inv.id.padLeft(6, '0')}';
+                                        return _buildInvoiceCardItem(context, inv, formattedId, false, isDark, textColor);
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            children: [
+                              TextField(
+                                onChanged: (val) => setDialogState(() => returnsSearchQuery = val),
+                                style: TextStyle(color: textColor),
+                                decoration: InputDecoration(
+                                  hintText: 'بحث برقم سند المرتجع...',
+                                  hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
+                                  prefixIcon: const Icon(Icons.search, color: Colors.orange),
+                                  filled: true,
+                                  fillColor: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: Builder(
+                                  builder: (context) {
+                                    final filteredReturns = returnInvoices.where((inv) {
+                                      if (returnsSearchQuery.isEmpty) return true;
+                                      return inv.id.toLowerCase().contains(returnsSearchQuery.toLowerCase());
+                                    }).toList();
+
+                                    if (filteredReturns.isEmpty) {
+                                      return Center(child: Text('لا توجد مرتجعات مطابقة', style: TextStyle(color: textColor)));
+                                    }
+
+                                    return ListView.builder(
+                                      itemCount: filteredReturns.length,
+                                      itemBuilder: (context, index) {
+                                        final inv = filteredReturns[index];
+                                        final formattedId = 'RET-${inv.id.padLeft(6, '0')}';
+                                        return _buildInvoiceCardItem(context, inv, formattedId, true, isDark, textColor);
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInvoiceCardItem(BuildContext context, Invoice inv, String formattedId, bool isReturn, bool isDark, Color textColor) {
+    return InkWell(
+      onTap: () async {
+        final items = isReturn 
+            ? await DBHelper.getReturnInvoiceItems(inv.id)
+            : await DBHelper.getInvoiceItems(inv.id);
+        if (!context.mounted) return;
+        
+        showDialog(
+          context: context,
+          builder: (c) => Dialog(
+            insetPadding: const EdgeInsets.all(10),
             child: Container(
-              width: double.maxFinite,
               padding: const EdgeInsets.all(12),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      Text('$formattedId تفاصيل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
                       IconButton(
-                        icon: Icon(Icons.refresh, color: textColor),
+                        icon: Icon(Icons.print, color: textColor),
                         onPressed: () async {
-                          final freshSales = await DBHelper.getAllInvoices();
-                          final freshReturns = await DBHelper.getAllReturnInvoices();
-                          setDialogState(() {
-                            combinedList.clear();
-                            for (var inv in freshSales) {
-                              combinedList.add({'invoice': inv, 'isReturn': false});
-                            }
-                            for (var inv in freshReturns) {
-                              combinedList.add({'invoice': inv, 'isReturn': true});
-                            }
-                            combinedList.sort((a, b) => (b['invoice'] as Invoice).date.compareTo((a['invoice'] as Invoice).date));
-                          });
+                          final cartItems = items.map((i) => CartItem(
+                            product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
+                            quantity: i.quantity,
+                            unitPrice: i.price,
+                            preparationNotes: i.notes,
+                          )).toList();
+
+                          await _printReceiptDirect(
+                            invoiceId: formattedId,
+                            paymentMethod: inv.paymentType,
+                            customCart: cartItems,
+                            customerName: inv.customerName,
+                            customTotal: inv.totalAmount,
+                            isReturn: isReturn,
+                          );
                         },
                       ),
-                      Text('سجل الفواتير والمرتجعات', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 18)),
-                      IconButton(
-                        icon: Icon(Icons.arrow_forward, color: textColor),
-                        onPressed: () => Navigator.pop(ctx),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
+                              const SizedBox(width: 4),
+                              Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
+                          child: Row(
+                            children: [
+                              Icon(isReturn ? Icons.assignment_return : Icons.check_circle, size: 16, color: isReturn ? Colors.orange : Colors.green),
+                              const SizedBox(width: 4),
+                              Text(isReturn ? 'مرتجع معتمد' : 'بيع معتمد', style: TextStyle(fontSize: 12, color: textColor)),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  TextField(
-                    onChanged: (val) {
-                      setDialogState(() {
-                        searchQuery = val;
-                      });
-                    },
-                    style: TextStyle(color: textColor),
-                    decoration: InputDecoration(
-                      hintText: 'بحث برقم الفاتورة أو المرتجع',
-                      hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                      filled: true,
-                      fillColor: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
                   Expanded(
-                    child: Builder(
-                      builder: (context) {
-                        final filteredList = combinedList.where((item) {
-                          if (searchQuery.isEmpty) return true;
-                          final inv = item['invoice'] as Invoice;
-                          return inv.id.toLowerCase().contains(searchQuery.toLowerCase());
-                        }).toList();
-
-                        if (filteredList.isEmpty) {
-                          return Center(child: Text('لا توجد سجلات مطابقة', style: TextStyle(color: textColor)));
-                        }
-
-                        return ListView.builder(
-                          itemCount: filteredList.length,
-                          itemBuilder: (context, index) {
-                            final mapItem = filteredList[index];
-                            final inv = mapItem['invoice'] as Invoice;
-                            final isReturn = mapItem['isReturn'] as bool;
-                            final formattedId = isReturn 
-                                ? 'RET-${inv.id.padLeft(6, '0')}' 
-                                : 'INV-${inv.id.padLeft(6, '0')}';
-
-                            return InkWell(
-                              onTap: () async {
-                                final items = isReturn 
-                                    ? await DBHelper.getReturnInvoiceItems(inv.id)
-                                    : await DBHelper.getInvoiceItems(inv.id);
-                                if (!context.mounted) return;
-                                
-                                showDialog(
-                                  context: context,
-                                  builder: (c) => Dialog(
-                                    insetPadding: const EdgeInsets.all(10),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text('$formattedId تفاصيل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
-                                              IconButton(
-                                                icon: Icon(Icons.print, color: textColor),
-                                                onPressed: () async {
-                                                  final cartItems = items.map((i) => CartItem(
-                                                    product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
-                                                    quantity: i.quantity,
-                                                    unitPrice: i.price,
-                                                    preparationNotes: i.notes,
-                                                  )).toList();
-
-                                                  await _printReceiptDirect(
-                                                    invoiceId: formattedId,
-                                                    paymentMethod: inv.paymentType,
-                                                    customCart: cartItems,
-                                                    customerName: inv.customerName,
-                                                    customTotal: inv.totalAmount,
-                                                    isReturn: isReturn,
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Container(
-                                                  padding: const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                                                  child: Row(
-                                                    children: [
-                                                      const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
-                                                      const SizedBox(width: 4),
-                                                      Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Container(
-                                                  padding: const EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                                                  child: Row(
-                                                    children: [
-                                                      Icon(isReturn ? Icons.assignment_return : Icons.check_circle, size: 16, color: isReturn ? Colors.orange : Colors.green),
-                                                      const SizedBox(width: 4),
-                                                      Text(isReturn ? 'مرتجع معتمد' : 'بيع معتمد', style: TextStyle(fontSize: 12, color: textColor)),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 10),
-                                          Expanded(
-                                            child: ListView.builder(
-                                              shrinkWrap: true,
-                                              itemCount: items.length,
-                                              itemBuilder: (_, i) {
-                                                final itm = items[i];
-                                                return Card(
-                                                  margin: const EdgeInsets.symmetric(vertical: 4),
-                                                  child: Padding(
-                                                    padding: const EdgeInsets.all(10.0),
-                                                    child: Row(
-                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                      children: [
-                                                        Column(
-                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                          children: [
-                                                            Text(itm.productName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
-                                                            Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
-                                                          ],
-                                                        ),
-                                                        Text(_formatNum(itm.total), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isReturn ? Colors.orange : Colors.green)),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(c),
-                                            child: Text('إغلاق', style: TextStyle(fontSize: 15, color: textColor)),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(vertical: 6),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: isReturn 
-                                      ? (isDark ? const Color(0xFF332211) : Colors.orange.shade900)
-                                      : (isDark ? const Color(0xFF252538) : Colors.blue.shade900),
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: Row(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: items.length,
+                      itemBuilder: (_, i) {
+                        final itm = items[i];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(10.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: (isReturn ? Colors.orange.shade700 : Colors.blue.shade700).withOpacity(0.4),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Icon(isReturn ? Icons.assignment_return : Icons.receipt, color: isReturn ? Colors.orangeAccent : Colors.cyanAccent, size: 24),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Text(formattedId, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                                              const SizedBox(width: 8),
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: isReturn ? Colors.orange.shade800 : Colors.teal.shade700,
-                                                  borderRadius: BorderRadius.circular(6),
-                                                ),
-                                                child: Text(isReturn ? 'مرتجع' : 'بيع', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            children: [
-                                              const Icon(Icons.access_time, color: Colors.white54, size: 13),
-                                              const SizedBox(width: 4),
-                                              Text(inv.date, style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                                              const SizedBox(width: 10),
-                                              const Icon(Icons.payment, color: Colors.white54, size: 13),
-                                              const SizedBox(width: 4),
-                                              Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        const Text('الإجمالي', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          _formatNum(inv.totalAmount),
-                                          style: TextStyle(
-                                            color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                    Text(itm.productName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
+                                    Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
                                   ],
                                 ),
-                              ),
-                            );
-                          },
+                                Text(_formatNum(itm.total), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isReturn ? Colors.orange : Colors.green)),
+                              ],
+                            ),
+                          ),
                         );
                       },
                     ),
                   ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(c),
+                    child: Text('إغلاق', style: TextStyle(fontSize: 15, color: textColor)),
+                  ),
                 ],
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isReturn 
+              ? (isDark ? const Color(0xFF332211) : Colors.orange.shade900)
+              : (isDark ? const Color(0xFF252538) : Colors.blue.shade900),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (isReturn ? Colors.orange.shade700 : Colors.blue.shade700).withOpacity(0.4),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(isReturn ? Icons.assignment_return : Icons.receipt, color: isReturn ? Colors.orangeAccent : Colors.cyanAccent, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(formattedId, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isReturn ? Colors.orange.shade800 : Colors.teal.shade700,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(isReturn ? 'مرتجع' : 'بيع', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time, color: Colors.white54, size: 13),
+                      const SizedBox(width: 4),
+                      Text(inv.date, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                      const SizedBox(width: 10),
+                      const Icon(Icons.payment, color: Colors.white54, size: 13),
+                      const SizedBox(width: 4),
+                      Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const Text('الإجمالي', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                const SizedBox(height: 2),
+                Text(
+                  _formatNum(inv.totalAmount),
+                  style: TextStyle(
+                    color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -771,9 +848,7 @@ class _PosScreenState extends State<PosScreen> {
     final customerId = _selectedCustomer?.id ?? 'cash_default';
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     
-    // التوجيه الصحيح بالكامل بناءً على وضع البيع أو وضع المرتجع (جدول مستقل كلياً)
     if (_isReturnMode) {
-      // 1. جلب فواتير المرتجعات فقط لتوليد رقم تسلسلي مستقل تماماً يبدأ من 1 وصاعداً
       final returnInvoices = await DBHelper.getAllReturnInvoices();
       int maxReturnId = 0;
       for (var inv in returnInvoices) {
@@ -797,7 +872,6 @@ class _PosScreenState extends State<PosScreen> {
         isClosed: false,
       );
       
-      // حفظ في جدول المرتجعات المستقل
       await DBHelper.saveReturnInvoice(returnInvoice);
 
       for (var item in cartSnapshot) {
@@ -812,8 +886,6 @@ class _PosScreenState extends State<PosScreen> {
           notes: item.preparationNotes,
         );
         await DBHelper.saveReturnInvoiceItem(returnItem);
-
-        // مرتجع المبيعات يعيد الكمية للمخزن (+)
         await DBHelper.updateProductStock(item.product.id, item.quantity);
       }
 
@@ -840,7 +912,6 @@ class _PosScreenState extends State<PosScreen> {
       }
 
     } else {
-      // 1. جلب فواتير المبيعات فقط لتوليد رقم تسلسلي مستقل تماماً يبدأ من 1 وصاعداً
       final salesInvoices = await DBHelper.getAllInvoices();
       int maxSaleId = 0;
       for (var inv in salesInvoices) {
@@ -864,7 +935,6 @@ class _PosScreenState extends State<PosScreen> {
         isClosed: false,
       );
       
-      // حفظ في جدول المبيعات
       await DBHelper.saveInvoice(saleInvoice);
 
       for (var item in cartSnapshot) {
@@ -879,8 +949,6 @@ class _PosScreenState extends State<PosScreen> {
           notes: item.preparationNotes,
         );
         await DBHelper.saveInvoiceItem(invoiceItem);
-
-        // مبيعات البيع تخفض الكمية من المخزن (-)
         await DBHelper.updateProductStock(item.product.id, -item.quantity);
       }
 
@@ -936,7 +1004,7 @@ class _PosScreenState extends State<PosScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: 'سجل الفواتير السابقة',
+            tooltip: 'سجل الفواتير والمرتجعات',
             icon: const Icon(Icons.receipt_long, color: Colors.amberAccent),
             onPressed: _showInvoicesHistoryDialog,
           ),
