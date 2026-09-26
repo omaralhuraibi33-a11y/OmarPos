@@ -236,8 +236,7 @@ class _PosScreenState extends State<PosScreen> {
             String salesSearchQuery = '';
             String returnsSearchQuery = '';
             
-            // فلاتر التواريخ (الافتراضي: اليوم)
-            String dateFilterType = 'today'; // options: today, yesterday, week, month, year, custom
+            String dateFilterType = 'today'; 
             DateTime? customStartDate;
             DateTime? customEndDate;
 
@@ -326,7 +325,6 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                     const SizedBox(height: 8),
                     
-                    // شريط الفلترة الزمنية
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
@@ -538,17 +536,20 @@ class _PosScreenState extends State<PosScreen> {
           builder: (c) => Dialog(
             insetPadding: const EdgeInsets.all(10),
             child: Container(
+              width: double.maxFinite,
               padding: const EdgeInsets.all(12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // العنوان وزر الطباعة
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('$formattedId تفاصيل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
                       IconButton(
                         icon: Icon(Icons.print, color: textColor),
+                        tooltip: 'طباعة الفاتورة',
                         onPressed: () async {
                           final cartItems = items.map((i) => CartItem(
                             product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
@@ -569,39 +570,63 @@ class _PosScreenState extends State<PosScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
-                              const SizedBox(width: 4),
-                              Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
-                            ],
-                          ),
+                  const Divider(),
+                  
+                  // 1. رأس الفاتورة (طريقة الدفع، الحالة، الوقت، التاريخ، والعميل)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
+                                const SizedBox(width: 4),
+                                Text('الدفع: ${inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل'}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor)),
+                              ],
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isReturn ? Colors.orange.shade800 : Colors.green.shade700,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(isReturn ? 'مرتجع معتمد' : 'بيع معتمد', style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                          child: Row(
-                            children: [
-                              Icon(isReturn ? Icons.assignment_return : Icons.check_circle, size: 16, color: isReturn ? Colors.orange : Colors.green),
-                              const SizedBox(width: 4),
-                              Text(isReturn ? 'مرتجع معتمد' : 'بيع معتمد', style: TextStyle(fontSize: 12, color: textColor)),
-                            ],
-                          ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text('الوقت والتاريخ: ${inv.date}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.person, size: 16, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text('العميل: ${inv.customerName}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 10),
+                  
+                  // 2. المنتصف (قائمة الأصناف)
+                  const Text('قائمة الأصناف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 4),
                   Expanded(
                     child: ListView.builder(
                       shrinkWrap: true,
@@ -611,18 +636,28 @@ class _PosScreenState extends State<PosScreen> {
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 4),
                           child: Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(itm.productName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
-                                    Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+                                    Expanded(
+                                      child: Text(itm.productName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
+                                    ),
+                                    Text(_formatNum(itm.total), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isReturn ? Colors.orange : Colors.green)),
                                   ],
                                 ),
-                                Text(_formatNum(itm.total), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isReturn ? Colors.orange : Colors.green)),
+                                const SizedBox(height: 2),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+                                    if (itm.notes.isNotEmpty)
+                                      Text('ملاحظات: ${itm.notes}', style: const TextStyle(fontSize: 11, color: Colors.deepOrange, fontStyle: FontStyle.italic)),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
@@ -630,6 +665,32 @@ class _PosScreenState extends State<PosScreen> {
                       },
                     ),
                   ),
+                  const SizedBox(height: 8),
+
+                  // 3. أسفل الصفحة (الإجمالي)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: isReturn ? Colors.orange.shade900.withOpacity(0.2) : Colors.blue.shade900.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('الإجمالي العام:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                        Text(
+                          _formatNum(inv.totalAmount),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
                   TextButton(
                     onPressed: () => Navigator.pop(c),
                     child: Text('إغلاق', style: TextStyle(fontSize: 15, color: textColor)),
