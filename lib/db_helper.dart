@@ -200,6 +200,55 @@ class Customer {
   }
 }
 
+// ==================== نموذج حركة العميل ====================
+class CustomerTransaction {
+  String id;
+  String customerId;
+  String type;
+  String date;
+  double credit;
+  double debit;
+  double runningBalance;
+  String notes;
+
+  CustomerTransaction({
+    required this.id,
+    required this.customerId,
+    required this.type,
+    required this.date,
+    required this.credit,
+    required this.debit,
+    required this.runningBalance,
+    this.notes = '',
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'customerId': customerId,
+      'type': type,
+      'date': date,
+      'credit': credit,
+      'debit': debit,
+      'runningBalance': runningBalance,
+      'notes': notes,
+    };
+  }
+
+  factory CustomerTransaction.fromMap(Map<String, dynamic> map) {
+    return CustomerTransaction(
+      id: map['id'],
+      customerId: map['customerId'],
+      type: map['type'],
+      date: map['date'],
+      credit: (map['credit'] as num).toDouble(),
+      debit: (map['debit'] as num).toDouble(),
+      runningBalance: (map['runningBalance'] as num).toDouble(),
+      notes: map['notes'] ?? '',
+    );
+  }
+}
+
 // ==================== نموذج المورد ====================
 class Supplier {
   String id;
@@ -480,7 +529,6 @@ class DBHelper {
           )
         ''');
 
-        // جداول المشتريات والمرتجع المستقلة
         await db.execute('''
           CREATE TABLE purchase_invoices(
             id TEXT PRIMARY KEY,
@@ -676,7 +724,6 @@ class DBHelper {
           )
         ''');
 
-        // البيانات الافتراضية
         final allPerms = {for (var m in allModules) m: true};
         final cashierPerms = {for (var m in allModules) m: (m == 'نقطة البيع' || m == 'إغلاق الصندوق / الوردية')};
         final supervisorPerms = {for (var m in allModules) m: (m != 'إدارة المستخدمين' && m != 'إعدادات النظام')};
@@ -764,6 +811,7 @@ class DBHelper {
     double totalExpenses = 0.0,
     double transferredToMainVault = 0.0,
     int? shiftNumber,
+    double? expectedCash,
   }) async {
     final db = await database;
     int currentShiftId = shiftNumber ?? await getCurrentShiftId();
@@ -961,6 +1009,12 @@ class DBHelper {
     return maps.map((m) => Product.fromMap(m)).toList();
   }
 
+  static Future<List<Product>> getActivePOSProducts() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('products', where: 'isActive = 1');
+    return maps.map((m) => Product.fromMap(m)).toList();
+  }
+
   static Future<void> saveProduct(Product product) async {
     final db = await database;
     await db.insert('products', product.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
@@ -980,6 +1034,12 @@ class DBHelper {
   static Future<List<Category>> getAllCategories() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('categories');
+    return maps.map((m) => Category.fromMap(m)).toList();
+  }
+
+  static Future<List<Category>> getActivePOSCategories() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('categories', where: 'isActive = 1');
     return maps.map((m) => Category.fromMap(m)).toList();
   }
 
@@ -1132,6 +1192,12 @@ class DBHelper {
     return maps.map((m) => AppUser.fromMap(m)).toList();
   }
 
+  static Future<List<AppUser>> getLoginUsers() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('users', where: 'showInLogin = 1');
+    return maps.map((m) => AppUser.fromMap(m)).toList();
+  }
+
   static Future<void> saveUser(AppUser user) async {
     final db = await database;
     await db.insert('users', user.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
@@ -1162,7 +1228,7 @@ class DBHelper {
   }
 
   static Future<double> getSalesCost() async {
-    return 0.0; // يمكن تعديلها حسب رغبتك لحساب التكلفة الفعلية
+    return 0.0;
   }
 
   static Future<double> getTotalRevenues() async {
@@ -1242,14 +1308,16 @@ class DBHelper {
     return await db.query('payment_methods');
   }
 
-  static Future<List<Map<String, dynamic>>> getUnclosedInvoices() async {
+  static Future<List<Invoice>> getUnclosedInvoices() async {
     final db = await database;
-    return await db.query('invoices', where: 'isClosed = 0');
+    final List<Map<String, dynamic>> maps = await db.query('invoices', where: 'isClosed = 0');
+    return maps.map((m) => Invoice.fromMap(m)).toList();
   }
 
-  static Future<List<Map<String, dynamic>>> getUnclosedVouchers() async {
+  static Future<List<Voucher>> getUnclosedVouchers() async {
     final db = await database;
-    return await db.query('vouchers', where: 'isClosed = 0');
+    final List<Map<String, dynamic>> maps = await db.query('vouchers', where: 'isClosed = 0');
+    return maps.map((m) => Voucher.fromMap(m)).toList();
   }
 
   static Future<void> resetAllRecordsAndBalances() async {
@@ -1286,7 +1354,6 @@ class DBHelper {
     await db.delete('products');
     await db.delete('categories');
     
-    // إعادة إنشاء العميل النقدي الافتراضي
     await db.insert('customers', Customer(id: 'cash_default', name: 'عميل نقدي', phone: '', balance: 0.0).toMap());
   }
 
