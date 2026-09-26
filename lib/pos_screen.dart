@@ -1,4 +1,4 @@
-import 'dart:convert';
+Import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
@@ -6,33 +6,33 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'db_helper.dart';
 
 class CartItem {
-  final Product product;
-  double quantity;
-  double unitPrice;
+  Final Product product;
+  Double quantity;
+  Double unitPrice;
   String preparationNotes;
 
   CartItem({
-    required this.product,
-    this.quantity = 1.0,
-    required this.unitPrice,
-    this.preparationNotes = '',
+    Required this.product,
+    This.quantity = 1.0,
+    Required this.unitPrice,
+    This.preparationNotes = '',
   });
 
-  double get total => quantity * unitPrice;
+  Double get total => quantity * unitPrice;
 }
 
 class PosScreen extends StatefulWidget {
-  const PosScreen({super.key});
+  Const PosScreen({super.key});
   @override
   State<PosScreen> createState() => _PosScreenState();
 }
 
 class _PosScreenState extends State<PosScreen> {
-  bool _isTouchMode = true;
-  bool _isPrinterConnected = true;
-  bool _isInvoiceExpanded = false;
-  bool _isProductsFullScreen = false;
-  bool _isReturnMode = false;
+  Bool _isTouchMode = true;
+  Bool _isPrinterConnected = true;
+  Bool _isInvoiceExpanded = false;
+  Bool _isProductsFullScreen = false;
+  Bool _isReturnMode = false;
 
   List<Category> _categories = [];
   List<Product> _allProducts = [];
@@ -43,37 +43,37 @@ class _PosScreenState extends State<PosScreen> {
 
   Customer? _selectedCustomer;
   String _selectedCategoryId = 'all';
-  final TextEditingController _searchController = TextEditingController();
+  Final TextEditingController _searchController = TextEditingController();
 
   List<CartItem> _cart = [];
-  bool _isLoading = true;
+  Bool _isLoading = true;
 
   String _mainButtonSizeSetting = 'وسط';
   String _posItemSizeSetting = 'وسط';
 
   @override
-  void initState() {
-    super.initState();
+  Void initState() {
+    Super.initState();
     _loadData();
   }
 
   Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-    final cats = await DBHelper.getActivePOSCategories();
-    final prods = await DBHelper.getActivePOSProducts();
-    final custs = await DBHelper.getAllCustomers();
-    final notes = await DBHelper.getPreparationNotes();
-    final dbPaymentMethods = await DBHelper.getPaymentMethods();
-    final defaultCust = await DBHelper.getOrCreateDefaultCustomer();
+    SetState(() => _isLoading = true);
+    Final cats = await DBHelper.getActivePOSCategories();
+    Final prods = await DBHelper.getActivePOSProducts();
+    Final custs = await DBHelper.getAllCustomers();
+    Final notes = await DBHelper.getPreparationNotes();
+    Final dbPaymentMethods = await DBHelper.getPaymentMethods();
+    Final defaultCust = await DBHelper.getOrCreateDefaultCustomer();
 
-    final savedMainBtnSize = await DBHelper.getSetting('main_button_size');
-    final savedPosItemSize = await DBHelper.getSetting('pos_item_size');
+    Final savedMainBtnSize = await DBHelper.getSetting('main_button_size');
+    Final savedPosItemSize = await DBHelper.getSetting('pos_item_size');
 
-    if (!custs.any((c) => c.id == defaultCust.id)) {
-      custs.insert(0, defaultCust);
+    If (!custs.any((c) => c.id == defaultCust.id)) {
+      Custs.insert(0, defaultCust);
     }
 
-    setState(() {
+    SetState(() {
       _categories = cats;
       _allProducts = prods;
       _filteredProducts = prods;
@@ -81,158 +81,158 @@ class _PosScreenState extends State<PosScreen> {
       _selectedCustomer = custs.firstWhere((c) => c.id == defaultCust.id, orElse: () => defaultCust);
       _prepNotesList = notes.isNotEmpty ? notes : ['بدون شطة', 'زيادة صوص', 'بدون ثوم', 'سفري', 'محلي'];
       _paymentMethods = dbPaymentMethods.isNotEmpty ? dbPaymentMethods : ['نقدي', 'آجل'];
-      if (savedMainBtnSize != null) _mainButtonSizeSetting = savedMainBtnSize;
-      if (savedPosItemSize != null) _posItemSizeSetting = savedPosItemSize;
+      If (savedMainBtnSize != null) _mainButtonSizeSetting = savedMainBtnSize;
+      If (savedPosItemSize != null) _posItemSizeSetting = savedPosItemSize;
       _isLoading = false;
     });
   }
 
   Future<void> _printReceiptDirect({
-    required String invoiceId,
-    required String paymentMethod,
+    Required String invoiceId,
+    Required String paymentMethod,
     List<CartItem>? customCart,
     String? customerName,
-    double? customTotal,
-    bool isReturn = false,
+    Double? customTotal,
+    Bool isReturn = false,
   }) async {
-    if (!_isPrinterConnected) return;
+    If (!_isPrinterConnected) return;
 
-    try {
-      final savedPrintersJson = await DBHelper.getSetting('printers_list');
-      if (savedPrintersJson == null || savedPrintersJson.isEmpty) return; 
+    Try {
+      Final savedPrintersJson = await DBHelper.getSetting('printers_list');
+      If (savedPrintersJson == null || savedPrintersJson.isEmpty) return; 
 
-      final List<dynamic> decoded = jsonDecode(savedPrintersJson);
+      Final List<dynamic> decoded = jsonDecode(savedPrintersJson);
       List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
-      if (printers.isEmpty) return;
+      If (printers.isEmpty) return;
 
-      final autoCustomer = await DBHelper.getSetting('auto_customer') == 'true';
-      final autoKitchen = await DBHelper.getSetting('auto_kitchen') == 'true';
+      Final autoCustomer = await DBHelper.getSetting('auto_customer') == 'true';
+      Final autoKitchen = await DBHelper.getSetting('auto_kitchen') == 'true';
 
-      final storeName = await DBHelper.getSetting('store_name') ?? 'متجري';
-      final storePhone = await DBHelper.getSetting('store_phone') ?? '';
-      final taxNumber = await DBHelper.getSetting('tax_number') ?? '';
-      final invoiceFooter = await DBHelper.getSetting('invoice_footer') ?? 'شكرا لزيارتكم';
-      final showItemCount = await DBHelper.getSetting('show_item_count') == 'true';
+      Final storeName = await DBHelper.getSetting('store_name') ?? 'متجري';
+      Final storePhone = await DBHelper.getSetting('store_phone') ?? '';
+      Final taxNumber = await DBHelper.getSetting('tax_number') ?? '';
+      Final invoiceFooter = await DBHelper.getSetting('invoice_footer') ?? 'شكرا لزيارتكم';
+      Final showItemCount = await DBHelper.getSetting('show_item_count') == 'true';
 
-      final activeCart = customCart ?? _cart;
-      final activeTotal = customTotal ?? _totalAmount;
-      final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
+      Final activeCart = customCart ?? _cart;
+      Final activeTotal = customTotal ?? _totalAmount;
+      Final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
 
-      final profile = await CapabilityProfile.load();
+      Final profile = await CapabilityProfile.load();
 
-      for (var printer in printers) {
-        final usage = printer['usage'] ?? 'زبون';
+      For (var printer in printers) {
+        Final usage = printer['usage'] ?? 'زبون';
 
-        if (usage == 'زبون' && !autoCustomer) continue;
-        if (usage == 'مطبخ' && !autoKitchen) continue;
+        If (usage == 'زبون' && !autoCustomer) continue;
+        If (usage == 'مطبخ' && !autoKitchen) continue;
 
-        final paperSizeVal = printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80;
-        final generator = Generator(paperSizeVal, profile);
+        Final paperSizeVal = printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80;
+        Final generator = Generator(paperSizeVal, profile);
 
         List<int> bytes = [];
 
-        if (usage == 'زبون') {
-          bytes += generator.text(storeName, styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
-          if (storePhone.isNotEmpty) {
-            bytes += generator.text('هاتف: $storePhone', styles: const PosStyles(align: PosAlign.center));
+        If (usage == 'زبون') {
+          Bytes += generator.text(storeName, styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
+          If (storePhone.isNotEmpty) {
+            Bytes += generator.text('هاتف: $storePhone', styles: const PosStyles(align: PosAlign.center));
           }
-          if (taxNumber.isNotEmpty) {
-            bytes += generator.text('الرقم الضريبي: $taxNumber', styles: const PosStyles(align: PosAlign.center));
+          If (taxNumber.isNotEmpty) {
+            Bytes += generator.text('الرقم الضريبي: $taxNumber', styles: const PosStyles(align: PosAlign.center));
           }
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+          Bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           
-          if (isReturn) {
-            bytes += generator.text('*** سند مرتجع مبيعات ***', styles: const PosStyles(align: PosAlign.center, bold: true));
+          If (isReturn) {
+            Bytes += generator.text('*** سند مرتجع مبيعات ***', styles: const PosStyles(align: PosAlign.center, bold: true));
           }
 
-          bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.right));
-          bytes += generator.text('العميل: $activeCustomer', styles: const PosStyles(align: PosAlign.right));
-          bytes += generator.text('طريقة الدفع: $paymentMethod', styles: const PosStyles(align: PosAlign.right));
-          bytes += generator.text('التاريخ: ${DateTime.now().toString().split('.')[0]}', styles: const PosStyles(align: PosAlign.right));
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+          Bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.right));
+          Bytes += generator.text('العميل: $activeCustomer', styles: const PosStyles(align: PosAlign.right));
+          Bytes += generator.text('طريقة الدفع: $paymentMethod', styles: const PosStyles(align: PosAlign.right));
+          Bytes += generator.text('التاريخ: ${DateTime.now().toString().split('.')[0]}', styles: const PosStyles(align: PosAlign.right));
+          Bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
 
-          for (var item in activeCart) {
-            bytes += generator.text('${item.product.name} (${item.quantity} x ${item.unitPrice}) = ${_formatNum(item.total)}', styles: const PosStyles(align: PosAlign.right));
-            if (item.preparationNotes.isNotEmpty) {
-              bytes += generator.text('  ملاحظات: ${item.preparationNotes}', styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB));
+          For (var item in activeCart) {
+            Bytes += generator.text('${item.product.name} (${item.quantity} x ${item.unitPrice}) = ${_formatNum(item.total)}', styles: const PosStyles(align: PosAlign.right));
+            If (item.preparationNotes.isNotEmpty) {
+              Bytes += generator.text('  ملاحظات: ${item.preparationNotes}', styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB));
             }
           }
 
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+          Bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           
-          if (showItemCount) {
-            double totalItemsQty = activeCart.fold(0.0, (sum, i) => sum + i.quantity);
-            bytes += generator.text('إجمالي عدد الأصناف: ${_formatNum(totalItemsQty)}', styles: const PosStyles(align: PosAlign.right, bold: true));
+          If (showItemCount) {
+            Double totalItemsQty = activeCart.fold(0.0, (sum, i) => sum + i.quantity);
+            Bytes += generator.text('إجمالي عدد الأصناف: ${_formatNum(totalItemsQty)}', styles: const PosStyles(align: PosAlign.right, bold: true));
           }
 
-          bytes += generator.text('الإجمالي العام: ${_formatNum(activeTotal)}', styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
+          Bytes += generator.text('الإجمالي العام: ${_formatNum(activeTotal)}', styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
           
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-          bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
+          Bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+          Bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
         } else {
-          bytes += generator.text(
-            isReturn ? '--- مرتجع مطبخ ---' : '--- طلب مطبخ ---', 
-            styles: const PosStyles(
-              align: PosAlign.center, 
-              bold: true, 
-              height: PosTextSize.size2,
+          Bytes += generator.text(
+            IsReturn ? '--- مرتجع مطبخ ---' : '--- طلب مطبخ ---', 
+            Styles: const PosStyles(
+              Align: PosAlign.center, 
+              Bold: true, 
+              Height: PosTextSize.size2,
             ),
           );
-          bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-          for (var item in activeCart) {
-            bytes += generator.text('${item.product.name}  x${item.quantity}', styles: const PosStyles(align: PosAlign.right, bold: true));
-            if (item.preparationNotes.isNotEmpty) {
-              bytes += generator.text('  [${item.preparationNotes}]', styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB, bold: true));
+          Bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
+          Bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+          For (var item in activeCart) {
+            Bytes += generator.text('${item.product.name}  x${item.quantity}', styles: const PosStyles(align: PosAlign.right, bold: true));
+            If (item.preparationNotes.isNotEmpty) {
+              Bytes += generator.text('  [${item.preparationNotes}]', styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB, bold: true));
             }
           }
         }
 
-        bytes += generator.feed(2);
-        bytes += generator.cut();
+        Bytes += generator.feed(2);
+        Bytes += generator.cut();
 
-        if (printer['connection'] == 'واي فاي') {
-          final String ip = (printer['ip'] ?? '').trim();
-          if (ip.isNotEmpty) {
-            final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 3));
-            socket.add(bytes);
-            await socket.flush();
-            await socket.close();
+        If (printer['connection'] == 'واي فاي') {
+          Final String ip = (printer['ip'] ?? '').trim();
+          If (ip.isNotEmpty) {
+            Final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 3));
+            Socket.add(bytes);
+            Await socket.flush();
+            Await socket.close();
           }
         } else if (printer['connection'] == 'بلوتوث') {
-          final String mac = (printer['macAddress'] ?? '').trim();
-          if (mac.isNotEmpty) {
-            bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
-            if (connected) {
-              await PrintBluetoothThermal.writeBytes(bytes);
-              await PrintBluetoothThermal.disconnect;
+          Final String mac = (printer['macAddress'] ?? '').trim();
+          If (mac.isNotEmpty) {
+            Bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+            If (connected) {
+              Await PrintBluetoothThermal.writeBytes(bytes);
+              Await PrintBluetoothThermal.disconnect;
             }
           }
         }
       }
     } catch (e) {
-      debugPrint('خطأ في الطباعة المباشرة: $e');
+      DebugPrint('خطأ في الطباعة المباشرة: $e');
     }
   }
 
-  void _showInvoicesHistoryDialog() async {
-    final salesInvoices = await DBHelper.getAllInvoices();
-    final returnInvoices = await DBHelper.getAllReturnInvoices();
+  Void _showInvoicesHistoryDialog() async {
+    Final salesInvoices = await DBHelper.getAllInvoices();
+    Final returnInvoices = await DBHelper.getAllReturnInvoices();
 
-    salesInvoices.sort((a, b) => b.date.compareTo(a.date));
-    returnInvoices.sort((a, b) => b.date.compareTo(a.date));
+    SalesInvoices.sort((a, b) => b.date.compareTo(a.date));
+    ReturnInvoices.sort((a, b) => b.date.compareTo(a.date));
 
-    if (!mounted) return;
+    If (!mounted) return;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    Final isDark = Theme.of(context).brightness == Brightness.dark;
+    Final textColor = isDark ? Colors.white : Colors.black;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => DefaultTabController(
-        length: 2,
-        child: StatefulBuilder(
-          builder: (context, setDialogState) {
+    ShowDialog(
+      Context: context,
+      Builder: (ctx) => DefaultTabController(
+        Length: 2,
+        Child: StatefulBuilder(
+          Builder: (context, setDialogState) {
             String salesSearchQuery = '';
             String returnsSearchQuery = '';
             
@@ -241,180 +241,180 @@ class _PosScreenState extends State<PosScreen> {
             DateTime? customStartDate;
             DateTime? customEndDate;
 
-            bool isDateMatching(String dateStr) {
-              try {
-                final invDate = DateTime.parse(dateStr);
-                final now = DateTime.now();
-                final today = DateTime(now.year, now.month, now.day);
+            Bool isDateMatching(String dateStr) {
+              Try {
+                Final invDate = DateTime.parse(dateStr);
+                Final now = DateTime.now();
+                Final today = DateTime(now.year, now.month, now.day);
 
-                if (dateFilterType == 'today') {
-                  final invDay = DateTime(invDate.year, invDate.month, invDate.day);
-                  return invDay.isAtSameMomentAs(today);
+                If (dateFilterType == 'today') {
+                  Final invDay = DateTime(invDate.year, invDate.month, invDate.day);
+                  Return invDay.isAtSameMomentAs(today);
                 } else if (dateFilterType == 'yesterday') {
-                  final yesterday = today.subtract(const Duration(days: 1));
-                  final invDay = DateTime(invDate.year, invDate.month, invDate.day);
-                  return invDay.isAtSameMomentAs(yesterday);
+                  Final yesterday = today.subtract(const Duration(days: 1));
+                  Final invDay = DateTime(invDate.year, invDate.month, invDate.day);
+                  Return invDay.isAtSameMomentAs(yesterday);
                 } else if (dateFilterType == 'week') {
-                  final weekAgo = today.subtract(const Duration(days: 7));
-                  return invDate.isAfter(weekAgo) || invDate.isAtSameMomentAs(weekAgo);
+                  Final weekAgo = today.subtract(const Duration(days: 7));
+                  Return invDate.isAfter(weekAgo) || invDate.isAtSameMomentAs(weekAgo);
                 } else if (dateFilterType == 'month') {
-                  final monthAgo = today.subtract(const Duration(days: 30));
-                  return invDate.isAfter(monthAgo) || invDate.isAtSameMomentAs(monthAgo);
+                  Final monthAgo = today.subtract(const Duration(days: 30));
+                  Return invDate.isAfter(monthAgo) || invDate.isAtSameMomentAs(monthAgo);
                 } else if (dateFilterType == 'year') {
-                  final yearAgo = today.subtract(const Duration(days: 365));
-                  return invDate.isAfter(yearAgo) || invDate.isAtSameMomentAs(yearAgo);
+                  Final yearAgo = today.subtract(const Duration(days: 365));
+                  Return invDate.isAfter(yearAgo) || invDate.isAtSameMomentAs(yearAgo);
                 } else if (dateFilterType == 'custom') {
-                  if (customStartDate == null || customEndDate == null) return true;
-                  final start = DateTime(customStartDate!.year, customStartDate!.month, customStartDate!.day);
-                  final end = DateTime(customEndDate!.year, customEndDate!.month, customEndDate!.day, 23, 59, 59);
-                  return (invDate.isAfter(start) || invDate.isAtSameMomentAs(start)) &&
+                  If (customStartDate == null || customEndDate == null) return true;
+                  Final start = DateTime(customStartDate!.year, customStartDate!.month, customStartDate!.day);
+                  Final end = DateTime(customEndDate!.year, customEndDate!.month, customEndDate!.day, 23, 59, 59);
+                  Return (invDate.isAfter(start) || invDate.isAtSameMomentAs(start)) &&
                          (invDate.isBefore(end) || invDate.isAtSameMomentAs(end));
                 }
               } catch (_) {}
-              return true;
+              Return true;
             }
 
             String getDateFilterLabel() {
-              switch (dateFilterType) {
-                case 'today': return 'اليوم';
-                case 'yesterday': return 'أمس';
-                case 'week': return 'آخر أسبوع';
-                case 'month': return 'آخر شهر';
-                case 'year': return 'آخر سنة';
-                case 'custom':
-                  if (customStartDate != null && customEndDate != null) {
-                    return '${customStartDate.toString().split(' ')[0]} إلى ${customEndDate.toString().split(' ')[0]}';
+              Switch (dateFilterType) {
+                Case 'today': return 'اليوم';
+                Case 'yesterday': return 'أمس';
+                Case 'week': return 'آخر أسبوع';
+                Case 'month': return 'آخر شهر';
+                Case 'year': return 'آخر سنة';
+                Case 'custom':
+                  If (customStartDate != null && customEndDate != null) {
+                    Return '${customStartDate.toString().split(' ')[0]} إلى ${customEndDate.toString().split(' ')[0]}';
                   }
-                  return 'مخصص';
-                default: return 'الكل';
+                  Return 'مخصص';
+                Default: return 'الكل';
               }
             }
 
-            return Dialog(
-              backgroundColor: isDark ? const Color(0xFF1E1E2C) : Colors.white,
-              insetPadding: const EdgeInsets.all(12),
-              child: Container(
-                width: double.maxFinite,
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
+            Return Dialog(
+              BackgroundColor: isDark ? const Color(0xFF1E1E2C) : Colors.white,
+              InsetPadding: const EdgeInsets.all(12),
+              Child: Container(
+                Width: double.maxFinite,
+                Padding: const EdgeInsets.all(12),
+                Child: Column(
+                  Children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
+                      MainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Children: [
                         IconButton(
-                          icon: Icon(Icons.refresh, color: textColor),
-                          tooltip: 'تحديث السجلات',
-                          onPressed: () async {
-                            final freshSales = await DBHelper.getAllInvoices();
-                            final freshReturns = await DBHelper.getAllReturnInvoices();
-                            freshSales.sort((a, b) => b.date.compareTo(a.date));
-                            freshReturns.sort((a, b) => b.date.compareTo(a.date));
-                            setDialogState(() {
-                              salesInvoices.clear();
-                              salesInvoices.addAll(freshSales);
-                              returnInvoices.clear();
-                              returnInvoices.addAll(freshReturns);
+                          Icon: Icon(Icons.refresh, color: textColor),
+                          Tooltip: 'تحديث السجلات',
+                          OnPressed: () async {
+                            Final freshSales = await DBHelper.getAllInvoices();
+                            Final freshReturns = await DBHelper.getAllReturnInvoices();
+                            FreshSales.sort((a, b) => b.date.compareTo(a.date));
+                            FreshReturns.sort((a, b) => b.date.compareTo(a.date));
+                            SetDialogState(() {
+                              SalesInvoices.clear();
+                              SalesInvoices.addAll(freshSales);
+                              ReturnInvoices.clear();
+                              ReturnInvoices.addAll(freshReturns);
                             });
                           },
                         ),
                         Text('سجل الفواتير والمرتجعات', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 18)),
                         IconButton(
-                          icon: Icon(Icons.arrow_forward, color: textColor),
-                          onPressed: () => Navigator.pop(ctx),
+                          Icon: Icon(Icons.arrow_forward, color: textColor),
+                          OnPressed: () => Navigator.pop(ctx),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    ConstrainedBox(constraints: const BoxConstraints(height: 8)),
                     
                     // شريط الفلترة الزمنية
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(10),
+                      Padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      Decoration: BoxDecoration(
+                        Color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
+                        BorderRadius: BorderRadius.circular(10),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
+                      Child: Row(
+                        MainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Children: [
                           Row(
-                            children: [
-                              const Icon(Icons.filter_list, size: 18, color: Colors.blueAccent),
-                              const SizedBox(width: 6),
+                            Children: [
+                              Const Icon(Icons.filter_list, size: 18, color: Colors.blueAccent),
+                              ConstrainedBox(constraints: const BoxConstraints(width: 6)),
                               Text('الفترة: ', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade800,
-                                  borderRadius: BorderRadius.circular(6),
+                                Padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                Decoration: BoxDecoration(
+                                  Color: Colors.blue.shade800,
+                                  BorderRadius: BorderRadius.circular(6),
                                 ),
-                                child: Text(getDateFilterLabel(), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Child: Text(getDateFilterLabel(), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                               ),
                             ],
                           ),
                           PopupMenuButton<String>(
-                            icon: Icon(Icons.calendar_month, color: textColor),
-                            tooltip: 'تغيير الفترة الزمنية',
-                            onSelected: (val) async {
-                              if (val == 'custom') {
-                                final picked = await showDateRangePicker(
-                                  context: context,
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime.now(),
+                            Icon: Icon(Icons.calendar_month, color: textColor),
+                            Tooltip: 'تغيير الفترة الزمنية',
+                            OnSelected: (val) async {
+                              If (val == 'custom') {
+                                Final picked = await showDateRangePicker(
+                                  Context: context,
+                                  FirstDate: DateTime(2020),
+                                  LastDate: DateTime.now(),
                                 );
-                                if (picked != null) {
-                                  setDialogState(() {
-                                    dateFilterType = 'custom';
-                                    customStartDate = picked.start;
-                                    customEndDate = picked.end;
+                                If (picked != null) {
+                                  SetDialogState(() {
+                                    DateFilterType = 'custom';
+                                    CustomStartDate = picked.start;
+                                    CustomEndDate = picked.end;
                                   });
                                 }
                               } else {
-                                setDialogState(() => dateFilterType = val);
+                                SetDialogState(() => dateFilterType = val);
                               }
                             },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(value: 'today', child: Text('اليوم')),
-                              const PopupMenuItem(value: 'yesterday', child: Text('أمس')),
-                              const PopupMenuItem(value: 'week', child: Text('خلال أسبوع')),
-                              const PopupMenuItem(value: 'month', child: Text('خلال شهر')),
-                              const PopupMenuItem(value: 'year', child: Text('خلال سنة')),
-                              const PopupMenuItem(value: 'custom', child: Text('تحديد فترة مخصصة...')),
+                            ItemBuilder: (context) => [
+                              Const PopupMenuItem(value: 'today', child: Text('اليوم')),
+                              Const PopupMenuItem(value: 'yesterday', child: Text('أمس')),
+                              Const PopupMenuItem(value: 'week', child: Text('خلال أسبوع')),
+                              Const PopupMenuItem(value: 'month', child: Text('خلال شهر')),
+                              Const PopupMenuItem(value: 'year', child: Text('خلال سنة')),
+                              Const PopupMenuItem(value: 'custom', child: Text('تحديد فترة مخصصة...')),
                             ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    ConstrainedBox(constraints: const BoxConstraints(height: 8)),
 
                     Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(10),
+                      Decoration: BoxDecoration(
+                        Color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade200,
+                        BorderRadius: BorderRadius.circular(10),
                       ),
-                      child: TabBar(
-                        indicator: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          color: Colors.blue.shade800,
+                      Child: TabBar(
+                        Indicator: BoxDecoration(
+                          BorderRadius: BorderRadius.circular(10),
+                          Color: Colors.blue.shade800,
                         ),
-                        labelColor: Colors.white,
-                        unselectedLabelColor: textColor,
-                        tabs: [
+                        LabelColor: Colors.white,
+                        UnselectedLabelColor: textColor,
+                        Tabs: [
                           Tab(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.receipt, size: 18),
-                                const SizedBox(width: 6),
+                            Child: Row(
+                              MainAxisAlignment: MainAxisAlignment.center,
+                              Children: [
+                                Const Icon(Icons.receipt, size: 18),
+                                ConstrainedBox(constraints: const BoxConstraints(width: 6)),
                                 Text('فواتير المبيعات', style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
                           Tab(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.assignment_return, size: 18),
-                                const SizedBox(width: 6),
+                            Child: Row(
+                              MainAxisAlignment: MainAxisAlignment.center,
+                              Children: [
+                                Const Icon(Icons.assignment_return, size: 18),
+                                ConstrainedBox(constraints: const BoxConstraints(width: 6)),
                                 Text('سجل المرتجعات', style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -422,46 +422,46 @@ class _PosScreenState extends State<PosScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    ConstrainedBox(constraints: const BoxConstraints(height: 10)),
                     Expanded(
-                      child: TabBarView(
-                        children: [
+                      Child: TabBarView(
+                        Children: [
                           Column(
-                            children: [
+                            Children: [
                               TextField(
-                                onChanged: (val) => setDialogState(() => salesSearchQuery = val),
-                                style: TextStyle(color: textColor),
-                                decoration: InputDecoration(
-                                  hintText: 'بحث برقم فاتورة المبيعات...',
-                                  hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
-                                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                                  filled: true,
-                                  fillColor: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                                OnChanged: (val) => setDialogState(() => salesSearchQuery = val),
+                                Style: TextStyle(color: textColor),
+                                Decoration: InputDecoration(
+                                  HintText: 'بحث برقم فاتورة المبيعات...',
+                                  HintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
+                                  PrefixIcon: const Icon(Icons.search, color: Colors.grey),
+                                  Filled: true,
+                                  FillColor: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
+                                  Border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                  ContentPadding: const EdgeInsets.symmetric(vertical: 0),
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              ConstrainedBox(constraints: const BoxConstraints(height: 8)),
                               Expanded(
-                                child: Builder(
-                                  builder: (context) {
-                                    final filteredSales = salesInvoices.where((inv) {
-                                      final matchesDate = isDateMatching(inv.date);
-                                      if (!matchesDate) return false;
-                                      if (salesSearchQuery.isEmpty) return true;
-                                      return inv.id.toLowerCase().contains(salesSearchQuery.toLowerCase());
+                                Child: Builder(
+                                  Builder: (context) {
+                                    Final filteredSales = salesInvoices.where((inv) {
+                                      Final matchesDate = isDateMatching(inv.date);
+                                      If (!matchesDate) return false;
+                                      If (salesSearchQuery.isEmpty) return true;
+                                      Return inv.id.toLowerCase().contains(salesSearchQuery.toLowerCase());
                                     }).toList();
 
-                                    if (filteredSales.isEmpty) {
-                                      return Center(child: Text('لا توجد مبيعات مطابقة للفترة المحددة', style: TextStyle(color: textColor)));
+                                    If (filteredSales.isEmpty) {
+                                      Return Center(child: Text('لا توجد مبيعات مطابقة للفترة المحددة', style: TextStyle(color: textColor)));
                                     }
 
-                                    return ListView.builder(
-                                      itemCount: filteredSales.length,
-                                      itemBuilder: (context, index) {
-                                        final inv = filteredSales[index];
-                                        final formattedId = 'INV-${inv.id.padLeft(6, '0')}';
-                                        return _buildInvoiceCardItem(context, inv, formattedId, false, isDark, textColor);
+                                    Return ListView.builder(
+                                      ItemCount: filteredSales.length,
+                                      ItemBuilder: (context, index) {
+                                        Final inv = filteredSales[index];
+                                        Final formattedId = 'INV-${inv.id.padLeft(6, '0')}';
+                                        Return _buildInvoiceCardItem(context, inv, formattedId, false, isDark, textColor);
                                       },
                                     );
                                   },
@@ -470,41 +470,41 @@ class _PosScreenState extends State<PosScreen> {
                             ],
                           ),
                           Column(
-                            children: [
+                            Children: [
                               TextField(
-                                onChanged: (val) => setDialogState(() => returnsSearchQuery = val),
-                                style: TextStyle(color: textColor),
-                                decoration: InputDecoration(
-                                  hintText: 'بحث برقم سند المرتجع...',
-                                  hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
-                                  prefixIcon: const Icon(Icons.search, color: Colors.orange),
-                                  filled: true,
-                                  fillColor: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                                OnChanged: (val) => setDialogState(() => returnsSearchQuery = val),
+                                Style: TextStyle(color: textColor),
+                                Decoration: InputDecoration(
+                                  HintText: 'بحث برقم سند المرتجع...',
+                                  HintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
+                                  PrefixIcon: const Icon(Icons.search, color: Colors.orange),
+                                  Filled: true,
+                                  FillColor: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
+                                  Border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                  ContentPadding: const EdgeInsets.symmetric(vertical: 0),
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              ConstrainedBox(constraints: const BoxConstraints(height: 8)),
                               Expanded(
-                                child: Builder(
-                                  builder: (context) {
-                                    final filteredReturns = returnInvoices.where((inv) {
-                                      final matchesDate = isDateMatching(inv.date);
-                                      if (!matchesDate) return false;
-                                      if (returnsSearchQuery.isEmpty) return true;
-                                      return inv.id.toLowerCase().contains(returnsSearchQuery.toLowerCase());
+                                Child: Builder(
+                                  Builder: (context) {
+                                    Final filteredReturns = returnInvoices.where((inv) {
+                                      Final matchesDate = isDateMatching(inv.date);
+                                      If (!matchesDate) return false;
+                                      If (returnsSearchQuery.isEmpty) return true;
+                                      Return inv.id.toLowerCase().contains(returnsSearchQuery.toLowerCase());
                                     }).toList();
 
-                                    if (filteredReturns.isEmpty) {
-                                      return Center(child: Text('لا توجد مرتجعات مطابقة للفترة المحددة', style: TextStyle(color: textColor)));
+                                    If (filteredReturns.isEmpty) {
+                                      Return Center(child: Text('لا توجد مرتجعات مطابقة للفترة المحددة', style: TextStyle(color: textColor)));
                                     }
 
-                                    return ListView.builder(
-                                      itemCount: filteredReturns.length,
-                                      itemBuilder: (context, index) {
-                                        final inv = filteredReturns[index];
-                                        final formattedId = 'RET-${inv.id.padLeft(6, '0')}';
-                                        return _buildInvoiceCardItem(context, inv, formattedId, true, isDark, textColor);
+                                    Return ListView.builder(
+                                      ItemCount: filteredReturns.length,
+                                      ItemBuilder: (context, index) {
+                                        Final inv = filteredReturns[index];
+                                        Final formattedId = 'RET-${inv.id.padLeft(6, '0')}';
+                                        Return _buildInvoiceCardItem(context, inv, formattedId, true, isDark, textColor);
                                       },
                                     );
                                   },
@@ -525,102 +525,143 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  // --- تم تعديل هذه الدالة بالكامل حسب الترتيب المطلوب ---
   Widget _buildInvoiceCardItem(BuildContext context, Invoice inv, String formattedId, bool isReturn, bool isDark, Color textColor) {
-    return InkWell(
-      onTap: () async {
-        final items = isReturn 
+    Return InkWell(
+      OnTap: () async {
+        Final items = isReturn 
             ? await DBHelper.getReturnInvoiceItems(inv.id)
             : await DBHelper.getInvoiceItems(inv.id);
-        if (!context.mounted) return;
+        If (!context.mounted) return;
         
-        showDialog(
-          context: context,
-          builder: (c) => Dialog(
-            insetPadding: const EdgeInsets.all(10),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+        ShowDialog(
+          Context: context,
+          Builder: (c) => Dialog(
+            InsetPadding: const EdgeInsets.all(10),
+            Child: Container(
+              Padding: const EdgeInsets.all(12),
+              Child: Column(
+                MainAxisSize: MainAxisSize.min,
+                CrossAxisAlignment: CrossAxisAlignment.stretch,
+                Children: [
+                  // شريط العنوان العلوي (رقم الفاتورة، زر الطباعة، وزر الإغلاق)
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
+                    MainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Children: [
                       Text('$formattedId تفاصيل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
-                      IconButton(
-                        icon: Icon(Icons.print, color: textColor),
-                        onPressed: () async {
-                          final cartItems = items.map((i) => CartItem(
-                            product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
-                            quantity: i.quantity,
-                            unitPrice: i.price,
-                            preparationNotes: i.notes,
-                          )).toList();
+                      Row(
+                        Children: [
+                          IconButton(
+                            Icon: Icon(Icons.print, color: textColor),
+                            Tooltip: 'طباعة الفاتورة',
+                            OnPressed: () async {
+                              Final cartItems = items.map((i) => CartItem(
+                                Product: Product(id: i.productId, name: i.productName, categoryId: '', sellPrice: i.price),
+                                Quantity: i.quantity,
+                                UnitPrice: i.price,
+                                PreparationNotes: i.notes,
+                              )).toList();
 
-                          await _printReceiptDirect(
-                            invoiceId: formattedId,
-                            paymentMethod: inv.paymentType,
-                            customCart: cartItems,
-                            customerName: inv.customerName,
-                            customTotal: inv.totalAmount,
-                            isReturn: isReturn,
-                          );
-                        },
+                              Await _printReceiptDirect(
+                                InvoiceId: formattedId,
+                                PaymentMethod: inv.paymentType,
+                                CustomCart: cartItems,
+                                CustomerName: inv.customerName,
+                                CustomTotal: inv.totalAmount,
+                                IsReturn: isReturn,
+                              );
+                            },
+                          ),
+                          IconButton(
+                            Icon: Icon(Icons.close, color: textColor),
+                            OnPressed: () => Navigator.pop(c),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
-                              const SizedBox(width: 4),
-                              Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
+                  ConstrainedBox(constraints: const BoxConstraints(height: 4)),
+                  Const Divider(),
+                  ConstrainedBox(constraints: const BoxConstraints(height: 6)),
+                  
+                  // 1. رأس الفاتورة: (طريقة الدفع، الحالة، التاريخ والوقت، واسم العميل)
+                  Container(
+                    Padding: const EdgeInsets.all(10),
+                    Decoration: BoxDecoration(
+                      Color: isDark ? const Color(0xFF2A2A3D) : Colors.grey.shade100,
+                      BorderRadius: BorderRadius.circular(8),
+                    ),
+                    Child: Column(
+                      CrossAxisAlignment: CrossAxisAlignment.start,
+                      Children: [
+                        Row(
+                          MainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          Children: [
+                            Row(
+                              Children: [
+                                Const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
+                                ConstrainedBox(constraints: const BoxConstraints(width: 4)),
+                                Text('الدفع: ${inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل'}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor)),
+                              ],
+                            ),
+                            Row(
+                              Children: [
+                                Icon(isReturn ? Icons.assignment_return : Icons.check_circle, size: 16, color: isReturn ? Colors.orange : Colors.green),
+                                ConstrainedBox(constraints: const BoxConstraints(width: 4)),
+                                Text(isReturn ? 'مرتجع معتمد' : 'بيع معتمد', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isReturn ? Colors.orange : Colors.green)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        ConstrainedBox(constraints: const BoxConstraints(height: 6)),
+                        Row(
+                          Children: [
+                            Const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                            ConstrainedBox(constraints: const BoxConstraints(width: 4)),
+                            Text('التاريخ والوقت: ${inv.date}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
+                          ],
+                        ),
+                        If (inv.customerName.isNotEmpty) ...[
+                          ConstrainedBox(constraints: const BoxConstraints(height: 4)),
+                          Row(
+                            Children: [
+                              Const Icon(Icons.person, size: 16, color: Colors.grey),
+                              ConstrainedBox(constraints: const BoxConstraints(width: 4)),
+                              Text('العميل: ${inv.customerName}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
                             ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
-                          child: Row(
-                            children: [
-                              Icon(isReturn ? Icons.assignment_return : Icons.check_circle, size: 16, color: isReturn ? Colors.orange : Colors.green),
-                              const SizedBox(width: 4),
-                              Text(isReturn ? 'مرتجع معتمد' : 'بيع معتمد', style: TextStyle(fontSize: 12, color: textColor)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                        ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  ConstrainedBox(constraints: const BoxConstraints(height: 10)),
+                  Text('قائمة الأصناف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor)),
+                  ConstrainedBox(constraints: const BoxConstraints(height: 6)),
+
+                  // 2. منتصف الفاتورة: قائمة الأصناف
                   Expanded(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: items.length,
-                      itemBuilder: (_, i) {
-                        final itm = items[i];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          child: Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(itm.productName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
-                                    Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
-                                  ],
+                    Child: ListView.builder(
+                      ShrinkWrap: true,
+                      ItemCount: items.length,
+                      ItemBuilder: (_, i) {
+                        Final itm = items[i];
+                        Return Card(
+                          Margin: const EdgeInsets.symmetric(vertical: 4),
+                          Child: Padding(
+                            Padding: const EdgeInsets.all(10.0),
+                            Child: Row(
+                              MainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              Children: [
+                                Expanded(
+                                  Child: Column(
+                                    CrossAxisAlignment: CrossAxisAlignment.start,
+                                    Children: [
+                                      Text(itm.productName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
+                                      Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+                                      If (itm.notes.isNotEmpty)
+                                        Text('ملاحظات: ${itm.notes}', style: const TextStyle(fontSize: 11, color: Colors.deepOrange)),
+                                    ],
+                                  ),
                                 ),
                                 Text(_formatNum(itm.total), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isReturn ? Colors.orange : Colors.green)),
                               ],
@@ -630,9 +671,31 @@ class _PosScreenState extends State<PosScreen> {
                       },
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(c),
-                    child: Text('إغلاق', style: TextStyle(fontSize: 15, color: textColor)),
+                  ConstrainedBox(constraints: const BoxConstraints(height: 6)),
+                  Const Divider(),
+                  ConstrainedBox(constraints: const BoxConstraints(height: 6)),
+
+                  // 3. أسفل الفاتورة: الإجمالي العام
+                  Container(
+                    Padding: const EdgeInsets.all(10),
+                    Decoration: BoxDecoration(
+                      Color: isReturn ? Colors.orange.shade900.withOpacity(0.2) : Colors.blue.shade900.withOpacity(0.2),
+                      BorderRadius: BorderRadius.circular(8),
+                    ),
+                    Child: Row(
+                      MainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Children: [
+                        Text('الإجمالي العام:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                        Text(
+                          _formatNum(inv.totalAmount),
+                          Style: TextStyle(
+                            FontWeight: FontWeight.bold,
+                            FontSize: 18,
+                            Color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -640,53 +703,53 @@ class _PosScreenState extends State<PosScreen> {
           ),
         );
       },
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isReturn 
+      Child: Container(
+        Margin: const EdgeInsets.symmetric(vertical: 6),
+        Padding: const EdgeInsets.all(12),
+        Decoration: BoxDecoration(
+          Color: isReturn 
               ? (isDark ? const Color(0xFF332211) : Colors.orange.shade900)
               : (isDark ? const Color(0xFF252538) : Colors.blue.shade900),
-          borderRadius: BorderRadius.circular(14),
+          BorderRadius: BorderRadius.circular(14),
         ),
-        child: Row(
-          children: [
+        Child: Row(
+          Children: [
             Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: (isReturn ? Colors.orange.shade700 : Colors.blue.shade700).withOpacity(0.4),
-                borderRadius: BorderRadius.circular(10),
+              Padding: const EdgeInsets.all(8),
+              Decoration: BoxDecoration(
+                Color: (isReturn ? Colors.orange.shade700 : Colors.blue.shade700).withOpacity(0.4),
+                BorderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(isReturn ? Icons.assignment_return : Icons.receipt, color: isReturn ? Colors.orangeAccent : Colors.cyanAccent, size: 24),
+              Child: Icon(isReturn ? Icons.assignment_return : Icons.receipt, color: isReturn ? Colors.orangeAccent : Colors.cyanAccent, size: 24),
             ),
-            const SizedBox(width: 12),
+            ConstrainedBox(constraints: const BoxConstraints(width: 12)),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              Child: Column(
+                CrossAxisAlignment: CrossAxisAlignment.start,
+                Children: [
                   Row(
-                    children: [
+                    Children: [
                       Text(formattedId, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                      const SizedBox(width: 8),
+                      ConstrainedBox(constraints: const BoxConstraints(width: 8)),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isReturn ? Colors.orange.shade800 : Colors.teal.shade700,
-                          borderRadius: BorderRadius.circular(6),
+                        Padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        Decoration: BoxDecoration(
+                          Color: isReturn ? Colors.orange.shade800 : Colors.teal.shade700,
+                          BorderRadius: BorderRadius.circular(6),
                         ),
-                        child: Text(isReturn ? 'مرتجع' : 'بيع', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                        Child: Text(isReturn ? 'مرتجع' : 'بيع', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  ConstrainedBox(constraints: const BoxConstraints(height: 4)),
                   Row(
-                    children: [
-                      const Icon(Icons.access_time, color: Colors.white54, size: 13),
-                      const SizedBox(width: 4),
+                    Children: [
+                      Const Icon(Icons.access_time, color: Colors.white54, size: 13),
+                      ConstrainedBox(constraints: const BoxConstraints(width: 4)),
                       Text(inv.date, style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                      const SizedBox(width: 10),
-                      const Icon(Icons.payment, color: Colors.white54, size: 13),
-                      const SizedBox(width: 4),
+                      ConstrainedBox(constraints: const BoxConstraints(width: 10)),
+                      Const Icon(Icons.payment, color: Colors.white54, size: 13),
+                      ConstrainedBox(constraints: const BoxConstraints(width: 4)),
                       Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                     ],
                   ),
@@ -694,16 +757,16 @@ class _PosScreenState extends State<PosScreen> {
               ),
             ),
             Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                const Text('الإجمالي', style: TextStyle(color: Colors.white54, fontSize: 11)),
-                const SizedBox(height: 2),
+              CrossAxisAlignment: CrossAxisAlignment.end,
+              Children: [
+                Const Text('الإجمالي', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                ConstrainedBox(constraints: const BoxConstraints(height: 2)),
                 Text(
                   _formatNum(inv.totalAmount),
-                  style: TextStyle(
-                    color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                  Style: TextStyle(
+                    Color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
+                    FontWeight: FontWeight.bold,
+                    FontSize: 16,
                   ),
                 ),
               ],
@@ -714,72 +777,72 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  int _getGridCrossAxisCount() {
-    if (_isProductsFullScreen) {
-      switch (_posItemSizeSetting) {
-        case 'صغير': return 6;
-        case 'كبير': return 4;
-        case 'وسط': default: return 5;
+  Int _getGridCrossAxisCount() {
+    If (_isProductsFullScreen) {
+      Switch (_posItemSizeSetting) {
+        Case 'صغير': return 6;
+        Case 'كبير': return 4;
+        Case 'وسط': default: return 5;
       }
     } else {
-      switch (_posItemSizeSetting) {
-        case 'صغير': return 4;
-        case 'كبير': return 2;
-        case 'وسط': default: return 3;
+      Switch (_posItemSizeSetting) {
+        Case 'صغير': return 4;
+        Case 'كبير': return 2;
+        Case 'وسط': default: return 3;
       }
     }
   }
 
-  double _getItemFontSize() {
-    switch (_posItemSizeSetting) {
-      case 'صغير': return 12.0;
-      case 'كبير': return 16.0;
-      case 'وسط': default: return 14.0;
+  Double _getItemFontSize() {
+    Switch (_posItemSizeSetting) {
+      Case 'صغير': return 12.0;
+      Case 'كبير': return 16.0;
+      Case 'وسط': default: return 14.0;
     }
   }
 
-  double _getBottomButtonHeight() {
-    switch (_mainButtonSizeSetting) {
-      case 'صغير': return 40.0;
-      case 'كبير': return 56.0;
-      case 'وسط': default: return 48.0;
+  Double _getBottomButtonHeight() {
+    Switch (_mainButtonSizeSetting) {
+      Case 'صغير': return 40.0;
+      Case 'كبير': return 56.0;
+      Case 'وسط': default: return 48.0;
     }
   }
 
-  double _getBottomButtonFontSize() {
-    switch (_mainButtonSizeSetting) {
-      case 'صغير': return 13.0;
-      case 'كبير': return 18.0;
-      case 'وسط': default: return 15.0;
+  Double _getBottomButtonFontSize() {
+    Switch (_mainButtonSizeSetting) {
+      Case 'صغير': return 13.0;
+      Case 'كبير': return 18.0;
+      Case 'وسط': default: return 15.0;
     }
   }
 
-  bool get _isCashCustomer =>
+  Bool get _isCashCustomer =>
       _selectedCustomer == null ||
       _selectedCustomer!.id == 'cash_default' ||
       _selectedCustomer!.name == 'عميل نقدي';
 
-  void _filterProducts(String query) {
-    setState(() {
+  Void _filterProducts(String query) {
+    SetState(() {
       _filteredProducts = _allProducts.where((p) {
-        final matchesQuery = p.name.contains(query);
-        final matchesCat = _selectedCategoryId == 'all' || p.categoryId == _selectedCategoryId;
-        return matchesQuery && matchesCat;
+        Final matchesQuery = p.name.contains(query);
+        Final matchesCat = _selectedCategoryId == 'all' || p.categoryId == _selectedCategoryId;
+        Return matchesQuery && matchesCat;
       }).toList();
     });
   }
 
-  void _filterByCategory(String catId) {
-    setState(() {
+  Void _filterByCategory(String catId) {
+    SetState(() {
       _selectedCategoryId = catId;
       _filterProducts(_searchController.text);
     });
   }
 
-  void _addToCart(Product product) {
-    setState(() {
-      final index = _cart.indexWhere((item) => item.product.id == product.id);
-      if (index >= 0) {
+  Void _addToCart(Product product) {
+    SetState(() {
+      Final index = _cart.indexWhere((item) => item.product.id == product.id);
+      If (index >= 0) {
         _cart[index].quantity += 1;
       } else {
         _cart.add(CartItem(product: product, unitPrice: product.sellPrice));
@@ -787,8 +850,8 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  void _clearInvoice() {
-    setState(() {
+  Void _clearInvoice() {
+    SetState(() {
       _cart.clear();
       _selectedCustomer = _customers.firstWhere(
         (c) => c.id == 'cash_default',
@@ -797,35 +860,35 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  double get _totalAmount => _cart.fold(0.0, (sum, item) => sum + item.total);
+  Double get _totalAmount => _cart.fold(0.0, (sum, item) => sum + item.total);
 
   String _formatNum(double number) {
-    return number % 1 == 0 ? number.toInt().toString() : number.toStringAsFixed(2);
+    Return number % 1 == 0 ? number.toInt().toString() : number.toStringAsFixed(2);
   }
 
-  void _selectCustomerDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('اختيار العميل'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _customers.length,
-            itemBuilder: (context, index) {
-              final c = _customers[index];
-              final isCash = c.id == 'cash_default';
+  Void _selectCustomerDialog() {
+    ShowDialog(
+      Context: context,
+      Builder: (ctx) => AlertDialog(
+        Title: const Text('اختيار العميل'),
+        Content: SizedBox(
+          Width: double.maxFinite,
+          Child: ListView.builder(
+            ShrinkWrap: true,
+            ItemCount: _customers.length,
+            ItemBuilder: (context, index) {
+              Final c = _customers[index];
+              Final isCash = c.id == 'cash_default';
 
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: isCash ? Colors.amber.shade100 : Colors.blue.shade100,
-                  child: Icon(isCash ? Icons.point_of_sale : Icons.person, color: isCash ? Colors.orange.shade900 : Colors.blue),
+              Return ListTile(
+                Leading: CircleAvatar(
+                  BackgroundColor: isCash ? Colors.amber.shade100 : Colors.blue.shade100,
+                  Child: Icon(isCash ? Icons.point_of_sale : Icons.person, color: isCash ? Colors.orange.shade900 : Colors.blue),
                 ),
-                title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(isCash ? 'عميل نقدي افتراضي' : 'هاتف: ${c.phone} | الرصيد: ${_formatNum(c.balance)}'),
-                onTap: () {
-                  setState(() => _selectedCustomer = c);
+                Title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Subtitle: Text(isCash ? 'عميل نقدي افتراضي' : 'هاتف: ${c.phone} | الرصيد: ${_formatNum(c.balance)}'),
+                OnTap: () {
+                  SetState(() => _selectedCustomer = c);
                   Navigator.pop(ctx);
                 },
               );
@@ -836,64 +899,64 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  void _showPrepNotesDialog(CartItem item) {
-    final customNoteCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) {
-          return AlertDialog(
-            title: Text('ملاحظات تحضير: ${item.product.name}'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+  Void _showPrepNotesDialog(CartItem item) {
+    Final customNoteCtrl = TextEditingController();
+    ShowDialog(
+      Context: context,
+      Builder: (ctx) => StatefulBuilder(
+        Builder: (context, setDlgState) {
+          Return AlertDialog(
+            Title: Text('ملاحظات تحضير: ${item.product.name}'),
+            Content: SingleChildScrollView(
+              Child: Column(
+                MainAxisSize: MainAxisSize.min,
+                Children: [
                   Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: _prepNotesList.map((note) {
-                      final isSelected = item.preparationNotes.contains(note);
-                      return FilterChip(
-                        label: Text(note, style: TextStyle(color: isSelected ? Colors.white : Colors.black)),
-                        selected: isSelected,
-                        selectedColor: Colors.deepOrange,
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              item.preparationNotes = item.preparationNotes.isEmpty ? note : '${item.preparationNotes} - $note';
+                    Spacing: 6,
+                    RunSpacing: 6,
+                    Children: _prepNotesList.map((note) {
+                      Final isSelected = item.preparationNotes.contains(note);
+                      Return FilterChip(
+                        Label: Text(note, style: TextStyle(color: isSelected ? Colors.white : Colors.black)),
+                        Selected: isSelected,
+                        SelectedColor: Colors.deepOrange,
+                        OnSelected: (selected) {
+                          SetState(() {
+                            If (selected) {
+                              Item.preparationNotes = item.preparationNotes.isEmpty ? note : '${item.preparationNotes} - $note';
                             } else {
-                              item.preparationNotes = item.preparationNotes.replaceAll(note, '').replaceAll(' -  - ', ' - ').trim();
+                              Item.preparationNotes = item.preparationNotes.replaceAll(note, '').replaceAll(' -  - ', ' - ').trim();
                             }
                           });
-                          setDlgState(() {});
+                          SetDlgState(() {});
                         },
                       );
                     }).toList(),
                   ),
-                  const Divider(),
+                  Const Divider(),
                   TextField(
-                    controller: customNoteCtrl,
-                    decoration: const InputDecoration(labelText: 'إضافة ملاحظة جديدة', border: OutlineInputBorder()),
+                    Controller: customNoteCtrl,
+                    Decoration: const InputDecoration(labelText: 'إضافة ملاحظة جديدة', border: OutlineInputBorder()),
                   ),
                 ],
               ),
             ),
-            actions: [
+            Actions: [
               TextButton(
-                onPressed: () async {
-                  if (customNoteCtrl.text.trim().isNotEmpty) {
-                    final newNote = customNoteCtrl.text.trim();
-                    if (!_prepNotesList.contains(newNote)) {
-                      await DBHelper.addPreparationNote(newNote);
+                OnPressed: () async {
+                  If (customNoteCtrl.text.trim().isNotEmpty) {
+                    Final newNote = customNoteCtrl.text.trim();
+                    If (!_prepNotesList.contains(newNote)) {
+                      Await DBHelper.addPreparationNote(newNote);
                       _prepNotesList.add(newNote);
                     }
-                    setState(() {
-                      item.preparationNotes = item.preparationNotes.isEmpty ? newNote : '${item.preparationNotes} - $newNote';
+                    SetState(() {
+                      Item.preparationNotes = item.preparationNotes.isEmpty ? newNote : '${item.preparationNotes} - $newNote';
                     });
                   }
                   Navigator.pop(ctx);
                 },
-                child: const Text('حفظ الملاحظة'),
+                Child: const Text('حفظ الملاحظة'),
               ),
             ],
           );
@@ -902,50 +965,50 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  void _showPaymentDialog() {
+  Void _showPaymentDialog() {
     String selectedMethod = _isCashCustomer ? 'نقدي' : (_paymentMethods.isNotEmpty ? _paymentMethods.first : 'نقدي');
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) {
-          final availableMethods = _isCashCustomer ? ['نقدي'] : _paymentMethods;
+    ShowDialog(
+      Context: context,
+      Builder: (ctx) => StatefulBuilder(
+        Builder: (context, setDlgState) {
+          Final availableMethods = _isCashCustomer ? ['نقدي'] : _paymentMethods;
 
-          return AlertDialog(
-            title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع واختيار طريقة الدفع'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          Return AlertDialog(
+            Title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع واختيار طريقة الدفع'),
+            Content: Column(
+              MainAxisSize: MainAxisSize.min,
+              CrossAxisAlignment: CrossAxisAlignment.start,
+              Children: [
                 Text(
                   'المبلغ الإجمالي: ${_formatNum(_totalAmount)}',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: _isReturnMode ? Colors.orange.shade800 : Colors.green),
+                  Style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: _isReturnMode ? Colors.orange.shade800 : Colors.green),
                 ),
-                const SizedBox(height: 12),
+                ConstrainedBox(constraints: const BoxConstraints(height: 12)),
                 Text('العميل الحالي: ${_selectedCustomer?.name ?? "عميل نقدي"}'),
-                if (_isCashCustomer)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 6.0),
-                    child: Text('تنبيه: العميل النقدي لا يقبل سوى الدفع النقدي.', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                If (_isCashCustomer)
+                  Const Padding(
+                    Padding: EdgeInsets.symmetric(vertical: 6.0),
+                    Child: Text('تنبيه: العميل النقدي لا يقبل سوى الدفع النقدي.', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
-                const SizedBox(height: 8),
+                ConstrainedBox(constraints: const BoxConstraints(height: 8)),
                 DropdownButtonFormField<String>(
-                  value: availableMethods.contains(selectedMethod) ? selectedMethod : availableMethods.first,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'طريقة الدفع'),
-                  items: availableMethods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                  onChanged: (val) {
-                    if (val != null) setDlgState(() => selectedMethod = val);
+                  Value: availableMethods.contains(selectedMethod) ? selectedMethod : availableMethods.first,
+                  Decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'طريقة الدفع'),
+                  Items: availableMethods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                  OnChanged: (val) {
+                    If (val != null) setDlgState(() => selectedMethod = val);
                   },
                 ),
               ],
             ),
-            actions: [
+            Actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green),
-                icon: const Icon(Icons.print, color: Colors.white),
-                label: Text(_isReturnMode ? 'طباعة وحفظ المرتجع' : 'طباعة وحفظ الفاتورة', style: const TextStyle(color: Colors.white)),
-                onPressed: () {
+                Style: ElevatedButton.styleFrom(backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green),
+                Icon: const Icon(Icons.print, color: Colors.white),
+                Label: Text(_isReturnMode ? 'طباعة وحفظ المرتجع' : 'طباعة وحفظ الفاتورة', style: const TextStyle(color: Colors.white)),
+                OnPressed: () {
                   Navigator.pop(ctx);
                   _processCheckout(selectedMethod);
                 },
@@ -958,188 +1021,188 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Future<void> _processCheckout(String paymentMethod) async {
-    final cartSnapshot = List<CartItem>.from(_cart);
-    final totalSnapshot = _totalAmount;
-    final customerNameSnapshot = _selectedCustomer?.name ?? 'عميل نقدي';
+    Final cartSnapshot = List<CartItem>.from(_cart);
+    Final totalSnapshot = _totalAmount;
+    Final customerNameSnapshot = _selectedCustomer?.name ?? 'عميل نقدي';
     
-    final now = DateTime.now().toString().split('.')[0];
-    final shiftId = await DBHelper.getCurrentShiftId();
-    final customerId = _selectedCustomer?.id ?? 'cash_default';
-    final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
+    Final now = DateTime.now().toString().split('.')[0];
+    Final shiftId = await DBHelper.getCurrentShiftId();
+    Final customerId = _selectedCustomer?.id ?? 'cash_default';
+    Final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     
-    if (_isReturnMode) {
-      final returnInvoices = await DBHelper.getAllReturnInvoices();
+    If (_isReturnMode) {
+      Final returnInvoices = await DBHelper.getAllReturnInvoices();
       int maxReturnId = 0;
-      for (var inv in returnInvoices) {
-        int? parsedId = int.tryParse(inv.id);
-        if (parsedId != null && parsedId > maxReturnId) {
-          maxReturnId = parsedId;
+      For (var inv in returnInvoices) {
+        Int? parsedId = int.tryParse(inv.id);
+        If (parsedId != null && parsedId > maxReturnId) {
+          MaxReturnId = parsedId;
         }
       }
-      final nextReturnNumber = maxReturnId + 1;
-      final invoiceId = nextReturnNumber.toString();
+      Final nextReturnNumber = maxReturnId + 1;
+      Final invoiceId = nextReturnNumber.toString();
 
-      final returnInvoice = Invoice(
-        id: invoiceId,
-        invoiceType: 'return',
-        paymentType: isCredit ? 'credit' : 'cash',
-        totalAmount: totalSnapshot,
-        date: now,
-        customerId: customerId,
-        customerName: customerNameSnapshot,
-        shiftId: shiftId,
-        isClosed: false,
+      Final returnInvoice = Invoice(
+        Id: invoiceId,
+        InvoiceType: 'return',
+        PaymentType: isCredit ? 'credit' : 'cash',
+        TotalAmount: totalSnapshot,
+        Date: now,
+        CustomerId: customerId,
+        CustomerName: customerNameSnapshot,
+        ShiftId: shiftId,
+        IsClosed: false,
       );
       
-      await DBHelper.saveReturnInvoice(returnInvoice);
+      Await DBHelper.saveReturnInvoice(returnInvoice);
 
-      for (var item in cartSnapshot) {
-        final returnItem = InvoiceItem(
-          id: '${invoiceId}_${item.product.id}',
-          invoiceId: invoiceId,
-          productId: item.product.id,
-          productName: item.product.name,
-          quantity: item.quantity,
-          price: item.unitPrice,
-          total: item.total,
-          notes: item.preparationNotes,
+      For (var item in cartSnapshot) {
+        Final returnItem = InvoiceItem(
+          Id: '${invoiceId}_${item.product.id}',
+          InvoiceId: invoiceId,
+          ProductId: item.product.id,
+          ProductName: item.product.name,
+          Quantity: item.quantity,
+          Price: item.unitPrice,
+          Total: item.total,
+          Notes: item.preparationNotes,
         );
-        await DBHelper.saveReturnInvoiceItem(returnItem);
-        await DBHelper.updateProductStock(item.product.id, item.quantity);
+        Await DBHelper.saveReturnInvoiceItem(returnItem);
+        Await DBHelper.updateProductStock(item.product.id, item.quantity);
       }
 
-      final formattedPrintId = 'RET-${invoiceId.padLeft(6, '0')}';
+      Final formattedPrintId = 'RET-${invoiceId.padLeft(6, '0')}';
 
-      if (_isPrinterConnected) {
-        await _printReceiptDirect(
-          invoiceId: formattedPrintId,
-          paymentMethod: paymentMethod,
-          customCart: cartSnapshot,
-          customerName: customerNameSnapshot,
-          customTotal: totalSnapshot,
-          isReturn: true,
+      If (_isPrinterConnected) {
+        Await _printReceiptDirect(
+          InvoiceId: formattedPrintId,
+          PaymentMethod: paymentMethod,
+          CustomCart: cartSnapshot,
+          CustomerName: customerNameSnapshot,
+          CustomTotal: totalSnapshot,
+          IsReturn: true,
         );
       }
 
-      if (mounted) {
+      If (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('تم حفظ مرتجع المبيعات بنجاح برقم ($formattedPrintId)'),
-            backgroundColor: Colors.orange.shade800,
+            Content: Text('تم حفظ مرتجع المبيعات بنجاح برقم ($formattedPrintId)'),
+            BackgroundColor: Colors.orange.shade800,
           ),
         );
       }
 
     } else {
-      final salesInvoices = await DBHelper.getAllInvoices();
+      Final salesInvoices = await DBHelper.getAllInvoices();
       int maxSaleId = 0;
-      for (var inv in salesInvoices) {
-        int? parsedId = int.tryParse(inv.id);
-        if (parsedId != null && parsedId > maxSaleId) {
-          maxSaleId = parsedId;
+      For (var inv in salesInvoices) {
+        Int? parsedId = int.tryParse(inv.id);
+        If (parsedId != null && parsedId > maxSaleId) {
+          MaxSaleId = parsedId;
         }
       }
-      final nextSaleNumber = maxSaleId + 1;
-      final invoiceId = nextSaleNumber.toString();
+      Final nextSaleNumber = maxSaleId + 1;
+      Final invoiceId = nextSaleNumber.toString();
 
-      final saleInvoice = Invoice(
-        id: invoiceId,
-        invoiceType: 'sale',
-        paymentType: isCredit ? 'credit' : 'cash',
-        totalAmount: totalSnapshot,
-        date: now,
-        customerId: customerId,
-        customerName: customerNameSnapshot,
-        shiftId: shiftId,
-        isClosed: false,
+      Final saleInvoice = Invoice(
+        Id: invoiceId,
+        InvoiceType: 'sale',
+        PaymentType: isCredit ? 'credit' : 'cash',
+        TotalAmount: totalSnapshot,
+        Date: now,
+        CustomerId: customerId,
+        CustomerName: customerNameSnapshot,
+        ShiftId: shiftId,
+        IsClosed: false,
       );
       
-      await DBHelper.saveInvoice(saleInvoice);
+      Await DBHelper.saveInvoice(saleInvoice);
 
-      for (var item in cartSnapshot) {
-        final invoiceItem = InvoiceItem(
-          id: '${invoiceId}_${item.product.id}',
-          invoiceId: invoiceId,
-          productId: item.product.id,
-          productName: item.product.name,
-          quantity: item.quantity,
-          price: item.unitPrice,
-          total: item.total,
-          notes: item.preparationNotes,
+      For (var item in cartSnapshot) {
+        Final invoiceItem = InvoiceItem(
+          Id: '${invoiceId}_${item.product.id}',
+          InvoiceId: invoiceId,
+          ProductId: item.product.id,
+          ProductName: item.product.name,
+          Quantity: item.quantity,
+          Price: item.unitPrice,
+          Total: item.total,
+          Notes: item.preparationNotes,
         );
-        await DBHelper.saveInvoiceItem(invoiceItem);
-        await DBHelper.updateProductStock(item.product.id, -item.quantity);
+        Await DBHelper.saveInvoiceItem(invoiceItem);
+        Await DBHelper.updateProductStock(item.product.id, -item.quantity);
       }
 
-      final formattedPrintId = 'INV-${invoiceId.padLeft(6, '0')}';
+      Final formattedPrintId = 'INV-${invoiceId.padLeft(6, '0')}';
 
-      if (_isPrinterConnected) {
-        await _printReceiptDirect(
-          invoiceId: formattedPrintId,
-          paymentMethod: paymentMethod,
-          customCart: cartSnapshot,
-          customerName: customerNameSnapshot,
-          customTotal: totalSnapshot,
-          isReturn: false,
+      If (_isPrinterConnected) {
+        Await _printReceiptDirect(
+          InvoiceId: formattedPrintId,
+          PaymentMethod: paymentMethod,
+          CustomCart: cartSnapshot,
+          CustomerName: customerNameSnapshot,
+          CustomTotal: totalSnapshot,
+          IsReturn: false,
         );
       }
 
-      if (mounted) {
+      If (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('تم حفظ الفاتورة بنجاح برقم ($formattedPrintId)'),
-            backgroundColor: Colors.green,
+            Content: Text('تم حفظ الفاتورة بنجاح برقم ($formattedPrintId)'),
+            BackgroundColor: Colors.green,
           ),
         );
       }
     }
 
-    await _loadData();
+    Await _loadData();
     _clearInvoice();
-    if (_isReturnMode) {
-      setState(() => _isReturnMode = false);
+    If (_isReturnMode) {
+      SetState(() => _isReturnMode = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: _isReturnMode ? Colors.orange.shade800 : null,
-        title: Row(
-          children: [
-            if (!_isReturnMode)
+    Return Scaffold(
+      AppBar: AppBar(
+        BackgroundColor: _isReturnMode ? Colors.orange.shade800 : null,
+        Title: Row(
+          Children: [
+            If (!_isReturnMode)
               Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+                MainAxisSize: MainAxisSize.min,
+                Children: [
                   Text(_isTouchMode ? 'مبيعات لمس' : 'مبيعات عادية', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 4),
+                  ConstrainedBox(constraints: const BoxConstraints(width: 4)),
                   Switch(value: _isTouchMode, onChanged: (val) => setState(() => _isTouchMode = val), activeColor: Colors.amber),
                 ],
               )
             else
-              const Text('مرتجع مبيعات', style: TextStyle(fontWeight: FontWeight.bold)),
+              Const Text('مرتجع مبيعات', style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
-        actions: [
+        Actions: [
           IconButton(
-            tooltip: 'سجل الفواتير والمرتجعات',
-            icon: const Icon(Icons.receipt_long, color: Colors.amberAccent),
-            onPressed: _showInvoicesHistoryDialog,
+            Tooltip: 'سجل الفواتير والمرتجعات',
+            Icon: const Icon(Icons.receipt_long, color: Colors.amberAccent),
+            OnPressed: _showInvoicesHistoryDialog,
           ),
           IconButton(
-            tooltip: _isPrinterConnected ? 'الطابعة متصلة' : 'الطابعة مفصولة',
-            icon: Icon(Icons.print, color: _isPrinterConnected ? Colors.greenAccent : Colors.redAccent),
-            onPressed: () => setState(() => _isPrinterConnected = !_isPrinterConnected),
+            Tooltip: _isPrinterConnected ? 'الطابعة متصلة' : 'الطابعة مفصولة',
+            Icon: Icon(Icons.print, color: _isPrinterConnected ? Colors.greenAccent : Colors.redAccent),
+            OnPressed: () => setState(() => _isPrinterConnected = !_isPrinterConnected),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: TextButton.icon(
-              style: TextButton.styleFrom(foregroundColor: Colors.white),
-              icon: Icon(_isReturnMode ? Icons.shopping_cart : Icons.assignment_return, color: Colors.amber),
-              label: Text(_isReturnMode ? 'وضع البيع' : 'مرتجع', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              onPressed: () {
-                setState(() {
+            Padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            Child: TextButton.icon(
+              Style: TextButton.styleFrom(foregroundColor: Colors.white),
+              Icon: Icon(_isReturnMode ? Icons.shopping_cart : Icons.assignment_return, color: Colors.amber),
+              Label: Text(_isReturnMode ? 'وضع البيع' : 'مرتجع', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              OnPressed: () {
+                SetState(() {
                   _isReturnMode = !_isReturnMode;
                   _clearInvoice();
                 });
@@ -1148,91 +1211,91 @@ class _PosScreenState extends State<PosScreen> {
           ),
         ],
       ),
-      body: _isLoading
+      Body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
-              children: [
+              Children: [
                 Container(
-                  color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Row(
-                    children: [
+                  Color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
+                  Padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  Child: Row(
+                    Children: [
                       Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
-                      const SizedBox(width: 8),
+                      ConstrainedBox(constraints: const BoxConstraints(width: 8)),
                       Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      const Spacer(),
+                      Const Spacer(),
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
-                        onPressed: _selectCustomerDialog,
-                        icon: const Icon(Icons.person_add, size: 18),
-                        label: const Text('تغيير العميل'),
+                        Style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                        OnPressed: _selectCustomerDialog,
+                        Icon: const Icon(Icons.person_add, size: 18),
+                        Label: const Text('تغيير العميل'),
                       ),
                     ],
                   ),
                 ),
                 Expanded(
-                  child: Row(
-                    children: [
-                      if (!_isInvoiceExpanded)
+                  Child: Row(
+                    Children: [
+                      If (!_isInvoiceExpanded)
                         Expanded(
-                          flex: _isProductsFullScreen ? 10 : 3,
-                          child: Column(
-                            children: [
+                          Flex: _isProductsFullScreen ? 10 : 3,
+                          Child: Column(
+                            Children: [
                               Padding(
-                                padding: const EdgeInsets.all(6.0),
-                                child: Row(
-                                  children: [
+                                Padding: const EdgeInsets.all(6.0),
+                                Child: Row(
+                                  Children: [
                                     Expanded(
-                                      child: TextField(
-                                        controller: _searchController,
-                                        onChanged: _filterProducts,
-                                        decoration: InputDecoration(
-                                          hintText: 'بحث باسم الصنف أو الباركود...',
-                                          prefixIcon: const Icon(Icons.search),
-                                          contentPadding: const EdgeInsets.all(8),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      Child: TextField(
+                                        Controller: _searchController,
+                                        OnChanged: _filterProducts,
+                                        Decoration: InputDecoration(
+                                          HintText: 'بحث باسم الصنف أو الباركود...',
+                                          PrefixIcon: const Icon(Icons.search),
+                                          ContentPadding: const EdgeInsets.all(8),
+                                          Border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                         ),
                                       ),
                                     ),
                                     IconButton(
-                                      icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.indigo),
-                                      onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
+                                      Icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.indigo),
+                                      OnPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
                                     ),
                                   ],
                                 ),
                               ),
-                              if (_isTouchMode)
+                              If (_isTouchMode)
                                 Container(
-                                  height: 48,
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                                  child: ListView(
-                                    scrollDirection: Axis.horizontal,
-                                    children: [
+                                  Height: 48,
+                                  Padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                  Child: ListView(
+                                    ScrollDirection: Axis.horizontal,
+                                    Children: [
                                       Padding(
-                                        padding: const EdgeInsets.only(right: 4.0),
-                                        child: ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: _selectedCategoryId == 'all' ? Colors.blue.shade900 : Colors.blue,
-                                            foregroundColor: Colors.white,
+                                        Padding: const EdgeInsets.only(right: 4.0),
+                                        Child: ElevatedButton(
+                                          Style: ElevatedButton.styleFrom(
+                                            BackgroundColor: _selectedCategoryId == 'all' ? Colors.blue.shade900 : Colors.blue,
+                                            ForegroundColor: Colors.white,
                                           ),
-                                          onPressed: () => _filterByCategory('all'),
-                                          child: const Text('الكل', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                          OnPressed: () => _filterByCategory('all'),
+                                          Child: const Text('الكل', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                                         ),
                                       ),
                                       ..._categories.map((cat) {
                                         Color catColor = Colors.teal;
-                                        try {
-                                          catColor = Color(int.parse(cat.colorHex));
+                                        Try {
+                                          CatColor = Color(int.parse(cat.colorHex));
                                         } catch (_) {}
 
-                                        final isSelected = _selectedCategoryId == cat.id;
+                                        Final isSelected = _selectedCategoryId == cat.id;
 
-                                        return Padding(
-                                          padding: const EdgeInsets.only(right: 4.0),
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor),
-                                            onPressed: () => _filterByCategory(cat.id),
-                                            child: Text(cat.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                        Return Padding(
+                                          Padding: const EdgeInsets.only(right: 4.0),
+                                          Child: ElevatedButton(
+                                            Style: ElevatedButton.styleFrom(backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor),
+                                            OnPressed: () => _filterByCategory(cat.id),
+                                            Child: Text(cat.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                                           ),
                                         );
                                       }),
@@ -1240,26 +1303,26 @@ class _PosScreenState extends State<PosScreen> {
                                   ),
                                 ),
                               Expanded(
-                                child: _isTouchMode ? _buildTouchProductGrid() : _buildStandardProductList(),
+                                Child: _isTouchMode ? _buildTouchProductGrid() : _buildStandardProductList(),
                               ),
                             ],
                           ),
                         ),
-                      if (!_isProductsFullScreen)
+                      If (!_isProductsFullScreen)
                         InkWell(
-                          onTap: () => setState(() => _isInvoiceExpanded = !_isInvoiceExpanded),
-                          child: Container(
-                            width: 24,
-                            color: Colors.grey.shade300,
-                            child: Center(
-                              child: Icon(_isInvoiceExpanded ? Icons.arrow_forward_ios : Icons.arrow_back_ios, size: 16),
+                          OnTap: () => setState(() => _isInvoiceExpanded = !_isInvoiceExpanded),
+                          Child: Container(
+                            Width: 24,
+                            Color: Colors.grey.shade300,
+                            Child: Center(
+                              Child: Icon(_isInvoiceExpanded ? Icons.arrow_forward_ios : Icons.arrow_back_ios, size: 16),
                             ),
                           ),
                         ),
-                      if (!_isProductsFullScreen)
+                      If (!_isProductsFullScreen)
                         Expanded(
-                          flex: _isInvoiceExpanded ? 1 : 2,
-                          child: Container(color: Colors.grey.shade100, child: _buildInvoicePanel()),
+                          Flex: _isInvoiceExpanded ? 1 : 2,
+                          Child: Container(color: Colors.grey.shade100, child: _buildInvoicePanel()),
                         ),
                     ],
                   ),
@@ -1271,42 +1334,42 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildTouchProductGrid() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(6),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: _getGridCrossAxisCount(),
-        childAspectRatio: 1.1,
-        crossAxisSpacing: 6,
-        mainAxisSpacing: 6,
+    Return GridView.builder(
+      Padding: const EdgeInsets.all(6),
+      GridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        CrossAxisCount: _getGridCrossAxisCount(),
+        ChildAspectRatio: 1.1,
+        CrossAxisSpacing: 6,
+        MainAxisSpacing: 6,
       ),
-      itemCount: _filteredProducts.length,
-      itemBuilder: (ctx, index) {
-        final prod = _filteredProducts[index];
+      ItemCount: _filteredProducts.length,
+      ItemBuilder: (ctx, index) {
+        Final prod = _filteredProducts[index];
         Color cardColor = _isReturnMode ? Colors.deepOrange.shade700 : Colors.blue.shade700;
-        final itemFontSize = _getItemFontSize();
+        Final itemFontSize = _getItemFontSize();
 
-        return InkWell(
-          onTap: () => _addToCart(prod),
-          child: Card(
-            elevation: 3,
-            color: cardColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            child: Padding(
-              padding: const EdgeInsets.all(6.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+        Return InkWell(
+          OnTap: () => _addToCart(prod),
+          Child: Card(
+            Elevation: 3,
+            Color: cardColor,
+            Shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            Child: Padding(
+              Padding: const EdgeInsets.all(6.0),
+              Child: Column(
+                MainAxisAlignment: MainAxisAlignment.center,
+                Children: [
                   Text(
-                    prod.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: itemFontSize, color: Colors.white),
+                    Prod.name,
+                    TextAlign: TextAlign.center,
+                    MaxLines: 2,
+                    Style: TextStyle(fontWeight: FontWeight.bold, fontSize: itemFontSize, color: Colors.white),
                   ),
-                  const SizedBox(height: 6),
+                  ConstrainedBox(constraints: const BoxConstraints(height: 6)),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4)),
-                    child: Text(_formatNum(prod.sellPrice), style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: itemFontSize - 1)),
+                    Padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    Decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4)),
+                    Child: Text(_formatNum(prod.sellPrice), style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: itemFontSize - 1)),
                   ),
                 ],
               ),
@@ -1318,16 +1381,16 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildStandardProductList() {
-    return ListView.builder(
-      itemCount: _filteredProducts.length,
-      itemBuilder: (ctx, index) {
-        final prod = _filteredProducts[index];
-        return ListTile(
-          title: Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text('السعر: ${_formatNum(prod.sellPrice)} | الكمية: ${_formatNum(prod.quantity)}'),
-          trailing: IconButton(
-            icon: Icon(_isReturnMode ? Icons.remove_shopping_cart : Icons.add_shopping_cart, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
-            onPressed: () => _addToCart(prod),
+    Return ListView.builder(
+      ItemCount: _filteredProducts.length,
+      ItemBuilder: (ctx, index) {
+        Final prod = _filteredProducts[index];
+        Return ListTile(
+          Title: Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Subtitle: Text('السعر: ${_formatNum(prod.sellPrice)} | الكمية: ${_formatNum(prod.quantity)}'),
+          Trailing: IconButton(
+            Icon: Icon(_isReturnMode ? Icons.remove_shopping_cart : Icons.add_shopping_cart, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
+            OnPressed: () => _addToCart(prod),
           ),
         );
       },
@@ -1335,84 +1398,84 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildInvoicePanel() {
-    return Column(
-      children: [
+    Return Column(
+      Children: [
         Container(
-          padding: const EdgeInsets.all(8),
-          color: _isReturnMode ? Colors.orange.shade200 : Colors.blueGrey.shade100,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+          Padding: const EdgeInsets.all(8),
+          Color: _isReturnMode ? Colors.orange.shade200 : Colors.blueGrey.shade100,
+          Child: Row(
+            MainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Children: [
               Text(_isReturnMode ? 'الصنف المراد إرجاعه' : 'الصنف / الملاحظات', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const Text('العدد', style: TextStyle(fontWeight: FontWeight.bold)),
-              const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
+              Const Text('العدد', style: TextStyle(fontWeight: FontWeight.bold)),
+              Const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),
         Expanded(
-          child: _cart.isEmpty
+          Child: _cart.isEmpty
               ? Center(child: Text(_isReturnMode ? 'قائمة المرتجع فارغة' : 'الفاتورة فارغة'))
               : ListView.builder(
-                  itemCount: _cart.length,
-                  itemBuilder: (ctx, index) {
-                    final item = _cart[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      child: Padding(
-                        padding: const EdgeInsets.all(6.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+                  ItemCount: _cart.length,
+                  ItemBuilder: (ctx, index) {
+                    Final item = _cart[index];
+                    Return Card(
+                      Margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      Child: Padding(
+                        Padding: const EdgeInsets.all(6.0),
+                        Child: Column(
+                          CrossAxisAlignment: CrossAxisAlignment.start,
+                          Children: [
                             Row(
-                              children: [
+                              Children: [
                                 Expanded(
-                                  flex: 3,
-                                  child: Text(item.product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                  Flex: 3,
+                                  Child: Text(item.product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                                 ),
                                 Row(
-                                  children: [
+                                  Children: [
                                     InkWell(
-                                      onTap: () {
-                                        setState(() {
-                                          if (item.quantity > 1) {
-                                            item.quantity--;
+                                      OnTap: () {
+                                        SetState(() {
+                                          If (item.quantity > 1) {
+                                            Item.quantity--;
                                           } else {
                                             _cart.removeAt(index);
                                           }
                                         });
                                       },
-                                      child: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.red),
+                                      Child: const Icon(Icons.remove_circle_outline, size: 18, color: Colors.red),
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                      child: Text(_formatNum(item.quantity)),
+                                      Padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      Child: Text(_formatNum(item.quantity)),
                                     ),
                                     InkWell(
-                                      onTap: () => setState(() => item.quantity++),
-                                      child: const Icon(Icons.add_circle_outline, size: 18, color: Colors.green),
+                                      OnTap: () => setState(() => item.quantity++),
+                                      Child: const Icon(Icons.add_circle_outline, size: 18, color: Colors.green),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(width: 8),
+                                ConstrainedBox(constraints: const BoxConstraints(width: 8)),
                                 Text(_formatNum(item.total), style: const TextStyle(fontWeight: FontWeight.bold)),
                               ],
                             ),
-                            if (!_isReturnMode)
+                            If (!_isReturnMode)
                               InkWell(
-                                onTap: () => _showPrepNotesDialog(item),
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.note_alt_outlined, size: 14, color: Colors.orange),
-                                      const SizedBox(width: 4),
+                                OnTap: () => _showPrepNotesDialog(item),
+                                Child: Padding(
+                                  Padding: const EdgeInsets.only(top: 4.0),
+                                  Child: Row(
+                                    Children: [
+                                      Const Icon(Icons.note_alt_outlined, size: 14, color: Colors.orange),
+                                      ConstrainedBox(constraints: const BoxConstraints(width: 4)),
                                       Expanded(
-                                        child: Text(
-                                          item.preparationNotes.isEmpty ? '+ ملاحظات تحضير' : item.preparationNotes,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: item.preparationNotes.isEmpty ? Colors.grey : Colors.deepOrange,
-                                            fontStyle: FontStyle.italic,
+                                        Child: Text(
+                                          Item.preparationNotes.isEmpty ? '+ ملاحظات تحضير' : item.preparationNotes,
+                                          Style: TextStyle(
+                                            FontSize: 11,
+                                            Color: item.preparationNotes.isEmpty ? Colors.grey : Colors.deepOrange,
+                                            FontStyle: FontStyle.italic,
                                           ),
                                         ),
                                       ),
@@ -1428,15 +1491,15 @@ class _PosScreenState extends State<PosScreen> {
                 ),
         ),
         Container(
-          padding: const EdgeInsets.all(12),
-          color: Colors.grey.shade200,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+          Padding: const EdgeInsets.all(12),
+          Color: Colors.grey.shade200,
+          Child: Row(
+            MainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Children: [
               Text(_isReturnMode ? 'إجمالي المسترجع:' : 'الإجمالي العام:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               Text(
                 _formatNum(_totalAmount),
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
+                Style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
               ),
             ],
           ),
@@ -1446,47 +1509,47 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   Widget _buildBottomBar() {
-    final btnHeight = _getBottomButtonHeight();
-    final btnFontSize = _getBottomButtonFontSize();
+    Final btnHeight = _getBottomButtonHeight();
+    Final btnFontSize = _getBottomButtonFontSize();
 
-    return Container(
-      padding: const EdgeInsets.all(8),
-      color: Colors.white,
-      child: Row(
-        children: [
+    Return Container(
+      Padding: const EdgeInsets.all(8),
+      Color: Colors.white,
+      Child: Row(
+        Children: [
           Expanded(
-            child: SizedBox(
-              height: btnHeight,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade700),
-                icon: const Icon(Icons.cleaning_services, color: Colors.white, size: 20),
-                label: Text('تعليق', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
-                onPressed: _clearInvoice,
+            Child: SizedBox(
+              Height: btnHeight,
+              Child: ElevatedButton.icon(
+                Style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade700),
+                Icon: const Icon(Icons.cleaning_services, color: Colors.white, size: 20),
+                Label: Text('تعليق', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
+                OnPressed: _clearInvoice,
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          ConstrainedBox(constraints: const BoxConstraints(width: 6)),
           Expanded(
-            child: SizedBox(
-              height: btnHeight,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
-                icon: const Icon(Icons.delete_forever, color: Colors.white, size: 20),
-                label: Text('إلغاء', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
-                onPressed: _clearInvoice,
+            Child: SizedBox(
+              Height: btnHeight,
+              Child: ElevatedButton.icon(
+                Style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+                Icon: const Icon(Icons.delete_forever, color: Colors.white, size: 20),
+                Label: Text('إلغاء', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
+                OnPressed: _clearInvoice,
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          ConstrainedBox(constraints: const BoxConstraints(width: 6)),
           Expanded(
-            flex: 2,
-            child: SizedBox(
-              height: btnHeight,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green.shade700),
-                icon: Icon(_isReturnMode ? Icons.assignment_return : Icons.payment, color: Colors.white, size: 22),
-                label: Text(_isReturnMode ? 'إتمام المرتجع' : 'دفع وطباعة', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
-                onPressed: _cart.isEmpty ? null : _showPaymentDialog,
+            Flex: 2,
+            Child: SizedBox(
+              Height: btnHeight,
+              Child: ElevatedButton.icon(
+                Style: ElevatedButton.styleFrom(backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green.shade700),
+                Icon: Icon(_isReturnMode ? Icons.assignment_return : Icons.payment, color: Colors.white, size: 22),
+                Label: Text(_isReturnMode ? 'إتمام المرتجع' : 'دفع وطباعة', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
+                OnPressed: _cart.isEmpty ? null : _showPaymentDialog,
               ),
             ),
           ),
