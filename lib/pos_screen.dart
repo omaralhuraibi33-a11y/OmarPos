@@ -93,6 +93,7 @@ class _PosScreenState extends State<PosScreen> {
     List<CartItem>? customCart,
     String? customerName,
     double? customTotal,
+    bool isReturn = false,
   }) async {
     if (!_isPrinterConnected) return;
 
@@ -139,6 +140,11 @@ class _PosScreenState extends State<PosScreen> {
             bytes += generator.text('الرقم الضريبي: $taxNumber', styles: const PosStyles(align: PosAlign.center));
           }
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+          
+          if (isReturn) {
+            bytes += generator.text('*** سند مرتجع مبيعات ***', styles: const PosStyles(align: PosAlign.center, bold: true));
+          }
+
           bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.right));
           bytes += generator.text('العميل: $activeCustomer', styles: const PosStyles(align: PosAlign.right));
           bytes += generator.text('طريقة الدفع: $paymentMethod', styles: const PosStyles(align: PosAlign.right));
@@ -165,7 +171,7 @@ class _PosScreenState extends State<PosScreen> {
           bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
         } else {
           bytes += generator.text(
-            '--- طلب مطبخ ---', 
+            isReturn ? '--- مرتجع مطبخ ---' : '--- طلب مطبخ ---', 
             styles: const PosStyles(
               align: PosAlign.center, 
               bold: true, 
@@ -210,7 +216,21 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   void _showInvoicesHistoryDialog() async {
-    final invoices = await DBHelper.getAllInvoices();
+    final salesInvoices = await DBHelper.getAllInvoices();
+    final returnInvoices = await DBHelper.getAllReturnInvoices();
+    
+    // دمج القائمتين مع تمييز النوع
+    List<Map<String, dynamic>> combinedList = [];
+    for (var inv in salesInvoices) {
+      combinedList.add({'invoice': inv, 'isReturn': false});
+    }
+    for (var inv in returnInvoices) {
+      combinedList.add({'invoice': inv, 'isReturn': true});
+    }
+
+    // ترتيب تنازلي حسب التاريخ
+    combinedList.sort((a, b) => (b['invoice'] as Invoice).date.compareTo((a['invoice'] as Invoice).date));
+
     if (!mounted) return;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -235,14 +255,21 @@ class _PosScreenState extends State<PosScreen> {
                       IconButton(
                         icon: Icon(Icons.refresh, color: textColor),
                         onPressed: () async {
-                          final freshInvoices = await DBHelper.getAllInvoices();
+                          final freshSales = await DBHelper.getAllInvoices();
+                          final freshReturns = await DBHelper.getAllReturnInvoices();
                           setDialogState(() {
-                            invoices.clear();
-                            invoices.addAll(freshInvoices);
+                            combinedList.clear();
+                            for (var inv in freshSales) {
+                              combinedList.add({'invoice': inv, 'isReturn': false});
+                            }
+                            for (var inv in freshReturns) {
+                              combinedList.add({'invoice': inv, 'isReturn': true});
+                            }
+                            combinedList.sort((a, b) => (b['invoice'] as Invoice).date.compareTo((a['invoice'] as Invoice).date));
                           });
                         },
                       ),
-                      Text('الفواتير', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text('سجل الفواتير والمرتجعات', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 18)),
                       IconButton(
                         icon: Icon(Icons.arrow_forward, color: textColor),
                         onPressed: () => Navigator.pop(ctx),
@@ -258,7 +285,7 @@ class _PosScreenState extends State<PosScreen> {
                     },
                     style: TextStyle(color: textColor),
                     decoration: InputDecoration(
-                      hintText: 'بحث برقم الفاتورة',
+                      hintText: 'بحث برقم الفاتورة أو المرتجع',
                       hintStyle: TextStyle(color: isDark ? Colors.white54 : Colors.grey),
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
@@ -271,27 +298,31 @@ class _PosScreenState extends State<PosScreen> {
                   Expanded(
                     child: Builder(
                       builder: (context) {
-                        final filteredList = invoices.where((inv) {
+                        final filteredList = combinedList.where((item) {
                           if (searchQuery.isEmpty) return true;
+                          final inv = item['invoice'] as Invoice;
                           return inv.id.toLowerCase().contains(searchQuery.toLowerCase());
                         }).toList();
 
                         if (filteredList.isEmpty) {
-                          return Center(child: Text('لا توجد فواتير مسجلة', style: TextStyle(color: textColor)));
+                          return Center(child: Text('لا توجد سجلات مطابقة', style: TextStyle(color: textColor)));
                         }
 
                         return ListView.builder(
                           itemCount: filteredList.length,
                           itemBuilder: (context, index) {
-                            final inv = filteredList[index];
-                            final isReturn = inv.invoiceType == 'return';
+                            final mapItem = filteredList[index];
+                            final inv = mapItem['invoice'] as Invoice;
+                            final isReturn = mapItem['isReturn'] as bool;
                             final formattedId = isReturn 
                                 ? 'RET-${inv.id.padLeft(6, '0')}' 
                                 : 'INV-${inv.id.padLeft(6, '0')}';
 
                             return InkWell(
                               onTap: () async {
-                                final items = await DBHelper.getInvoiceItems(inv.id);
+                                final items = isReturn 
+                                    ? await DBHelper.getReturnInvoiceItems(inv.id)
+                                    : await DBHelper.getInvoiceItems(inv.id);
                                 if (!context.mounted) return;
                                 
                                 showDialog(
@@ -324,6 +355,7 @@ class _PosScreenState extends State<PosScreen> {
                                                     customCart: cartItems,
                                                     customerName: inv.customerName,
                                                     customTotal: inv.totalAmount,
+                                                    isReturn: isReturn,
                                                   );
                                                 },
                                               ),
@@ -340,7 +372,7 @@ class _PosScreenState extends State<PosScreen> {
                                                     children: [
                                                       const Icon(Icons.payment, size: 16, color: Colors.blueAccent),
                                                       const SizedBox(width: 4),
-                                                      Text(inv.paymentType == 'cash' ? 'نقداً' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
+                                                      Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: TextStyle(fontSize: 12, color: textColor)),
                                                     ],
                                                   ),
                                                 ),
@@ -352,9 +384,9 @@ class _PosScreenState extends State<PosScreen> {
                                                   decoration: BoxDecoration(color: isDark ? Colors.white12 : Colors.grey.shade200, borderRadius: BorderRadius.circular(8)),
                                                   child: Row(
                                                     children: [
-                                                      const Icon(Icons.info_outline, size: 16, color: Colors.blueAccent),
+                                                      Icon(isReturn ? Icons.assignment_return : Icons.check_circle, size: 16, color: isReturn ? Colors.orange : Colors.green),
                                                       const SizedBox(width: 4),
-                                                      Text('معتمدة', style: TextStyle(fontSize: 12, color: textColor)),
+                                                      Text(isReturn ? 'مرتجع معتمد' : 'بيع معتمد', style: TextStyle(fontSize: 12, color: textColor)),
                                                     ],
                                                   ),
                                                 ),
@@ -382,7 +414,7 @@ class _PosScreenState extends State<PosScreen> {
                                                             Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
                                                           ],
                                                         ),
-                                                        Text(_formatNum(itm.total), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green)),
+                                                        Text(_formatNum(itm.total), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: isReturn ? Colors.orange : Colors.green)),
                                                       ],
                                                     ),
                                                   ),
@@ -404,7 +436,9 @@ class _PosScreenState extends State<PosScreen> {
                                 margin: const EdgeInsets.symmetric(vertical: 6),
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF252538) : Colors.blue.shade900,
+                                  color: isReturn 
+                                      ? (isDark ? const Color(0xFF332211) : Colors.orange.shade900)
+                                      : (isDark ? const Color(0xFF252538) : Colors.blue.shade900),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: Row(
@@ -412,10 +446,10 @@ class _PosScreenState extends State<PosScreen> {
                                     Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: Colors.blue.shade700.withOpacity(0.4),
+                                        color: (isReturn ? Colors.orange.shade700 : Colors.blue.shade700).withOpacity(0.4),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
-                                      child: const Icon(Icons.receipt, color: Colors.cyanAccent, size: 24),
+                                      child: Icon(isReturn ? Icons.assignment_return : Icons.receipt, color: isReturn ? Colors.orangeAccent : Colors.cyanAccent, size: 24),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
@@ -445,7 +479,7 @@ class _PosScreenState extends State<PosScreen> {
                                               const SizedBox(width: 10),
                                               const Icon(Icons.payment, color: Colors.white54, size: 13),
                                               const SizedBox(width: 4),
-                                              Text(inv.paymentType == 'cash' ? 'نقداً' : 'آجل', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                                              Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                                             ],
                                           ),
                                         ],
@@ -457,9 +491,9 @@ class _PosScreenState extends State<PosScreen> {
                                         const Text('الإجمالي', style: TextStyle(color: Colors.white54, fontSize: 11)),
                                         const SizedBox(height: 2),
                                         Text(
-                                          _formatNum(isReturn ? -inv.totalAmount : inv.totalAmount),
+                                          _formatNum(inv.totalAmount),
                                           style: TextStyle(
-                                            color: isReturn ? Colors.yellowAccent : Colors.greenAccent,
+                                            color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 16,
                                           ),
@@ -736,75 +770,141 @@ class _PosScreenState extends State<PosScreen> {
     final shiftId = await DBHelper.getCurrentShiftId();
     final customerId = _selectedCustomer?.id ?? 'cash_default';
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
-    final invoiceType = _isReturnMode ? 'return' : 'sale';
     
-    // جلب جميع الفواتير وفلترتها بدقة حسب النوع الحالي فقط لمنع تداخل أرقام المبيعات والمرتجع نهائياً
-    final allInvoices = await DBHelper.getAllInvoices();
-    final sameTypeInvoices = allInvoices.where((inv) => inv.invoiceType == invoiceType).toList();
-    
-    int maxId = 0;
-    for (var inv in sameTypeInvoices) {
-      int? parsedId = int.tryParse(inv.id);
-      if (parsedId != null && parsedId > maxId) {
-        maxId = parsedId;
+    // التوجيه الصحيح بالكامل بناءً على وضع البيع أو وضع المرتجع (جدول مستقل كلياً)
+    if (_isReturnMode) {
+      // 1. جلب فواتير المرتجعات فقط لتوليد رقم تسلسلي مستقل تماماً يبدأ من 1 وصاعداً
+      final returnInvoices = await DBHelper.getAllReturnInvoices();
+      int maxReturnId = 0;
+      for (var inv in returnInvoices) {
+        int? parsedId = int.tryParse(inv.id);
+        if (parsedId != null && parsedId > maxReturnId) {
+          maxReturnId = parsedId;
+        }
       }
-    }
-    
-    // الرقم التسلسلي الجديد مستقل تماماً (كل نوع يبدأ تسلسله الخاص من 1 وصاعداً)
-    final nextNumber = maxId + 1;
-    final invoiceId = nextNumber.toString();
+      final nextReturnNumber = maxReturnId + 1;
+      final invoiceId = nextReturnNumber.toString();
 
-    final invoice = Invoice(
-      id: invoiceId,
-      invoiceType: invoiceType,
-      paymentType: isCredit ? 'credit' : 'cash',
-      totalAmount: totalSnapshot,
-      date: now,
-      customerId: customerId,
-      customerName: customerNameSnapshot,
-      shiftId: shiftId,
-      isClosed: false,
-    );
-    await DBHelper.saveInvoice(invoice);
-
-    for (var item in cartSnapshot) {
-      final invoiceItem = InvoiceItem(
-        id: '${invoiceId}_${item.product.id}',
-        invoiceId: invoiceId,
-        productId: item.product.id,
-        productName: item.product.name,
-        quantity: item.quantity,
-        price: item.unitPrice,
-        total: item.total,
-        notes: item.preparationNotes,
-      );
-      await DBHelper.saveInvoiceItem(invoiceItem);
-
-      // تأثير المخزن: المبيعات تخصم (-) والمرتجع يضيف (+)
-      double stockDelta = _isReturnMode ? item.quantity : -item.quantity;
-      await DBHelper.updateProductStock(item.product.id, stockDelta);
-    }
-
-    final formattedPrintId = _isReturnMode ? 'RET-${invoiceId.padLeft(6, '0')}' : 'INV-${invoiceId.padLeft(6, '0')}';
-
-    if (_isPrinterConnected) {
-      await _printReceiptDirect(
-        invoiceId: formattedPrintId,
-        paymentMethod: paymentMethod,
-        customCart: cartSnapshot,
+      final returnInvoice = Invoice(
+        id: invoiceId,
+        invoiceType: 'return',
+        paymentType: isCredit ? 'credit' : 'cash',
+        totalAmount: totalSnapshot,
+        date: now,
+        customerId: customerId,
         customerName: customerNameSnapshot,
-        customTotal: totalSnapshot,
+        shiftId: shiftId,
+        isClosed: false,
       );
-    }
+      
+      // حفظ في جدول المرتجعات المستقل
+      await DBHelper.saveReturnInvoice(returnInvoice);
 
-    final actionName = _isReturnMode ? 'مرتجع المبيعات' : 'الفاتورة';
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تم حفظ $actionName بنجاح برقم ($formattedPrintId)'),
-          backgroundColor: _isReturnMode ? Colors.orange.shade800 : Colors.green,
-        ),
+      for (var item in cartSnapshot) {
+        final returnItem = InvoiceItem(
+          id: '${invoiceId}_${item.product.id}',
+          invoiceId: invoiceId,
+          productId: item.product.id,
+          productName: item.product.name,
+          quantity: item.quantity,
+          price: item.unitPrice,
+          total: item.total,
+          notes: item.preparationNotes,
+        );
+        await DBHelper.saveReturnInvoiceItem(returnItem);
+
+        // مرتجع المبيعات يعيد الكمية للمخزن (+)
+        await DBHelper.updateProductStock(item.product.id, item.quantity);
+      }
+
+      final formattedPrintId = 'RET-${invoiceId.padLeft(6, '0')}';
+
+      if (_isPrinterConnected) {
+        await _printReceiptDirect(
+          invoiceId: formattedPrintId,
+          paymentMethod: paymentMethod,
+          customCart: cartSnapshot,
+          customerName: customerNameSnapshot,
+          customTotal: totalSnapshot,
+          isReturn: true,
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم حفظ مرتجع المبيعات بنجاح برقم ($formattedPrintId)'),
+            backgroundColor: Colors.orange.shade800,
+          ),
+        );
+      }
+
+    } else {
+      // 1. جلب فواتير المبيعات فقط لتوليد رقم تسلسلي مستقل تماماً يبدأ من 1 وصاعداً
+      final salesInvoices = await DBHelper.getAllInvoices();
+      int maxSaleId = 0;
+      for (var inv in salesInvoices) {
+        int? parsedId = int.tryParse(inv.id);
+        if (parsedId != null && parsedId > maxSaleId) {
+          maxSaleId = parsedId;
+        }
+      }
+      final nextSaleNumber = maxSaleId + 1;
+      final invoiceId = nextSaleNumber.toString();
+
+      final saleInvoice = Invoice(
+        id: invoiceId,
+        invoiceType: 'sale',
+        paymentType: isCredit ? 'credit' : 'cash',
+        totalAmount: totalSnapshot,
+        date: now,
+        customerId: customerId,
+        customerName: customerNameSnapshot,
+        shiftId: shiftId,
+        isClosed: false,
       );
+      
+      // حفظ في جدول المبيعات
+      await DBHelper.saveInvoice(saleInvoice);
+
+      for (var item in cartSnapshot) {
+        final invoiceItem = InvoiceItem(
+          id: '${invoiceId}_${item.product.id}',
+          invoiceId: invoiceId,
+          productId: item.product.id,
+          productName: item.product.name,
+          quantity: item.quantity,
+          price: item.unitPrice,
+          total: item.total,
+          notes: item.preparationNotes,
+        );
+        await DBHelper.saveInvoiceItem(invoiceItem);
+
+        // مبيعات البيع تخفض الكمية من المخزن (-)
+        await DBHelper.updateProductStock(item.product.id, -item.quantity);
+      }
+
+      final formattedPrintId = 'INV-${invoiceId.padLeft(6, '0')}';
+
+      if (_isPrinterConnected) {
+        await _printReceiptDirect(
+          invoiceId: formattedPrintId,
+          paymentMethod: paymentMethod,
+          customCart: cartSnapshot,
+          customerName: customerNameSnapshot,
+          customTotal: totalSnapshot,
+          isReturn: false,
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم حفظ الفاتورة بنجاح برقم ($formattedPrintId)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     }
 
     await _loadData();
