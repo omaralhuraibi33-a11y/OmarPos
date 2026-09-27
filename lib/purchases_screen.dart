@@ -234,41 +234,37 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       return;
     }
 
-    if (_isReturnMode) {
-      for (var item in _purchaseItems) {
-        await DBHelper.updateProductStock(item.product.id, -item.quantity);
-      }
-
-      if (_selectedSupplier != null) {
-        await DBHelper.addSupplierTransaction(
-          supplierId: _selectedSupplier!.id,
-          type: 'مرتجع مشتريات',
-          credit: 0.0,
-          debit: _finalTotal,
+    try {
+      if (_isReturnMode) {
+        // 1. حفظ فاتورة مرتجع المشتريات في قاعدة البيانات عبر DBHelper
+        // (تأكد من مطابقة اسم الدوال مع ملف db_helper.dart لديك مثل savePurchaseReturn أو ما سيلها)
+        await DBHelper.savePurchaseReturn(
+          supplierId: _selectedSupplier?.id,
+          supplierName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
+          subTotal: _subTotal,
+          discount: _invoiceDiscount,
+          grandTotal: _finalTotal,
+          items: _purchaseItems,
         );
-      }
 
-      _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتقييده بنجاح');
-    } else {
-      for (var item in _purchaseItems) {
-        await DBHelper.updateProductStock(item.product.id, item.quantity);
-
-        if (item.purchasePrice != item.product.purchasePrice) {
-          item.product.purchasePrice = item.purchasePrice;
-          await DBHelper.saveProduct(item.product);
-        }
-      }
-
-      if (_selectedSupplier != null) {
-        await DBHelper.addSupplierTransaction(
-          supplierId: _selectedSupplier!.id,
-          type: 'فاتورة مشتريات',
-          credit: _finalTotal,
-          debit: 0.0,
+        _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتحديث المخزون وحساب المورد بنجاح');
+      } else {
+        // 1. حفظ فاتورة المشتريات الأساسية عبر DBHelper
+        await DBHelper.savePurchaseInvoice(
+          supplierId: _selectedSupplier?.id,
+          supplierName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
+          subTotal: _subTotal,
+          discount: _invoiceDiscount,
+          grandTotal: _finalTotal,
+          items: _purchaseItems,
         );
-      }
 
-      _finishInvoiceProcess('تم حفظ فاتورة المشتريات وتحديث المخزون بنجاح');
+        _finishInvoiceProcess('تم حفظ فاتورة المشتريات وتحديث المخزون بنجاح');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('حدث خطأ أثناء الحفظ: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -499,7 +495,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            flex: 2,
+                            flex:2,
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: _isReturnMode ? theme.colorScheme.error : theme.colorScheme.primary,
