@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'db_helper.dart';
+// استورد شاشة سجل الفواتير إذا كانت موجودة لديك بهذا الاسم أو عدلها حسب اسم الملف لديك
+// import 'purchase_invoices_log_screen.dart'; 
 
 class PurchaseItem {
   final Product product;
@@ -240,14 +242,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final int currentShift = await DBHelper.getCurrentShiftId();
 
       if (_isReturnMode) {
-        // إنشاء كائن فاتورة مرتجع المشتريات
+        // إنشاء كائن فاتورة مرتجع المشتريات (متوافق مع حقول الجدول تماماً بدون customerId)
         Invoice returnInvoice = Invoice(
           id: invoiceId,
           invoiceType: 'purchase_return',
           paymentType: _selectedSupplier == null ? 'cash' : 'credit',
           totalAmount: _finalTotal,
           date: currentDate,
-          customerId: _selectedSupplier?.id, // نستخدم حقل المعرف للجهة
           customerName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
           notes: 'مرتجع مشتريات - خصم: $_invoiceDiscount',
           shiftId: currentShift,
@@ -268,20 +269,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             total: item.total,
           );
           await DBHelper.savePurchaseReturnInvoiceItem(invItem);
-          // خصم الكمية من المخزون عند إرجاع المشتريات للمورد
           await DBHelper.updateProductStock(item.product.id, -item.quantity);
         }
 
         _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتحديث المخزون وحساب المورد بنجاح');
       } else {
-        // إنشاء كائن فاتورة المشتريات الرئيسية
+        // إنشاء كائن فاتورة المشتريات الرئيسية (متوافق مع حقول الجدول تماماً بدون customerId)
         Invoice purchaseInvoice = Invoice(
           id: invoiceId,
           invoiceType: 'purchase',
           paymentType: _selectedSupplier == null ? 'cash' : 'credit',
           totalAmount: _finalTotal,
           date: currentDate,
-          customerId: _selectedSupplier?.id,
           customerName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
           notes: 'فاتورة مشتريات - خصم: $_invoiceDiscount',
           shiftId: currentShift,
@@ -302,7 +301,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             total: item.total,
           );
           await DBHelper.savePurchaseInvoiceItem(invItem);
-          // زيادة الكمية وتحديث سعر الشراء في المخزون
           await DBHelper.updateProductPriceAndStock(
             item.product.id,
             item.quantity,
@@ -348,11 +346,21 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
         centerTitle: true,
         actions: [
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _isReturnMode ? theme.colorScheme.primary : theme.colorScheme.error,
-              elevation: 0,
-            ),
+          // زر سجل الفواتير
+          IconButton(
+            icon: const Icon(Icons.receipt_long, color: Colors.white),
+            tooltip: 'سجل الفواتير',
+            onPressed: () {
+              // ضع هنا الانتقال لشاشة سجل الفواتير الخاصة بك، مثال:
+              // Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseInvoicesLogScreen()));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('شاشة سجل الفواتير (تأكد من ربطها بالشاشة الخاصة بك)')),
+              );
+            },
+          ),
+          // زر التبديل بين فاتورة الشراء والمرتجع
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
             icon: Icon(_isReturnMode ? Icons.shopping_bag : Icons.assignment_return, color: Colors.white),
             label: Text(
               _isReturnMode ? 'فاتورة شراء' : 'مرتجع',
