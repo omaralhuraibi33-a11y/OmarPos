@@ -235,29 +235,81 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     }
 
     try {
+      final String invoiceId = 'pur_${DateTime.now().millisecondsSinceEpoch}';
+      final String currentDate = DateTime.now().toString().split('.')[0];
+      final int currentShift = await DBHelper.getCurrentShiftId();
+
       if (_isReturnMode) {
-        // 1. حفظ فاتورة مرتجع المشتريات في قاعدة البيانات عبر DBHelper
-        // (تأكد من مطابقة اسم الدوال مع ملف db_helper.dart لديك مثل savePurchaseReturn أو ما سيلها)
-        await DBHelper.savePurchaseReturn(
-          supplierId: _selectedSupplier?.id,
-          supplierName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
-          subTotal: _subTotal,
-          discount: _invoiceDiscount,
-          grandTotal: _finalTotal,
-          items: _purchaseItems,
+        // إنشاء كائن فاتورة مرتجع المشتريات
+        Invoice returnInvoice = Invoice(
+          id: invoiceId,
+          invoiceType: 'purchase_return',
+          paymentType: _selectedSupplier == null ? 'cash' : 'credit',
+          totalAmount: _finalTotal,
+          date: currentDate,
+          customerId: _selectedSupplier?.id, // نستخدم حقل المعرف للجهة
+          customerName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
+          notes: 'مرتجع مشتريات - خصم: $_invoiceDiscount',
+          shiftId: currentShift,
         );
+
+        // حفظ الفاتورة الأساسية للمرتجع
+        await DBHelper.savePurchaseReturnInvoice(returnInvoice);
+
+        // حفظ تفاصيل الأصناف وتحديث المخزون
+        for (var item in _purchaseItems) {
+          InvoiceItem invItem = InvoiceItem(
+            id: '${invoiceId}_${item.product.id}',
+            invoiceId: invoiceId,
+            productId: item.product.id,
+            productName: item.product.name,
+            quantity: item.quantity,
+            price: item.purchasePrice,
+            total: item.total,
+          );
+          await DBHelper.savePurchaseReturnInvoiceItem(invItem);
+          // خصم الكمية من المخزون عند إرجاع المشتريات للمورد
+          await DBHelper.updateProductStock(item.product.id, -item.quantity);
+        }
 
         _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتحديث المخزون وحساب المورد بنجاح');
       } else {
-        // 1. حفظ فاتورة المشتريات الأساسية عبر DBHelper
-        await DBHelper.savePurchaseInvoice(
-          supplierId: _selectedSupplier?.id,
-          supplierName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
-          subTotal: _subTotal,
-          discount: _invoiceDiscount,
-          grandTotal: _finalTotal,
-          items: _purchaseItems,
+        // إنشاء كائن فاتورة المشتريات الرئيسية
+        Invoice purchaseInvoice = Invoice(
+          id: invoiceId,
+          invoiceType: 'purchase',
+          paymentType: _selectedSupplier == null ? 'cash' : 'credit',
+          totalAmount: _finalTotal,
+          date: currentDate,
+          customerId: _selectedSupplier?.id,
+          customerName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
+          notes: 'فاتورة مشتريات - خصم: $_invoiceDiscount',
+          shiftId: currentShift,
         );
+
+        // حفظ فاتورة المشتريات
+        await DBHelper.savePurchaseInvoice(purchaseInvoice);
+
+        // حفظ تفاصيل الأصناف وتحديث المخزون والأسعار
+        for (var item in _purchaseItems) {
+          InvoiceItem invItem = InvoiceItem(
+            id: '${invoiceId}_${item.product.id}',
+            invoiceId: invoiceId,
+            productId: item.product.id,
+            productName: item.product.name,
+            quantity: item.quantity,
+            price: item.purchasePrice,
+            total: item.total,
+          );
+          await DBHelper.savePurchaseInvoiceItem(invItem);
+          // زيادة الكمية وتحديث سعر الشراء في المخزون
+          await DBHelper.updateProductPriceAndStock(
+            item.product.id,
+            item.quantity,
+            item.purchasePrice,
+            item.product.sellPrice,
+          );
+        }
 
         _finishInvoiceProcess('تم حفظ فاتورة المشتريات وتحديث المخزون بنجاح');
       }
@@ -495,7 +547,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            flex:2,
+                            flex: 2,
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: _isReturnMode ? theme.colorScheme.error : theme.colorScheme.primary,
