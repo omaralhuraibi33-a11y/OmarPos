@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'db_helper.dart';
-// استورد شاشة سجل الفواتير إذا كانت موجودة لديك بهذا الاسم أو عدلها حسب اسم الملف لديك
-// import 'purchase_invoices_log_screen.dart'; 
+import 'purchase_invoices_log_screen.dart'; // تأكد أن هذا هو اسم ملف شاشة سجل الفواتير لديك
 
 class PurchaseItem {
   final Product product;
@@ -242,7 +241,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final int currentShift = await DBHelper.getCurrentShiftId();
 
       if (_isReturnMode) {
-        // إنشاء كائن فاتورة مرتجع المشتريات (متوافق مع حقول الجدول تماماً بدون customerId)
         Invoice returnInvoice = Invoice(
           id: invoiceId,
           invoiceType: 'purchase_return',
@@ -254,10 +252,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           shiftId: currentShift,
         );
 
-        // حفظ الفاتورة الأساسية للمرتجع
         await DBHelper.savePurchaseReturnInvoice(returnInvoice);
 
-        // حفظ تفاصيل الأصناف وتحديث المخزون
         for (var item in _purchaseItems) {
           InvoiceItem invItem = InvoiceItem(
             id: '${invoiceId}_${item.product.id}',
@@ -272,9 +268,19 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           await DBHelper.updateProductStock(item.product.id, -item.quantity);
         }
 
-        _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتحديث المخزون وحساب المورد بنجاح');
+        if (_selectedSupplier != null) {
+          await DBHelper.addSupplierTransaction(
+            supplierId: _selectedSupplier!.id,
+            type: 'مرتجع مشتريات',
+            credit: 0.0,
+            debit: _finalTotal,
+            date: currentDate,
+            notes: 'مرتجع مشتريات: $invoiceId',
+          );
+        }
+
+        _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتحديث المخزون بنجاح');
       } else {
-        // إنشاء كائن فاتورة المشتريات الرئيسية (متوافق مع حقول الجدول تماماً بدون customerId)
         Invoice purchaseInvoice = Invoice(
           id: invoiceId,
           invoiceType: 'purchase',
@@ -286,10 +292,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           shiftId: currentShift,
         );
 
-        // حفظ فاتورة المشتريات
         await DBHelper.savePurchaseInvoice(purchaseInvoice);
 
-        // حفظ تفاصيل الأصناف وتحديث المخزون والأسعار
         for (var item in _purchaseItems) {
           InvoiceItem invItem = InvoiceItem(
             id: '${invoiceId}_${item.product.id}',
@@ -301,11 +305,23 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             total: item.total,
           );
           await DBHelper.savePurchaseInvoiceItem(invItem);
+          
           await DBHelper.updateProductPriceAndStock(
             item.product.id,
             item.quantity,
             item.purchasePrice,
             item.product.sellPrice,
+          );
+        }
+
+        if (_selectedSupplier != null && purchaseInvoice.paymentType == 'credit') {
+          await DBHelper.addSupplierTransaction(
+            supplierId: _selectedSupplier!.id,
+            type: 'فاتورة مشتريات أجلة',
+            credit: _finalTotal,
+            debit: 0.0,
+            date: currentDate,
+            notes: 'فاتورة مشتريات: $invoiceId',
           );
         }
 
@@ -346,15 +362,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
         centerTitle: true,
         actions: [
-          // زر سجل الفواتير
+          // ==================== تم ربط زر سجل الفواتير الموجود مسبقاً بالشاشة الفعلية ====================
           IconButton(
             icon: const Icon(Icons.receipt_long, color: Colors.white),
             tooltip: 'سجل الفواتير',
             onPressed: () {
-              // ضع هنا الانتقال لشاشة سجل الفواتير الخاصة بك، مثال:
-              // Navigator.push(context, MaterialPageRoute(builder: (context) => const PurchaseInvoicesLogScreen()));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('شاشة سجل الفواتير (تأكد من ربطها بالشاشة الخاصة بك)')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PurchaseInvoicesLogScreen()),
               );
             },
           ),
