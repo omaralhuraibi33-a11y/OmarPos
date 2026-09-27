@@ -452,7 +452,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 12, // رفع الإصدار لضمان إضافة جداول مرتجعات المشتريات الجديدة
+      version: 13, // رفع الإصدار لدعم الجداول المستقلة للمشتريات
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -482,6 +482,35 @@ class DBHelper {
 
         await db.execute('''
           CREATE TABLE invoice_items(
+            id TEXT PRIMARY KEY,
+            invoiceId TEXT,
+            productId TEXT,
+            productName TEXT,
+            quantity REAL,
+            price REAL,
+            total REAL,
+            notes TEXT
+          )
+        ''');
+
+        // ==================== الجداول المستقلة للمشتريات ====================
+        await db.execute('''
+          CREATE TABLE purchase_invoices(
+            id TEXT PRIMARY KEY,
+            invoiceType TEXT,
+            paymentType TEXT,
+            totalAmount REAL,
+            date TEXT,
+            supplierId TEXT,
+            supplierName TEXT,
+            notes TEXT,
+            shiftId INTEGER DEFAULT 1,
+            isClosed INTEGER DEFAULT 0
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE purchase_invoice_items(
             id TEXT PRIMARY KEY,
             invoiceId TEXT,
             productId TEXT,
@@ -818,6 +847,34 @@ class DBHelper {
             )
           ''');
         }
+        if (oldVersion < 13) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS purchase_invoices(
+              id TEXT PRIMARY KEY,
+              invoiceType TEXT,
+              paymentType TEXT,
+              totalAmount REAL,
+              date TEXT,
+              supplierId TEXT,
+              supplierName TEXT,
+              notes TEXT,
+              shiftId INTEGER DEFAULT 1,
+              isClosed INTEGER DEFAULT 0
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS purchase_invoice_items(
+              id TEXT PRIMARY KEY,
+              invoiceId TEXT,
+              productId TEXT,
+              productName TEXT,
+              quantity REAL,
+              price REAL,
+              total REAL,
+              notes TEXT
+            )
+          ''');
+        }
       },
     );
   }
@@ -880,6 +937,7 @@ class DBHelper {
     );
 
     await db.update('invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
+    await db.update('purchase_invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
     await db.update('return_invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
     await db.update('purchase_return_invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
     await db.update('vouchers', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
@@ -899,6 +957,16 @@ class DBHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'invoices',
+      where: 'isClosed = 0',
+      orderBy: 'date DESC',
+    );
+    return maps.map((m) => Invoice.fromMap(m)).toList();
+  }
+
+  static Future<List<Invoice>> getUnclosedPurchaseInvoices() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'purchase_invoices',
       where: 'isClosed = 0',
       orderBy: 'date DESC',
     );
@@ -935,7 +1003,7 @@ class DBHelper {
     return maps.map((m) => Voucher.fromMap(m)).toList();
   }
 
-  // ==================== فواتير المبيعات (الجدول الأول) ====================
+  // ==================== فواتير المبيعات ====================
   static Future<List<Invoice>> getAllInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('invoices', orderBy: 'date DESC');
@@ -981,7 +1049,51 @@ class DBHelper {
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير المرتجعات (الجدول المستقل الثاني) ====================
+  // ==================== فواتير المشتريات (الجداول المستقلة الجديدة) ====================
+  static Future<List<Invoice>> getAllPurchaseInvoices() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('purchase_invoices', orderBy: 'date DESC');
+    return maps.map((m) => Invoice.fromMap(m)).toList();
+  }
+
+  static Future<void> savePurchaseInvoice(Invoice invoice) async {
+    final db = await database;
+    if (invoice.shiftId <= 0) {
+      invoice.shiftId = await getCurrentShiftId();
+    }
+    await db.insert('purchase_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
+
+    if (invoice.paymentType == 'credit' && invoice.customerId != null) {
+      await addSupplierTransaction(
+        supplierId: invoice.customerId!,
+        type: 'فاتورة مشتريات أجلة',
+        credit: invoice.totalAmount, // زيادة رصيد المورد (دائن)
+        debit: 0.0,
+        date: invoice.date,
+        notes: invoice.notes,
+      );
+    }
+  }
+
+  static Future<void> savePurchaseInvoiceItem(InvoiceItem item) async {
+    final db = await database;
+    if (!item.id.contains('_item_')) {
+      item.id = '${item.invoiceId}_${item.productId}_${DateTime.now().microsecondsSinceEpoch}';
+    }
+    await db.insert('purchase_invoice_items', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<InvoiceItem>> getPurchaseInvoiceItems(String invoiceId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'purchase_invoice_items',
+      where: 'invoiceId = ?',
+      whereArgs: [invoiceId],
+    );
+    return maps.map((m) => InvoiceItem.fromMap(m)).toList();
+  }
+
+  // ==================== فواتير مرتجعات المبيعات ====================
   static Future<List<Invoice>> getAllReturnInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('return_invoices', orderBy: 'date DESC');
@@ -1025,7 +1137,7 @@ class DBHelper {
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير مرتجعات المشتريات (الجداول الجديدة المستقلة) ====================
+  // ==================== فواتير مرتجعات المشتريات ====================
   static Future<List<Invoice>> getAllPurchaseReturnInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('purchase_return_invoices', orderBy: 'date DESC');
@@ -1037,15 +1149,14 @@ class DBHelper {
     if (invoice.shiftId <= 0) {
       invoice.shiftId = await getCurrentShiftId();
     }
-    // ملاحظة: الحقل customerId و customerName في نموذج Invoice يتم استخدامهما لتخزين معرف واسم المورد (supplierId / supplierName) لتوافق الهيكل
     await db.insert('purchase_return_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
       await addSupplierTransaction(
         supplierId: invoice.customerId!,
         type: 'مرتجع مشتريات',
-        credit: invoice.totalAmount, // تخفيض رصيد المورد (دائن)
-        debit: 0.0,
+        credit: 0.0,
+        debit: invoice.totalAmount, // تخفيض رصيد المورد (مدين)
         date: invoice.date,
         notes: invoice.notes,
       );
@@ -1428,6 +1539,8 @@ class DBHelper {
     final db = await database;
     await db.delete('invoices');
     await db.delete('invoice_items');
+    await db.delete('purchase_invoices');
+    await db.delete('purchase_invoice_items');
     await db.delete('return_invoices');
     await db.delete('return_invoice_items');
     await db.delete('purchase_return_invoices');
@@ -1445,6 +1558,8 @@ class DBHelper {
     final db = await database;
     await db.delete('invoices');
     await db.delete('invoice_items');
+    await db.delete('purchase_invoices');
+    await db.delete('purchase_invoice_items');
     await db.delete('return_invoices');
     await db.delete('return_invoice_items');
     await db.delete('purchase_return_invoices');
@@ -1550,7 +1665,7 @@ class DBHelper {
   static Future<double> getTotalPurchases() async {
     final db = await database;
     final result = await db.rawQuery(
-      "SELECT SUM(totalAmount) as total FROM invoices WHERE invoiceType = 'purchase'",
+      "SELECT SUM(totalAmount) as total FROM purchase_invoices",
     );
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
