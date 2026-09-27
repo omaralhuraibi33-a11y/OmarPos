@@ -240,12 +240,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final int currentShift = await DBHelper.getCurrentShiftId();
 
       if (_isReturnMode) {
+        // تم ضبط الحقول لكي تتوافق مع هيكل جدول مرتجعات المشتريات (بدون customerId)
         Invoice returnInvoice = Invoice(
           id: invoiceId,
           invoiceType: 'purchase_return',
           paymentType: _selectedSupplier == null ? 'cash' : 'credit',
           totalAmount: _finalTotal,
           date: currentDate,
+          customerId: null, // تم ضبطه لتجنب خطأ قاعدة البيانات
           customerName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
           notes: 'مرتجع مشتريات - خصم: $_invoiceDiscount',
           shiftId: currentShift,
@@ -280,12 +282,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
         _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتحديث المخزون بنجاح');
       } else {
+        // تم ضبط الحقول لكي تتوافق مع هيكل جدول المشتريات (بدون customerId)
         Invoice purchaseInvoice = Invoice(
           id: invoiceId,
           invoiceType: 'purchase',
           paymentType: _selectedSupplier == null ? 'cash' : 'credit',
           totalAmount: _finalTotal,
           date: currentDate,
+          customerId: null, // تم ضبطه لتجنب خطأ قاعدة البيانات
           customerName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
           notes: 'فاتورة مشتريات - خصم: $_invoiceDiscount',
           shiftId: currentShift,
@@ -348,7 +352,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _loadData();
   }
 
-  // دالة فتح شاشة سجل الفواتير مباشرة من نفس الملف
   void _openInvoicesLog() {
     Navigator.push(
       context,
@@ -369,7 +372,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
         centerTitle: true,
         actions: [
-          // زر سجل الفواتير الموجود مسبقاً
           IconButton(
             icon: const Icon(Icons.receipt_long, color: Colors.white),
             tooltip: 'سجل الفواتير',
@@ -596,7 +598,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 }
 
-// ==================== شاشة سجل الفواتير والمرتجعات (مدمجة في نفس الملف) ====================
 class LocalPurchaseInvoicesLogScreen extends StatefulWidget {
   const LocalPurchaseInvoicesLogScreen({Key? key}) : super(key: key);
 
