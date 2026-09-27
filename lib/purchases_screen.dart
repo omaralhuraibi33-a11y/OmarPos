@@ -239,21 +239,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final String currentDate = DateTime.now().toString().split('.')[0];
       final int currentShift = await DBHelper.getCurrentShiftId();
 
-      if (_isReturnMode) {
-        // تم ضبط الحقول لكي تتوافق مع هيكل جدول مرتجعات المشتريات (بدون customerId)
-        Invoice returnInvoice = Invoice(
-          id: invoiceId,
-          invoiceType: 'purchase_return',
-          paymentType: _selectedSupplier == null ? 'cash' : 'credit',
-          totalAmount: _finalTotal,
-          date: currentDate,
-          customerId: null, // تم ضبطه لتجنب خطأ قاعدة البيانات
-          customerName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
-          notes: 'مرتجع مشتريات - خصم: $_invoiceDiscount',
-          shiftId: currentShift,
-        );
+      final db = await DBHelper.database;
 
-        await DBHelper.savePurchaseReturnInvoice(returnInvoice);
+      if (_isReturnMode) {
+        // الحفظ المباشر لتلافي تمرير customerId الخاطئ لجدول المرتجعات
+        await db.insert('purchase_return_invoices', {
+          'id': invoiceId,
+          'invoiceType': 'purchase_return',
+          'paymentType': _selectedSupplier == null ? 'cash' : 'credit',
+          'totalAmount': _finalTotal,
+          'date': currentDate,
+          'supplierId': _selectedSupplier?.id,
+          'supplierName': _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
+          'notes': 'مرتجع مشتريات - خصم: $_invoiceDiscount',
+          'shiftId': currentShift,
+          'isClosed': 0,
+        });
 
         for (var item in _purchaseItems) {
           InvoiceItem invItem = InvoiceItem(
@@ -282,20 +283,19 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
         _finishInvoiceProcess('تم حفظ مرتجع المشتريات وتحديث المخزون بنجاح');
       } else {
-        // تم ضبط الحقول لكي تتوافق مع هيكل جدول المشتريات (بدون customerId)
-        Invoice purchaseInvoice = Invoice(
-          id: invoiceId,
-          invoiceType: 'purchase',
-          paymentType: _selectedSupplier == null ? 'cash' : 'credit',
-          totalAmount: _finalTotal,
-          date: currentDate,
-          customerId: null, // تم ضبطه لتجنب خطأ قاعدة البيانات
-          customerName: _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
-          notes: 'فاتورة مشتريات - خصم: $_invoiceDiscount',
-          shiftId: currentShift,
-        );
-
-        await DBHelper.savePurchaseInvoice(purchaseInvoice);
+        // الحفظ المباشر لتلافي تمرير customerId لجدول purchase_invoices
+        await db.insert('purchase_invoices', {
+          'id': invoiceId,
+          'invoiceType': 'purchase',
+          'paymentType': _selectedSupplier == null ? 'cash' : 'credit',
+          'totalAmount': _finalTotal,
+          'date': currentDate,
+          'supplierId': _selectedSupplier?.id,
+          'supplierName': _selectedSupplier?.name ?? 'مشتريات نقدية / عامة',
+          'notes': 'فاتورة مشتريات - خصم: $_invoiceDiscount',
+          'shiftId': currentShift,
+          'isClosed': 0,
+        });
 
         for (var item in _purchaseItems) {
           InvoiceItem invItem = InvoiceItem(
@@ -317,7 +317,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           );
         }
 
-        if (_selectedSupplier != null && purchaseInvoice.paymentType == 'credit') {
+        if (_selectedSupplier != null && _selectedSupplier != null) {
           await DBHelper.addSupplierTransaction(
             supplierId: _selectedSupplier!.id,
             type: 'فاتورة مشتريات أجلة',
