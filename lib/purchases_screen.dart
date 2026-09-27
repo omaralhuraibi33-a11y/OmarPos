@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'db_helper.dart';
-import 'purchase_invoices_log_screen.dart'; // تأكد أن هذا هو اسم ملف شاشة سجل الفواتير لديك
 
 class PurchaseItem {
   final Product product;
@@ -349,6 +348,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _loadData();
   }
 
+  // دالة فتح شاشة سجل الفواتير مباشرة من نفس الملف
+  void _openInvoicesLog() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const LocalPurchaseInvoicesLogScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -362,18 +369,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
         centerTitle: true,
         actions: [
-          // ==================== تم ربط زر سجل الفواتير الموجود مسبقاً بالشاشة الفعلية ====================
+          // زر سجل الفواتير الموجود مسبقاً
           IconButton(
             icon: const Icon(Icons.receipt_long, color: Colors.white),
             tooltip: 'سجل الفواتير',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const PurchaseInvoicesLogScreen()),
-              );
-            },
+            onPressed: _openInvoicesLog,
           ),
-          // زر التبديل بين فاتورة الشراء والمرتجع
           TextButton.icon(
             style: TextButton.styleFrom(foregroundColor: Colors.white),
             icon: Icon(_isReturnMode ? Icons.shopping_bag : Icons.assignment_return, color: Colors.white),
@@ -589,6 +590,162 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     ],
                   ),
                 ),
+              ],
+            ),
+    );
+  }
+}
+
+// ==================== شاشة سجل الفواتير والمرتجعات (مدمجة في نفس الملف) ====================
+class LocalPurchaseInvoicesLogScreen extends StatefulWidget {
+  const LocalPurchaseInvoicesLogScreen({Key? key}) : super(key: key);
+
+  @override
+  State<LocalPurchaseInvoicesLogScreen> createState() => _LocalPurchaseInvoicesLogScreenState();
+}
+
+class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLogScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  List<Invoice> _purchaseInvoices = [];
+  List<Invoice> _returnInvoices = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _loadInvoices();
+  }
+
+  Future<void> _loadInvoices() async {
+    setState(() => _isLoading = true);
+    final purchases = await DBHelper.getAllPurchaseInvoices();
+    final returns = await DBHelper.getAllPurchaseReturnInvoices();
+    setState(() {
+      _purchaseInvoices = purchases;
+      _returnInvoices = returns;
+      _isLoading = false;
+    });
+  }
+
+  void _showInvoiceDetails(Invoice invoice, bool isReturn) async {
+    final items = isReturn 
+        ? await DBHelper.getPurchaseReturnInvoiceItems(invoice.id)
+        : await DBHelper.getPurchaseInvoiceItems(invoice.id);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isReturn ? 'تفاصيل مرتجع المشتريات' : 'تفاصيل فاتورة المشتريات'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('رقم الفاتورة: ${invoice.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text('التاريخ: ${invoice.date}'),
+                const SizedBox(height: 4),
+                Text('المورد: ${invoice.customerName ?? "غير محدد"}'),
+                const SizedBox(height: 4),
+                Text('نوع الدفع: ${invoice.paymentType}'),
+                const SizedBox(height: 4),
+                Text('ملاحظات: ${invoice.notes}'),
+                const Divider(height: 20, thickness: 2),
+                const Text('الأصناف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 8),
+                
+                ...items.map((item) => Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.price}'),
+                    trailing: Text('${item.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                )),
+                
+                const Divider(height: 20, thickness: 2),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('الإجمالي النهائي:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text('${invoice.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('سجل فواتير المشتريات والمرتجعات', style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'المشتريات'),
+            Tab(text: 'مرتجعات المشتريات'),
+          ],
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _purchaseInvoices.isEmpty
+                    ? const Center(child: Text('لا توجد فواتير مشتريات مسجلة'))
+                    : ListView.builder(
+                        itemCount: _purchaseInvoices.length,
+                        itemBuilder: (ctx, index) {
+                          final inv = _purchaseInvoices[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            child: ListTile(
+                              leading: const Icon(Icons.shopping_cart, color: Colors.blue),
+                              title: Text('مورد: ${inv.customerName ?? "عام"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('التاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                              isThreeLine: true,
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () => _showInvoiceDetails(inv, false),
+                            ),
+                          );
+                        },
+                      ),
+                
+                _returnInvoices.isEmpty
+                    ? const Center(child: Text('لا توجد مرتجعات مشتريات مسجلة'))
+                    : ListView.builder(
+                        itemCount: _returnInvoices.length,
+                        itemBuilder: (ctx, index) {
+                          final inv = _returnInvoices[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            child: ListTile(
+                              leading: const Icon(Icons.assignment_return, color: Colors.red),
+                              title: Text('مورد: ${inv.customerName ?? "عام"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('التاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                              isThreeLine: true,
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () => _showInvoiceDetails(inv, true),
+                            ),
+                          );
+                        },
+                      ),
               ],
             ),
     );
