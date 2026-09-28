@@ -73,29 +73,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(_isReturnMode ? 'اختر المورد للمرتجع' : 'اختيار مورد'),
+        title: Text(_isReturnMode ? 'اختر المورد للمرتجع' : 'اختيار مورد *'),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView(
             shrinkWrap: true,
             children: [
-              ListTile(
-                leading: Icon(Icons.person, color: theme.colorScheme.secondary),
-                title: const Text('مشتريات نقدية / عامة', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('بدون تحديد حساب مورد معين'),
-                onTap: () {
-                  setState(() {
-                    _selectedSupplier = null;
-                    _supplierController.text = 'مشتريات نقدية / عامة';
-                  });
-                  Navigator.pop(ctx);
-                },
-              ),
-              const Divider(),
               if (_suppliers.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(8.0),
-                  child: Text('لا يوجد موردين مسجلين حالياً', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                  child: Text('لا يوجد موردين مسجلين حالياً. أضف مورداً أولاً', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                 ),
               ..._suppliers.map((sup) => ListTile(
                 leading: Icon(Icons.business, color: theme.colorScheme.primary),
@@ -226,7 +213,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  // توليد رقم تسلسلي مستقل يبدأ من 1 (تم تصحيح طريقة الاستعلام لتتطابق مع الـ SQLite بدون أخطاء)
   Future<String> _generateSequentialId(bool isReturn) async {
     final db = await DBHelper.database;
     final tableName = isReturn ? 'purchase_return_invoices' : 'purchase_invoices';
@@ -240,6 +226,14 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   Future<void> _savePurchaseProcess() async {
+    // التحقق الإجباري من اختيار المورد
+    if (_selectedSupplier == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يجب اختيار المورد أولاً لإتمام الحفظ'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     if (_purchaseItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى إضافة أصناف أولاً قبل الحفظ')),
@@ -251,18 +245,18 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       final String currentDate = DateTime.now().toString().split('.')[0];
       final int currentShift = await DBHelper.getCurrentShiftId();
       final db = await DBHelper.database;
+      final String supplierNameText = _selectedSupplier!.name;
 
       if (_isReturnMode) {
         final String invoiceId = await _generateSequentialId(true);
-        final supplierNameText = _selectedSupplier?.name ?? 'مشتريات نقدية / عامة';
 
         await db.insert('purchase_return_invoices', {
           'id': invoiceId,
           'invoiceType': 'purchase_return',
-          'paymentType': _selectedSupplier == null ? 'cash' : 'credit',
+          'paymentType': 'credit',
           'totalAmount': _finalTotal,
           'date': currentDate,
-          'supplierId': _selectedSupplier?.id,
+          'supplierId': _selectedSupplier!.id,
           'supplierName': supplierNameText,
           'notes': 'مرتجع مشتريات - خصم: $_invoiceDiscount',
           'shiftId': currentShift,
@@ -283,29 +277,26 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           await DBHelper.updateProductStock(item.product.id, -item.quantity);
         }
 
-        if (_selectedSupplier != null) {
-          await DBHelper.addSupplierTransaction(
-            supplierId: _selectedSupplier!.id,
-            type: 'مرتجع مشتريات',
-            credit: 0.0,
-            debit: _finalTotal,
-            date: currentDate,
-            notes: 'مرتجع مشتريات رقم: $invoiceId',
-          );
-        }
+        await DBHelper.addSupplierTransaction(
+          supplierId: _selectedSupplier!.id,
+          type: 'مرتجع مشتريات',
+          credit: 0.0,
+          debit: _finalTotal,
+          date: currentDate,
+          notes: 'مرتجع مشتريات رقم: $invoiceId',
+        );
 
-        _finishInvoiceProcess('تم حفظ مرتجع المشتريات برقم ($invoiceId) بنجاح');
+        _finishInvoiceProcess('تم حفظ مرتجع المشتريات برقم ($invoiceId) للمورد $supplierNameText بنجاح');
       } else {
         final String invoiceId = await _generateSequentialId(false);
-        final supplierNameText = _selectedSupplier?.name ?? 'مشتريات نقدية / عامة';
 
         await db.insert('purchase_invoices', {
           'id': invoiceId,
           'invoiceType': 'purchase',
-          'paymentType': _selectedSupplier == null ? 'cash' : 'credit',
+          'paymentType': 'credit',
           'totalAmount': _finalTotal,
           'date': currentDate,
-          'supplierId': _selectedSupplier?.id,
+          'supplierId': _selectedSupplier!.id,
           'supplierName': supplierNameText,
           'notes': 'فاتورة مشتريات - خصم: $_invoiceDiscount',
           'shiftId': currentShift,
@@ -332,18 +323,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           );
         }
 
-        if (_selectedSupplier != null) {
-          await DBHelper.addSupplierTransaction(
-            supplierId: _selectedSupplier!.id,
-            type: 'فاتورة مشتريات',
-            credit: _finalTotal,
-            debit: 0.0,
-            date: currentDate,
-            notes: 'فاتورة مشتريات رقم: $invoiceId',
-          );
-        }
+        await DBHelper.addSupplierTransaction(
+          supplierId: _selectedSupplier!.id,
+          type: 'فاتورة مشتريات',
+          credit: _finalTotal,
+          debit: 0.0,
+          date: currentDate,
+          notes: 'فاتورة مشتريات رقم: $invoiceId',
+        );
 
-        _finishInvoiceProcess('تم حفظ فاتورة المشتريات برقم ($invoiceId) بنجاح');
+        _finishInvoiceProcess('تم حفظ فاتورة المشتريات برقم ($invoiceId) للمورد $supplierNameText بنجاح');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -425,8 +414,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           readOnly: true,
                           onTap: _showSelectSupplierDialog,
                           decoration: InputDecoration(
-                            hintText: 'اضغط للبحث عن مورد...',
-                            labelText: _isReturnMode ? 'المورد المرجّع له' : 'المورد',
+                            hintText: 'اختر المورد (إجباري)...',
+                            labelText: _isReturnMode ? 'المورد المرجّع له *' : 'المورد *',
                             prefixIcon: IconButton(
                               icon: Icon(Icons.search, color: theme.colorScheme.primary, size: 28),
                               onPressed: _showSelectSupplierDialog,
@@ -664,7 +653,8 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                 const SizedBox(height: 4),
                 Text('التاريخ: ${invoice.date}'),
                 const SizedBox(height: 4),
-                Text('المورد: ${invoice.customerName ?? "مشتريات نقدية / عامة"}'),
+                // عرض اسم المورد المخزن فعلياً في الفاتورة
+                Text('المورد: ${invoice.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
                 const SizedBox(height: 4),
                 Text('نوع الدفع: ${invoice.paymentType}'),
                 const SizedBox(height: 4),
@@ -733,7 +723,8 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             child: ListTile(
                               leading: const Icon(Icons.shopping_cart, color: Colors.blue),
-                              title: Text('مورد: ${inv.customerName ?? "مشتريات نقدية / عامة"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              // عرض اسم المورد الصحيح في القائمة الخارجية
+                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
                               isThreeLine: true,
                               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
@@ -753,7 +744,8 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             child: ListTile(
                               leading: const Icon(Icons.assignment_return, color: Colors.red),
-                              title: Text('مورد: ${inv.customerName ?? "مشتريات نقدية / عامة"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              // عرض اسم المورد الصحيح في المرتجعات
+                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
                               isThreeLine: true,
                               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
