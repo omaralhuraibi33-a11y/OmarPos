@@ -452,7 +452,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 13,
+      version: 13, // رفع الإصدار لدعم الجداول المستقلة للمشتريات
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -719,6 +719,7 @@ class DBHelper {
           )
         ''');
 
+        // إضافة المستخدمين الافتراضيين
         final allPerms = {for (var m in allModules) m: true};
         final cashierPerms = {
           for (var m in allModules) m: (m == 'نقطة البيع' || m == 'إغلاق الصندوق / الوردية')
@@ -732,11 +733,14 @@ class DBHelper {
         await db.insert('users', AppUser(id: '3', name: 'كاشير 2', pin: '0000', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
         await db.insert('users', AppUser(id: '4', name: 'مشرف', pin: '1111', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
 
+        // عميل نقدي افتراضي
         await db.insert('customers', Customer(id: 'cash_default', name: 'عميل نقدي', phone: '', balance: 0.0).toMap());
 
+        // إضافة طرق دفع افتراضية
         await db.insert('payment_methods', {'id': '1', 'name': 'نقدي'});
         await db.insert('payment_methods', {'id': '2', 'name': 'آجل'});
 
+        // إنشاء الوردية الأولى
         await db.insert('shifts', {
           'startTime': DateTime.now().toString(),
           'userId': '1',
@@ -1059,10 +1063,9 @@ class DBHelper {
     }
     await db.insert('purchase_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
-    // [تصحيح هنا]: استخدام supplierId وليس customerId للمشتريات
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
       await addSupplierTransaction(
-        supplierId: invoice.customerId!, // ملاحظة: في نموذج الفاتورة العام يتم استخدام حقل customerId كمعرف للطرف الآخر (عميل أو مورد) حسب نوع الفاتورة، أو يمكنك اعتماده كمعرف للمورد.
+        supplierId: invoice.customerId!,
         type: 'فاتورة مشتريات أجلة',
         credit: invoice.totalAmount, // زيادة رصيد المورد (دائن)
         debit: 0.0,
@@ -1148,7 +1151,6 @@ class DBHelper {
     }
     await db.insert('purchase_return_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
-    // [تصحيح هنا]: استخدام المورد لمرتجعات المشتريات الأجلة
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
       await addSupplierTransaction(
         supplierId: invoice.customerId!,
