@@ -54,6 +54,7 @@ class Invoice {
   String date;
   String? customerId;
   String? customerName;
+  String? supplierName; // تمت إضافتها لتجنب خطأ الشاشات
   String notes;
   int shiftId;
   bool isClosed;
@@ -66,6 +67,7 @@ class Invoice {
     required this.date,
     this.customerId,
     this.customerName,
+    this.supplierName,
     this.notes = '',
     this.shiftId = 1,
     this.isClosed = false,
@@ -80,6 +82,7 @@ class Invoice {
       'date': date,
       'customerId': customerId,
       'customerName': customerName,
+      'supplierName': supplierName,
       'notes': notes,
       'shiftId': shiftId,
       'isClosed': isClosed ? 1 : 0,
@@ -95,6 +98,7 @@ class Invoice {
       date: map['date'],
       customerId: map['customerId'],
       customerName: map['customerName'],
+      supplierName: map['supplierName'],
       notes: map['notes'] ?? '',
       shiftId: map['shiftId'] ?? 1,
       isClosed: map['isClosed'] == 1,
@@ -531,6 +535,7 @@ class DBHelper {
             date TEXT,
             customerId TEXT,
             customerName TEXT,
+            supplierName TEXT,
             notes TEXT,
             shiftId INTEGER DEFAULT 1,
             isClosed INTEGER DEFAULT 0
@@ -801,10 +806,17 @@ class DBHelper {
           'status': 'open'
         });
       },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        // التحديثات والتوسعات
-      },
+      onUpgrade: (db, oldVersion, newVersion) async {},
     );
+  }
+
+  // ==================== الدوال المفقودة التي كانت تسبب الأخطاء في الشاشات ====================
+
+  static Future<int> getNextShiftNumber() async {
+    final db = await database;
+    final res = await db.rawQuery('SELECT COUNT(*) as count FROM shifts');
+    int count = Sqflite.firstIntValue(res) ?? 0;
+    return count + 1;
   }
 
   static Future<int> getCurrentShiftId() async {
@@ -895,6 +907,99 @@ class DBHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('vouchers', where: 'isClosed = 0', orderBy: 'date DESC');
     return maps.map((m) => Voucher.fromMap(m)).toList();
+  }
+
+  // دوال التقارير المالية والارصدة الإجمالية المفقودة
+  static Future<double> getMainVaultBalance() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT SUM(transferredToMainVault) as total FROM shifts");
+    return (res.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  static Future<double> getSalesCost() async {
+    final db = await database;
+    final res = await db.rawQuery("""
+      SELECT SUM(ii.quantity * p.purchasePrice) as cost 
+      FROM invoice_items ii 
+      JOIN products p ON ii.productId = p.id
+    """);
+    return (res.first['cost'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  static Future<double> getTotalRevenues() async {
+    return await getTotalSales();
+  }
+
+  static Future<double> getSuppliersTotalBalance() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT SUM(balance) as total FROM suppliers");
+    return (res.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  static Future<double> getCustomersTotalBalance() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT SUM(balance) as total FROM customers");
+    return (res.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  static Future<double> getSalesReturnsTotal() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT SUM(totalAmount) as total FROM return_invoices");
+    return (res.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  static Future<double> getPurchasesReturnsTotal() async {
+    final db = await database;
+    final res = await db.rawQuery("SELECT SUM(totalAmount) as total FROM purchase_return_invoices");
+    return (res.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  static Future<void> resetFullSystemToDefault() async {
+    await resetAllRecordsAndBalances();
+  }
+
+  // دوال الـ POS والمخزن المفقودة
+  static Future<List<Category>> getActivePOSCategories() async {
+    final db = await database;
+    final maps = await db.query('categories', where: 'isActive = 1');
+    return maps.map((m) => Category.fromMap(m)).toList();
+  }
+
+  static Future<List<Product>> getActivePOSProducts() async {
+    final db = await database;
+    final maps = await db.query('products', where: 'isActive = 1');
+    return maps.map((m) => Product.fromMap(m)).toList();
+  }
+
+  static Future<List<String>> getPreparationNotes() async {
+    final db = await database;
+    final maps = await db.query('prep_notes');
+    return maps.map((m) => m['note'].toString()).toList();
+  }
+
+  static Future<List<String>> getPaymentMethods() async {
+    final db = await database;
+    final maps = await db.query('payment_methods');
+    return maps.map((m) => m['name'].toString()).toList();
+  }
+
+  static Future<void> addPreparationNote(String note) async {
+    final db = await database;
+    await db.insert('prep_notes', {'id': DateTime.now().millisecondsSinceEpoch.toString(), 'note': note}, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<void> updateProductStock(String productId, double quantityChange) async {
+    final db = await database;
+    final res = await db.query('products', where: 'id = ?', whereArgs: [productId]);
+    if (res.isNotEmpty) {
+      double currentQty = (res.first['quantity'] as num).toDouble();
+      await db.update('products', {'quantity': currentQty + quantityChange}, where: 'id = ?', whereArgs: [productId]);
+    }
+  }
+
+  static Future<void> updateProductPriceAndStock(String productId, double newPrice, double newStock) async {
+    final db = await database;
+    await db.update('products', {'sellPrice': newPrice, 'quantity': newStock}, where: 'id = ?', whereArgs: [productId]);
   }
 
   // ==================== فواتير المبيعات ====================
@@ -1059,7 +1164,7 @@ class DBHelper {
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== المستخدمين والعملاء والموردين وباقي الدوال ====================
+  // ==================== المستخدمين والعملاء والموردين ====================
   static Future<List<AppUser>> getAllUsers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('users');
