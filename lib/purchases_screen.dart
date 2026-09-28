@@ -226,12 +226,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     );
   }
 
-  // توليد رقم تسلسلي مستقل يبدأ من 1
+  // توليد رقم تسلسلي مستقل يبدأ من 1 (تم تصحيح طريقة الاستعلام لتتطابق مع الـ SQLite بدون أخطاء)
   Future<String> _generateSequentialId(bool isReturn) async {
     final db = await DBHelper.database;
     final tableName = isReturn ? 'purchase_return_invoices' : 'purchase_invoices';
     final result = await db.rawQuery('SELECT COUNT(*) as count FROM $tableName');
-    int count = Sqflite.firstIntValue(result) ?? 0;
+    int count = 0;
+    if (result.isNotEmpty) {
+      count = (result.first['count'] as num?)?.toInt() ?? 0;
+    }
     int nextSeq = count + 1;
     return isReturn ? 'return_$nextSeq' : 'pur_$nextSeq';
   }
@@ -281,7 +284,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         }
 
         if (_selectedSupplier != null) {
-          // حساب المرتجع كمدين (تخفيض رصيد المورد)
           await DBHelper.addSupplierTransaction(
             supplierId: _selectedSupplier!.id,
             type: 'مرتجع مشتريات',
@@ -330,8 +332,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           );
         }
 
-        if (_selectedSupplier != null && _selectedSupplier != null) {
-          // حساب الفاتورة الأجلة كدائن (زيادة رصيد المورد)
+        if (_selectedSupplier != null) {
           await DBHelper.addSupplierTransaction(
             supplierId: _selectedSupplier!.id,
             type: 'فاتورة مشتريات',
