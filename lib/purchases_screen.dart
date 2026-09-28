@@ -249,6 +249,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       if (_isReturnMode) {
         final String invoiceId = await _generateSequentialId(true);
 
+        // تم الاعتماد على supplierName فقط بناءً على هيكل جدول قاعدة البيانات
         await db.insert('purchase_return_invoices', {
           'id': invoiceId,
           'invoiceType': 'purchase_return',
@@ -257,7 +258,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           'date': currentDate,
           'supplierId': _selectedSupplier!.id,
           'supplierName': supplierNameText,
-          'customerName': supplierNameText, // لتغطية كلا الحقلين لضمان ظهوره بكل الطرق
           'notes': 'مرتجع مشتريات - خصم: $_invoiceDiscount',
           'shiftId': currentShift,
           'isClosed': 0,
@@ -290,6 +290,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       } else {
         final String invoiceId = await _generateSequentialId(false);
 
+        // تم الاعتماد على supplierName فقط بناءً على هيكل جدول قاعدة البيانات
         await db.insert('purchase_invoices', {
           'id': invoiceId,
           'invoiceType': 'purchase',
@@ -298,7 +299,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           'date': currentDate,
           'supplierId': _selectedSupplier!.id,
           'supplierName': supplierNameText,
-          'customerName': supplierNameText, // لتغطية كلا الحقلين لضمان ظهوره بكل الطرق
           'notes': 'فاتورة مشتريات - خصم: $_invoiceDiscount',
           'shiftId': currentShift,
           'isClosed': 0,
@@ -639,11 +639,8 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
         ? await DBHelper.getPurchaseReturnInvoiceItems(invoice.id)
         : await DBHelper.getPurchaseInvoiceItems(invoice.id);
 
-    // التحقق من اسم المورد من الخصائص المتاحة في كلاس Invoice (سواء customerName أو عبر البحث بالـ supplierId إذا لزم)
-    String supplierDisplayName = invoice.customerName ?? "غير محدد";
-    if (supplierDisplayName == "غير محدد" || supplierDisplayName.isEmpty) {
-      supplierDisplayName = "مورد معتمد";
-    }
+    // استخدام customerName أو fallback لقراءة supplierName من كلاس Invoice حسب المتاح
+    String supplierDisplayName = invoice.customerName ?? invoice.supplierName ?? "غير محدد";
 
     showDialog(
       context: context,
@@ -725,9 +722,7 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                         itemCount: _purchaseInvoices.length,
                         itemBuilder: (ctx, index) {
                           final inv = _purchaseInvoices[index];
-                          String supName = (inv.customerName != null && inv.customerName!.isNotEmpty && inv.customerName != "غير محدد") 
-                              ? inv.customerName! 
-                              : "مورد معتمد";
+                          String supName = inv.customerName ?? inv.supplierName ?? "غير محدد";
 
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -749,9 +744,7 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                         itemCount: _returnInvoices.length,
                         itemBuilder: (ctx, index) {
                           final inv = _returnInvoices[index];
-                          String supName = (inv.customerName != null && inv.customerName!.isNotEmpty && inv.customerName != "غير محدد") 
-                              ? inv.customerName! 
-                              : "مورد معتمد";
+                          String supName = inv.customerName ?? inv.supplierName ?? "غير محدد";
 
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
