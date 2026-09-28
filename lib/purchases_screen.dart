@@ -226,6 +226,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   Future<void> _savePurchaseProcess() async {
+    // التحقق الإجباري من اختيار المورد
     if (_selectedSupplier == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يجب اختيار المورد أولاً لإتمام الحفظ'), backgroundColor: Colors.red),
@@ -249,7 +250,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       if (_isReturnMode) {
         final String invoiceId = await _generateSequentialId(true);
 
-        // تم الاعتماد على supplierName فقط بناءً على هيكل جدول قاعدة البيانات
         await db.insert('purchase_return_invoices', {
           'id': invoiceId,
           'invoiceType': 'purchase_return',
@@ -290,7 +290,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       } else {
         final String invoiceId = await _generateSequentialId(false);
 
-        // تم الاعتماد على supplierName فقط بناءً على هيكل جدول قاعدة البيانات
         await db.insert('purchase_invoices', {
           'id': invoiceId,
           'invoiceType': 'purchase',
@@ -639,9 +638,6 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
         ? await DBHelper.getPurchaseReturnInvoiceItems(invoice.id)
         : await DBHelper.getPurchaseInvoiceItems(invoice.id);
 
-    // استخدام customerName أو fallback لقراءة supplierName من كلاس Invoice حسب المتاح
-    String supplierDisplayName = invoice.customerName ?? invoice.supplierName ?? "غير محدد";
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -657,7 +653,8 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                 const SizedBox(height: 4),
                 Text('التاريخ: ${invoice.date}'),
                 const SizedBox(height: 4),
-                Text('المورد: $supplierDisplayName', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                // عرض اسم المورد المخزن فعلياً في الفاتورة
+                Text('المورد: ${invoice.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
                 const SizedBox(height: 4),
                 Text('نوع الدفع: ${invoice.paymentType}'),
                 const SizedBox(height: 4),
@@ -722,13 +719,12 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                         itemCount: _purchaseInvoices.length,
                         itemBuilder: (ctx, index) {
                           final inv = _purchaseInvoices[index];
-                          String supName = inv.customerName ?? inv.supplierName ?? "غير محدد";
-
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             child: ListTile(
                               leading: const Icon(Icons.shopping_cart, color: Colors.blue),
-                              title: Text('مورد: $supName', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              // عرض اسم المورد الصحيح في القائمة الخارجية
+                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
                               isThreeLine: true,
                               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
@@ -744,13 +740,12 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                         itemCount: _returnInvoices.length,
                         itemBuilder: (ctx, index) {
                           final inv = _returnInvoices[index];
-                          String supName = inv.customerName ?? inv.supplierName ?? "غير محدد";
-
                           return Card(
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             child: ListTile(
                               leading: const Icon(Icons.assignment_return, color: Colors.red),
-                              title: Text('مورد: $supName', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              // عرض اسم المورد الصحيح في المرتجعات
+                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
                               isThreeLine: true,
                               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
