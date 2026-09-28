@@ -151,7 +151,7 @@ class PurchaseInvoice {
       totalAmount: (map['totalAmount'] as num).toDouble(),
       date: map['date'],
       supplierId: map['supplierId'],
-      supplierName: map['supplierName'],
+      supplierName: map['supplierName'] ?? '',
       notes: map['notes'] ?? '',
       shiftId: map['shiftId'] ?? 1,
       isClosed: map['isClosed'] == 1,
@@ -939,7 +939,7 @@ class DBHelper {
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير المشتريات (تستخدم PurchaseInvoice ومقاومة للتداخل) ====================
+  // ==================== فواتير المشتريات ====================
   static Future<List<PurchaseInvoice>> getAllPurchaseInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('purchase_invoices', orderBy: 'date DESC');
