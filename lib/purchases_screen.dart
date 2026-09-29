@@ -633,63 +633,15 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
     });
   }
 
-  void _showInvoiceDetails(Invoice invoice, bool isReturn) async {
-    final items = isReturn 
-        ? await DBHelper.getPurchaseReturnInvoiceItems(invoice.id)
-        : await DBHelper.getPurchaseInvoiceItems(invoice.id);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isReturn ? 'تفاصيل مرتجع المشتريات' : 'تفاصيل فاتورة المشتريات'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('رقم الفاتورة: ${invoice.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text('التاريخ: ${invoice.date}'),
-                const SizedBox(height: 4),
-                // عرض اسم المورد المخزن فعلياً في الفاتورة
-                Text('المورد: ${invoice.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-                const SizedBox(height: 4),
-                Text('نوع الدفع: ${invoice.paymentType}'),
-                const SizedBox(height: 4),
-                Text('ملاحظات: ${invoice.notes}'),
-                const Divider(height: 20, thickness: 2),
-                const Text('الأصناف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 8),
-                
-                ...items.map((item) => Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  child: ListTile(
-                    title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('الكمية: ${item.quantity} | السعر: ${item.price}'),
-                    trailing: Text('${item.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                )),
-                
-                const Divider(height: 20, thickness: 2),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('الإجمالي النهائي:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text('${invoice.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green)),
-                  ],
-                ),
-              ],
-            ),
-          ),
+  // تم استبدال النافذة المنبثقة بالانتقال إلى شاشة كاملة جديدة
+  void _openInvoiceDetailsScreen(Invoice invoice, bool isReturn) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PurchaseInvoiceDetailsScreen(
+          invoice: invoice,
+          isReturn: isReturn,
         ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إغلاق'),
-          ),
-        ],
       ),
     );
   }
@@ -723,12 +675,11 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             child: ListTile(
                               leading: const Icon(Icons.shopping_cart, color: Colors.blue),
-                              // عرض اسم المورد الصحيح في القائمة الخارجية
                               title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
                               isThreeLine: true,
                               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                              onTap: () => _showInvoiceDetails(inv, false),
+                              onTap: () => _openInvoiceDetailsScreen(inv, false),
                             ),
                           );
                         },
@@ -744,16 +695,149 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
                             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             child: ListTile(
                               leading: const Icon(Icons.assignment_return, color: Colors.red),
-                              // عرض اسم المورد الصحيح في المرتجعات
                               title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
                               isThreeLine: true,
                               trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                              onTap: () => _showInvoiceDetails(inv, true),
+                              onTap: () => _openInvoiceDetailsScreen(inv, true),
                             ),
                           );
                         },
                       ),
+              ],
+            ),
+    );
+  }
+}
+
+// شاشة تفاصيل الفاتورة الكاملة المستقلة الجديدة
+class PurchaseInvoiceDetailsScreen extends StatefulWidget {
+  final Invoice invoice;
+  final bool isReturn;
+
+  const PurchaseInvoiceDetailsScreen({
+    Key? key,
+    required this.invoice,
+    required this.isReturn,
+  }) : super(key: key);
+
+  @override
+  State<PurchaseInvoiceDetailsScreen> createState() => _PurchaseInvoiceDetailsScreenState();
+}
+
+class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScreen> {
+  List<InvoiceItem> _items = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  Future<void> _loadItems() async {
+    final fetchedItems = widget.isReturn
+        ? await DBHelper.getPurchaseReturnInvoiceItems(widget.invoice.id)
+        : await DBHelper.getPurchaseInvoiceItems(widget.invoice.id);
+    setState(() {
+      _items = fetchedItems;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isReturn = widget.isReturn;
+    final invoice = widget.invoice;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          isReturn ? 'تفاصيل مرتجع المشتريات' : 'تفاصيل فاتورة المشتريات',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        backgroundColor: isReturn ? theme.colorScheme.error : theme.colorScheme.primary,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                // رأس الفاتورة (معلومات أساسية)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('رقم الفاتورة: ${invoice.id}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text('التاريخ: ${invoice.date}', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text('المورد: ${invoice.customerName ?? "غير محدد"}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: theme.colorScheme.primary)),
+                      const SizedBox(height: 4),
+                      Text('نوع الدفع: ${invoice.paymentType}', style: const TextStyle(fontSize: 14)),
+                      if (invoice.notes != null && invoice.notes!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text('ملاحظات: ${invoice.notes}', style: const TextStyle(fontSize: 14, color: Colors.black87)),
+                      ],
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, thickness: 1),
+                
+                // قائمة الأصناف داخل الفاتورة
+                Expanded(
+                  child: _items.isEmpty
+                      ? const Center(child: Text('لا توجد أصناف مسجلة في هذه الفاتورة'))
+                      : ListView.builder(
+                          itemCount: _items.length,
+                          itemBuilder: (ctx, index) {
+                            final item = _items[index];
+                            return Card(
+                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              child: ListTile(
+                                title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text('الكمية: ${item.quantity} | سعر الوحدة: ${item.price}'),
+                                trailing: Text(
+                                  item.total.toStringAsFixed(2),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: isReturn ? theme.colorScheme.error : theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+
+                // إجمالي الفاتورة في الأسفل
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('الإجمالي النهائي:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Text(
+                        invoice.totalAmount.toStringAsFixed(2),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 22,
+                          color: isReturn ? theme.colorScheme.error : Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
     );
