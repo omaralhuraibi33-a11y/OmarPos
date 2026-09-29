@@ -1245,6 +1245,18 @@ class DBHelper {
     return maps.map((m) => CustomerTransaction.fromMap(m)).toList();
   }
 
+  // دالة كشف حساب العميل المطلوبة
+  static Future<List<Map<String, dynamic>>> getCustomerStatement(String customerId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'customer_transactions',
+      where: 'customerId = ?',
+      whereArgs: [customerId],
+      orderBy: 'date DESC',
+    );
+    return maps;
+  }
+
   static Future<void> addCustomerTransaction({
     required String customerId,
     required String type,
