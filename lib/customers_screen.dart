@@ -59,11 +59,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
     });
   }
 
-  void _showCustomerStatement(Customer customer) async {
+  /// نافذة كشف حساب العميل بنفس تصميم كشف حساب الموردين المرتب
+  void _showCustomerStatement(Customer customer) {
     showDialog(
       context: context,
-      builder: (ctx) => FutureBuilder<List<CustomerTransaction>>(
-        future: DBHelper.getCustomerTransactions(customer.id),
+      builder: (ctx) => FutureBuilder<List<Map<String, dynamic>>>(
+        // ملاحظة: تأكد من أن دالة DBHelper تدعم جلب الحركات كـ Map بنفس هيكلية الموردين
+        future: DBHelper.getCustomerStatement(customer.id), 
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const AlertDialog(
@@ -74,13 +76,13 @@ class _CustomersScreenState extends State<CustomersScreen> {
             );
           }
 
-          final transactions = snapshot.data ?? [];
+          final statementTransactions = snapshot.data ?? [];
 
           return AlertDialog(
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('كشف حساب: ${customer.name}',
+                Text('كشف حساب العميل: ${customer.name}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                 const SizedBox(height: 4),
                 Text(
@@ -95,37 +97,81 @@ class _CustomersScreenState extends State<CustomersScreen> {
             ),
             content: SizedBox(
               width: double.maxFinite,
-              child: transactions.isEmpty
+              child: statementTransactions.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.all(20.0),
-                      child: Text('لا توجد حركات مسجلة لهذا العميل حتى الآن',
-                          textAlign: TextAlign.center),
+                      child: Text('لا توجد حركات مسجلة لهذا العميل حتى الآن', textAlign: TextAlign.center),
                     )
-                  : ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: transactions.length,
-                      separatorBuilder: (_, __) => const Divider(),
-                      itemBuilder: (ctx, index) {
-                        final tx = transactions[index];
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(tx.type,
-                              style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(tx.date),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          color: Colors.grey.shade300,
+                          child: const Row(
                             children: [
-                              if (tx.debit > 0)
-                                Text('مدين (عليه): ${tx.debit.toStringAsFixed(2)}',
-                                    style: const TextStyle(color: Colors.red, fontSize: 12)),
-                              if (tx.credit > 0)
-                                Text('دائن (له): ${tx.credit.toStringAsFixed(2)}',
-                                    style: const TextStyle(color: Colors.green, fontSize: 12)),
+                              Expanded(flex: 2, child: Text('التاريخ / الحركة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                              Expanded(child: Text('دائن (له)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green))),
+                              Expanded(child: Text('مدين (عليه)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red))),
+                              Expanded(child: Text('الرصيد', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                             ],
                           ),
-                        );
-                      },
+                        ),
+                        Flexible(
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: statementTransactions.length,
+                            itemBuilder: (ctx, index) {
+                              final item = statementTransactions[index];
+                              final credit = (item['credit'] as num?)?.toDouble() ?? 0.0;
+                              final debit = (item['debit'] as num?)?.toDouble() ?? 0.0;
+                              final runningBalance = (item['runningBalance'] as num?)?.toDouble() ?? 0.0;
+
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                decoration: BoxDecoration(
+                                  border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(item['type'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                          Text(item['date'] ?? '', style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        credit > 0 ? credit.toStringAsFixed(2) : '-',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        debit > 0 ? debit.toStringAsFixed(2) : '-',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        runningBalance.toStringAsFixed(2),
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
             ),
             actions: [
@@ -141,7 +187,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _showCustomerDialog({Customer? customer}) {
-    // التأكد من حماية العميل النقدي من التعديل
     if (customer != null && (customer.id == 'cash_customer' || customer.name == 'عميل نقدي')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('العميل النقدي افتراضي ولا يمكن تعديله')),
@@ -231,7 +276,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _deleteCustomer(Customer customer) {
-    // حماية العميل النقدي من الحذف
     if (customer.id == 'cash_customer' || customer.name == 'عميل نقدي') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('لا يمكن حذف العميل النقدي الافتراضي للنظام')),
@@ -350,7 +394,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   Padding(
                                     padding: const EdgeInsets.only(left: 8.0),
                                     child: Text(
-                                      '${c.balance.toStringAsFixed(2)}',
+                                      c.balance.toStringAsFixed(2),
                                       style: TextStyle(
                                         color: hasDebt ? Colors.red : Colors.green,
                                         fontWeight: FontWeight.bold,
@@ -364,7 +408,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                     tooltip: 'كشف حساب',
                                     onPressed: () => _showCustomerStatement(c),
                                   ),
-                                  // إخفاء زري التعديل والحذف للعميل النقدي الافتراضي
                                   if (!isDefaultCash) ...[
                                     IconButton(
                                       icon: const Icon(Icons.edit,
