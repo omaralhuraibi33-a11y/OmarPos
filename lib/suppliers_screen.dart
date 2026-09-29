@@ -102,75 +102,6 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
   }
 
-  // تسديد مبلغ لمورد
-  void _showPaySupplierDialog(Supplier supplier) {
-    final amountController = TextEditingController();
-    final notesController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('تسديد حساب لمورد: ${supplier.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'الرصيد المستحق الحالي: ${supplier.balance.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'المبلغ المسدد *',
-                prefixIcon: Icon(Icons.attach_money),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: notesController,
-              decoration: const InputDecoration(
-                labelText: 'ملاحظات / رقم السند',
-                prefixIcon: Icon(Icons.note),
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            onPressed: () async {
-              final amount = double.tryParse(amountController.text.trim());
-              if (amount == null || amount <= 0) return;
-
-              final now = DateTime.now().toString().split('.')[0];
-              await DBHelper.addSupplierTransaction(
-                supplierId: supplier.id,
-                type: 'payment',
-                debit: amount,
-                credit: 0.0,
-                date: now,
-                notes: notesController.text.trim(),
-              );
-
-              Navigator.pop(ctx);
-              _loadSuppliers();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم تسجيل دفعة التسديد بنجاح'), backgroundColor: Colors.green),
-              );
-            },
-            child: const Text('تسجيل السداد', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
   // نافذة كشف حساب المورد
   void _showSupplierStatement(Supplier supplier) {
     showDialog(
@@ -398,11 +329,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                                       ],
                                     ),
                                   ),
-                                  IconButton(
-                                    icon: const Icon(Icons.monetization_on, size: 20, color: Colors.green),
-                                    tooltip: 'تسديد حساب',
-                                    onPressed: () => _showPaySupplierDialog(sup),
-                                  ),
+                                  // تم إلغاء زر وسند التسديد المباشر من هنا
                                   IconButton(
                                     icon: const Icon(Icons.receipt_long, size: 20, color: Colors.teal),
                                     tooltip: 'كشف حساب',
