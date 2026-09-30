@@ -226,7 +226,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   Future<void> _savePurchaseProcess() async {
-    // التحقق الإجباري من اختيار المورد
     if (_selectedSupplier == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يجب اختيار المورد أولاً لإتمام الحفظ'), backgroundColor: Colors.red),
@@ -615,11 +614,63 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
   List<Invoice> _returnInvoices = [];
   bool _isLoading = true;
 
+  // خيارات الفلترة
+  String _selectedFilter = 'اليوم';
+  DateTime? _customStartDate;
+  DateTime? _customEndDate;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadInvoices();
+  }
+
+  // دالة مساعدة لتحويل التاريخ النصي (يُفترض أنه بصيغة 'YYYY-MM-DD HH:MM:SS' أو ما شابه) إلى كائن DateTime
+  DateTime? _parseDate(String dateStr) {
+    try {
+      return DateTime.parse(dateStr);
+    } catch (_) {
+      try {
+        // محاولة بديلة إذا كان التاريخ مخزناً بصيغة أخرى
+        final parts = dateStr.split(' ')[0].split('-');
+        if (parts.length == 3) {
+          return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  // تطبيق فلترة التاريخ على القائمة
+  List<Invoice> _filterInvoices(List<Invoice> invoices) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    return invoices.where((inv) {
+      final invDate = _parseDate(inv.date);
+      if (invDate == null) return true; // في حال تعذر التحليل، اعرض الفاتورة تفادياً للاختفاء
+      final cleanInvDate = DateTime(invDate.year, invDate.month, invDate.day);
+
+      if (_selectedFilter == 'اليوم') {
+        return cleanInvDate.isAtSameMomentAs(today);
+      } else if (_selectedFilter == 'أمس') {
+        final yesterday = today.subtract(const Duration(days: 1));
+        return cleanInvDate.isAtSameMomentAs(yesterday);
+      } else if (_selectedFilter == 'الأسبوع') {
+        final weekAgo = today.subtract(const Duration(days: 7));
+        return cleanInvDate.isAfter(weekAgo.subtract(const Duration(seconds: 1))) && cleanInvDate.isBefore(today.add(const Duration(days: 1)));
+      } else if (_selectedFilter == 'الشهر') {
+        return invDate.year == now.year && invDate.month == now.month;
+      } else if (_selectedFilter == 'السنة') {
+        return invDate.year == now.year;
+      } else if (_selectedFilter == 'مخصص' && _customStartDate != null && _customEndDate != null) {
+        final start = DateTime(_customStartDate!.year, _customStartDate!.month, _customStartDate!.day);
+        final end = DateTime(_customEndDate!.year, _customEndDate!.month, _customEndDate!.day, 23, 59, 59);
+        return invDate.isAfter(start.subtract(const Duration(seconds: 1))) && invDate.isBefore(end.add(const Duration(seconds: 1)));
+      }
+      return true;
+    }).toList();
   }
 
   Future<void> _loadInvoices() async {
@@ -633,7 +684,27 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
     });
   }
 
-  // تم استبدال النافذة المنبثقة بالانتقال إلى شاشة كاملة جديدة
+  // اختيار الفترة المخصصة عبر DateRangePicker
+  Future<void> _selectCustomDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: now,
+      initialDateRange: _customStartDate != null && _customEndDate != null
+          ? DateTimeRange(start: _customStartDate!, end: _customEndDate!)
+          : DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _customStartDate = picked.start;
+        _customEndDate = picked.end;
+        _selectedFilter = 'مخصص';
+      });
+    }
+  }
+
   void _openInvoiceDetailsScreen(Invoice invoice, bool isReturn) {
     Navigator.push(
       context,
@@ -648,6 +719,16 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    // الفلترة للقوائم
+    final filteredPurchases = _filterInvoices(_purchaseInvoices);
+    final filteredReturns = _filterInvoices(_returnInvoices);
+
+    // حساب الإجماليات للفواتير المففلترة حالياً
+    final double totalFilteredPurchases = filteredPurchases.fold(0.0, (sum, item) => sum + item.totalAmount);
+    final double totalFilteredReturns = filteredReturns.fold(0.0, (sum, item) => sum + item.totalAmount);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('سجل فواتير المشتريات والمرتجعات', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -662,48 +743,115 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
+          : Column(
               children: [
-                _purchaseInvoices.isEmpty
-                    ? const Center(child: Text('لا توجد فواتير مشتريات مسجلة'))
-                    : ListView.builder(
-                        itemCount: _purchaseInvoices.length,
-                        itemBuilder: (ctx, index) {
-                          final inv = _purchaseInvoices[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            child: ListTile(
-                              leading: const Icon(Icons.shopping_cart, color: Colors.blue),
-                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
-                              isThreeLine: true,
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                              onTap: () => _openInvoiceDetailsScreen(inv, false),
+                // شريط الفلترة حسب الفترة
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        const Text('فلترة: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 4),
+                        ...['اليوم', 'أمس', 'الأسبوع', 'الشهر', 'السنة'].map((filterName) {
+                          final isSelected = _selectedFilter == filterName;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                            child: ChoiceChip(
+                              label: Text(filterName),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() => _selectedFilter = filterName);
+                                }
+                              },
                             ),
                           );
-                        },
-                      ),
-                
-                _returnInvoices.isEmpty
-                    ? const Center(child: Text('لا توجد مرتجعات مشتريات مسجلة'))
-                    : ListView.builder(
-                        itemCount: _returnInvoices.length,
-                        itemBuilder: (ctx, index) {
-                          final inv = _returnInvoices[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            child: ListTile(
-                              leading: const Icon(Icons.assignment_return, color: Colors.red),
-                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
-                              isThreeLine: true,
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                              onTap: () => _openInvoiceDetailsScreen(inv, true),
+                        }),
+                        const SizedBox(width: 4),
+                        ActionChip(
+                          avatar: const Icon(Icons.date_range, size: 18),
+                          label: Text(_selectedFilter == 'مخصص' && _customStartDate != null && _customEndDate != null
+                              ? '${_customStartDate!.toLocal().toString().split(' ')[0]} إلى ${_customEndDate!.toLocal().toString().split(' ')[0]}'
+                              : 'فترة مخصصة'),
+                          onPressed: _selectCustomDateRange,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // عرض محتوى التاب النشط
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      // تاب المشتريات
+                      filteredPurchases.isEmpty
+                          ? const Center(child: Text('لا توجد فواتير مشتريات مطابقة للفترة المحددة'))
+                          : ListView.builder(
+                              itemCount: filteredPurchases.length,
+                              itemBuilder: (ctx, index) {
+                                final inv = filteredPurchases[index];
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  child: ListTile(
+                                    leading: const Icon(Icons.shopping_cart, color: Colors.blue),
+                                    title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                                    isThreeLine: true,
+                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                    onTap: () => _openInvoiceDetailsScreen(inv, false),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
+                      
+                      // تاب المرتجعات
+                      filteredReturns.isEmpty
+                          ? const Center(child: Text('لا توجد مرتجعات مشتريات مطابقة للفترة المحددة'))
+                          : ListView.builder(
+                              itemCount: filteredReturns.length,
+                              itemBuilder: (ctx, index) {
+                                final inv = filteredReturns[index];
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  child: ListTile(
+                                    leading: const Icon(Icons.assignment_return, color: Colors.red),
+                                    title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                                    isThreeLine: true,
+                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                    onTap: () => _openInvoiceDetailsScreen(inv, true),
+                                  ),
+                                );
+                              },
+                            ),
+                    ],
+                  ),
+                ),
+
+                // شريط عرض إجمالي الفترة المختارة في الأسفل
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('إجمالي الفترة (${_selectedFilter}):', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text(
+                        _tabController.index == 0 ? totalFilteredPurchases.toStringAsFixed(2) : totalFilteredReturns.toStringAsFixed(2),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: _tabController.index == 0 ? Colors.green.shade700 : theme.colorScheme.error,
+                        ),
                       ),
+                    ],
+                  ),
+                ),
               ],
             ),
     );
@@ -764,7 +912,6 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // رأس الفاتورة (معلومات أساسية)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -792,7 +939,6 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
                 ),
                 const Divider(height: 1, thickness: 1),
                 
-                // قائمة الأصناف داخل الفاتورة
                 Expanded(
                   child: _items.isEmpty
                       ? const Center(child: Text('لا توجد أصناف مسجلة في هذه الفاتورة'))
@@ -819,7 +965,6 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
                         ),
                 ),
 
-                // إجمالي الفاتورة في الأسفل
                 Container(
                   padding: const EdgeInsets.all(16),
                   color: theme.colorScheme.surfaceContainerHighest,
