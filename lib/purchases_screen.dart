@@ -226,6 +226,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   Future<void> _savePurchaseProcess() async {
+    // التحقق الإجباري من اختيار المورد
     if (_selectedSupplier == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يجب اختيار المورد أولاً لإتمام الحفظ'), backgroundColor: Colors.red),
@@ -614,14 +615,6 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
   List<Invoice> _returnInvoices = [];
   bool _isLoading = true;
 
-  // متحكمات وحقول البحث والفلترة الزمنية
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-  
-  // أنواع الفلاتر الزمنية: 'today', 'yesterday', 'week', 'month', 'year', 'custom'
-  String _dateFilterType = 'today';
-  DateTimeRange? _customDateRange;
-
   @override
   void initState() {
     super.initState();
@@ -640,6 +633,7 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
     });
   }
 
+  // تم استبدال النافذة المنبثقة بالانتقال إلى شاشة كاملة جديدة
   void _openInvoiceDetailsScreen(Invoice invoice, bool isReturn) {
     Navigator.push(
       context,
@@ -652,82 +646,8 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
     );
   }
 
-  // دالة التحقق من مطابقة تاريخ الفاتورة للفلتر الزمني المختار
-  bool _isDateMatching(String dateStr) {
-    try {
-      final invoiceDate = DateTime.parse(dateStr);
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final invDay = DateTime(invoiceDate.year, invoiceDate.month, invoiceDate.day);
-
-      if (_dateFilterType == 'today') {
-        return invDay.isAtSameMomentAs(today);
-      } else if (_dateFilterType == 'yesterday') {
-        final yesterday = today.subtract(const Duration(days: 1));
-        return invDay.isAtSameMomentAs(yesterday);
-      } else if (_dateFilterType == 'week') {
-        final weekAgo = today.subtract(const Duration(days: 7));
-        return invDay.isAfter(weekAgo.subtract(const Duration(days: 1))) && invDay.isBefore(today.add(const Duration(days: 1)));
-      } else if (_dateFilterType == 'month') {
-        final monthAgo = today.subtract(const Duration(days: 30));
-        return invDay.isAfter(monthAgo.subtract(const Duration(days: 1))) && invDay.isBefore(today.add(const Duration(days: 1)));
-      } else if (_dateFilterType == 'year') {
-        final yearAgo = today.subtract(const Duration(days: 365));
-        return invDay.isAfter(yearAgo.subtract(const Duration(days: 1))) && invDay.isBefore(today.add(const Duration(days: 1)));
-      } else if (_dateFilterType == 'custom' && _customDateRange != null) {
-        final start = DateTime(_customDateRange!.start.year, _customDateRange!.start.month, _customDateRange!.start.day);
-        final end = DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day);
-        return invDay.isAfter(start.subtract(const Duration(days: 1))) && invDay.isBefore(end.add(const Duration(days: 1)));
-      }
-      return true;
-    } catch (e) {
-      return true; // في حال كان تنسيق التاريخ مختلفاً يتم عرضه لتجنب إخفائه
-    }
-  }
-
-  String _getFilterLabel() {
-    switch (_dateFilterType) {
-      case 'today': return 'اليوم';
-      case 'yesterday': return 'أمس';
-      case 'week': return 'خلال أسبوع';
-      case 'month': return 'خلال شهر';
-      case 'year': return 'خلال سنة';
-      case 'custom': 
-        if (_customDateRange != null) {
-          return '${_customDateRange!.start.toString().split(' ')[0]} إلى ${_customDateRange!.end.toString().split(' ')[0]}';
-        }
-        return 'فترة مخصصة';
-      default: return 'فلترة الوقت';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    // تصفية قوائم المشتريات والمرتجعات بناءً على البحث والفلتر الزمني
-    final filteredPurchases = _purchaseInvoices.where((inv) {
-      final query = _searchQuery.toLowerCase();
-      final idMatch = inv.id.toLowerCase().contains(query);
-      final supplierMatch = (inv.customerName ?? '').toLowerCase().contains(query);
-      final dateMatch = inv.date.toLowerCase().contains(query);
-      
-      final matchesSearch = idMatch || supplierMatch || dateMatch;
-      final matchesDate = _isDateMatching(inv.date);
-
-      return matchesSearch && matchesDate;
-    }).toList();
-
-    final filteredReturns = _returnInvoices.where((inv) {
-      final query = _searchQuery.toLowerCase();
-      final idMatch = inv.id.toLowerCase().contains(query);
-      final supplierMatch = (inv.customerName ?? '').toLowerCase().contains(query);
-      final dateMatch = inv.date.toLowerCase().contains(query);
-
-      final matchesSearch = idMatch || supplierMatch || dateMatch;
-      final matchesDate = _isDateMatching(inv.date);
-
-      return matchesSearch && matchesDate;
-    }).toList();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('سجل فواتير المشتريات والمرتجعات', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -742,200 +662,55 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : TabBarView(
+              controller: _tabController,
               children: [
-                // شريط البحث والفلترة الزمنية
-                Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (value) => setState(() => _searchQuery = value),
-                          decoration: InputDecoration(
-                            labelText: 'بحث برقم الفاتورة، اسم المورد، أو التاريخ...',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _searchQuery.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () {
-                                      setState(() {
-                                        _searchController.clear();
-                                        _searchQuery = '';
-                                      });
-                                    },
-                                  )
-                                : null,
-                            border: const OutlineInputBorder(),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // زر قائمة الفلاتر الزمنية
-                      PopupMenuButton<String>(
-                        icon: const Icon(Icons.filter_list, size: 28),
-                        tooltip: 'فلترة حسب الوقت',
-                        onSelected: (value) async {
-                          if (value == 'custom') {
-                            final pickedRange = await showDateRangePicker(
-                              context: context,
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2100),
-                              initialDateRange: _customDateRange ?? DateTimeRange(start: DateTime.now().subtract(const Duration(days: 7)), end: DateTime.now()),
-                            );
-                            if (pickedRange != null) {
-                              setState(() {
-                                _dateFilterType = 'custom';
-                                _customDateRange = pickedRange;
-                              });
-                            }
-                          } else {
-                            setState(() {
-                              _dateFilterType = value;
-                              _customDateRange = null;
-                            });
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'today',
-                            child: Row(
-                              children: [
-                                Icon(Icons.today, color: _dateFilterType == 'today' ? Colors.blue : Colors.grey),
-                                const SizedBox(width: 8),
-                                const Text('اليوم'),
-                              ],
+                _purchaseInvoices.isEmpty
+                    ? const Center(child: Text('لا توجد فواتير مشتريات مسجلة'))
+                    : ListView.builder(
+                        itemCount: _purchaseInvoices.length,
+                        itemBuilder: (ctx, index) {
+                          final inv = _purchaseInvoices[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            child: ListTile(
+                              leading: const Icon(Icons.shopping_cart, color: Colors.blue),
+                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                              isThreeLine: true,
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () => _openInvoiceDetailsScreen(inv, false),
                             ),
-                          ),
-                          PopupMenuItem(
-                            value: 'yesterday',
-                            child: Row(
-                              children: [
-                                Icon(Icons.history, color: _dateFilterType == 'yesterday' ? Colors.blue : Colors.grey),
-                                const SizedBox(width: 8),
-                                const Text('أمس'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'week',
-                            child: Row(
-                              children: [
-                                Icon(Icons.date_range, color: _dateFilterType == 'week' ? Colors.blue : Colors.grey),
-                                const SizedBox(width: 8),
-                                const Text('خلال أسبوع'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'month',
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_month, color: _dateFilterType == 'month' ? Colors.blue : Colors.grey),
-                                const SizedBox(width: 8),
-                                const Text('خلال شهر'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'year',
-                            child: Row(
-                              children: [
-                                Icon(Icons.calendar_view_year, color: _dateFilterType == 'year' ? Colors.blue : Colors.grey),
-                                const SizedBox(width: 8),
-                                const Text('خلال سنة'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'custom',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit_calendar, color: _dateFilterType == 'custom' ? Colors.blue : Colors.grey),
-                                const SizedBox(width: 8),
-                                const Text('فترة مخصصة...'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // مؤشر يوضح الفلتر الزمني الحالي النشط
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
-                  child: Row(
-                    children: [
-                      const Text('فلتر الوقت النشط: ', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                      Chip(
-                        label: Text(_getFilterLabel(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        backgroundColor: Colors.blue.shade50,
-                        deleteIcon: const Icon(Icons.close, size: 14),
-                        onDeleted: () {
-                          setState(() {
-                            _dateFilterType = 'today';
-                            _customDateRange = null;
-                          });
+                          );
                         },
                       ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      filteredPurchases.isEmpty
-                          ? const Center(child: Text('لا توجد فواتير مشتريات مطابقة للبحث والفلتر الزمني'))
-                          : ListView.builder(
-                              itemCount: filteredPurchases.length,
-                              itemBuilder: (ctx, index) {
-                                final inv = filteredPurchases[index];
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  child: ListTile(
-                                    leading: const Icon(Icons.shopping_cart, color: Colors.blue),
-                                    title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
-                                    isThreeLine: true,
-                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                                    onTap: () => _openInvoiceDetailsScreen(inv, false),
-                                  ),
-                                );
-                              },
+                
+                _returnInvoices.isEmpty
+                    ? const Center(child: Text('لا توجد مرتجعات مشتريات مسجلة'))
+                    : ListView.builder(
+                        itemCount: _returnInvoices.length,
+                        itemBuilder: (ctx, index) {
+                          final inv = _returnInvoices[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            child: ListTile(
+                              leading: const Icon(Icons.assignment_return, color: Colors.red),
+                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                              isThreeLine: true,
+                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                              onTap: () => _openInvoiceDetailsScreen(inv, true),
                             ),
-                      
-                      filteredReturns.isEmpty
-                          ? const Center(child: Text('لا توجد مرتجعات مشتريات مطابقة للبحث والفلتر الزمني'))
-                          : ListView.builder(
-                              itemCount: filteredReturns.length,
-                              itemBuilder: (ctx, index) {
-                                final inv = filteredReturns[index];
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  child: ListTile(
-                                    leading: const Icon(Icons.assignment_return, color: Colors.red),
-                                    title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
-                                    isThreeLine: true,
-                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                                    onTap: () => _openInvoiceDetailsScreen(inv, true),
-                                  ),
-                                );
-                              },
-                            ),
-                    ],
-                  ),
-                ),
+                          );
+                        },
+                      ),
               ],
             ),
     );
   }
 }
 
+// شاشة تفاصيل الفاتورة الكاملة المستقلة الجديدة
 class PurchaseInvoiceDetailsScreen extends StatefulWidget {
   final Invoice invoice;
   final bool isReturn;
@@ -970,18 +745,6 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
     });
   }
 
-  void _printInvoice() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('جاري إرسال الفاتورة للطابعة الحرارية...')),
-    );
-  }
-
-  void _shareInvoice() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('جاري مشاركة تفاصيل الفاتورة...')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -996,23 +759,12 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
         ),
         centerTitle: true,
         backgroundColor: isReturn ? theme.colorScheme.error : theme.colorScheme.primary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.print, color: Colors.white),
-            tooltip: 'طباعة الفاتورة',
-            onPressed: _printInvoice,
-          ),
-          IconButton(
-            icon: const Icon(Icons.share, color: Colors.white),
-            tooltip: 'مشاركة الفاتورة',
-            onPressed: _shareInvoice,
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                // رأس الفاتورة (معلومات أساسية)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -1040,6 +792,7 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
                 ),
                 const Divider(height: 1, thickness: 1),
                 
+                // قائمة الأصناف داخل الفاتورة
                 Expanded(
                   child: _items.isEmpty
                       ? const Center(child: Text('لا توجد أصناف مسجلة في هذه الفاتورة'))
@@ -1066,6 +819,7 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
                         ),
                 ),
 
+                // إجمالي الفاتورة في الأسفل
                 Container(
                   padding: const EdgeInsets.all(16),
                   color: theme.colorScheme.surfaceContainerHighest,
