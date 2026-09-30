@@ -942,6 +942,23 @@ class DBHelper {
     await db.update('purchase_return_invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
     await db.update('vouchers', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
 
+    // 💡 التعديل هنا: توريد النقدية الفعلية للصندوق العام عبر سند قبض تلقائي لكي تظهر في الصندوق والتقارير المالية
+    if (transferredToMainVault > 0) {
+      await db.insert('vouchers', {
+        'id': 'shift_trans_${currentShiftId}_${DateTime.now().millisecondsSinceEpoch}',
+        'voucherType': 'receipt',
+        'targetType': 'general',
+        'targetId': null,
+        'targetName': 'توريد نقدية الوردية رقم ($currentShiftId)',
+        'amount': transferredToMainVault,
+        'date': DateTime.now().toString().split('.')[0],
+        'paymentMethod': 'نقدي',
+        'notes': 'إغلاق الوردية رقم $currentShiftId وتوريد النقدية الفعلية للصندوق',
+        'shiftId': currentShiftId,
+        'isClosed': 1,
+      });
+    }
+
     await db.insert('shifts', {
       'startTime': DateTime.now().toString(),
       'userId': userId ?? '1',
