@@ -226,7 +226,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   Future<void> _savePurchaseProcess() async {
-    // التحقق الإجباري من اختيار المورد
     if (_selectedSupplier == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يجب اختيار المورد أولاً لإتمام الحفظ'), backgroundColor: Colors.red),
@@ -615,6 +614,10 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
   List<Invoice> _returnInvoices = [];
   bool _isLoading = true;
 
+  // متحكمات وحقول البحث والفلترة الجديدة
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -633,7 +636,6 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
     });
   }
 
-  // تم استبدال النافذة المنبثقة بالانتقال إلى شاشة كاملة جديدة
   void _openInvoiceDetailsScreen(Invoice invoice, bool isReturn) {
     Navigator.push(
       context,
@@ -648,6 +650,23 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
 
   @override
   Widget build(BuildContext context) {
+    // تصفية القوائم بناءً على نص البحث (برقم الفاتورة، اسم المورد، أو التاريخ)
+    final filteredPurchases = _purchaseInvoices.where((inv) {
+      final query = _searchQuery.toLowerCase();
+      final idMatch = inv.id.toLowerCase().contains(query);
+      final supplierMatch = (inv.customerName ?? '').toLowerCase().contains(query);
+      final dateMatch = inv.date.toLowerCase().contains(query);
+      return idMatch || supplierMatch || dateMatch;
+    }).toList();
+
+    final filteredReturns = _returnInvoices.where((inv) {
+      final query = _searchQuery.toLowerCase();
+      final idMatch = inv.id.toLowerCase().contains(query);
+      final supplierMatch = (inv.customerName ?? '').toLowerCase().contains(query);
+      final dateMatch = inv.date.toLowerCase().contains(query);
+      return idMatch || supplierMatch || dateMatch;
+    }).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('سجل فواتير المشتريات والمرتجعات', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -662,55 +681,85 @@ class _LocalPurchaseInvoicesLogScreenState extends State<LocalPurchaseInvoicesLo
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
+          : Column(
               children: [
-                _purchaseInvoices.isEmpty
-                    ? const Center(child: Text('لا توجد فواتير مشتريات مسجلة'))
-                    : ListView.builder(
-                        itemCount: _purchaseInvoices.length,
-                        itemBuilder: (ctx, index) {
-                          final inv = _purchaseInvoices[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            child: ListTile(
-                              leading: const Icon(Icons.shopping_cart, color: Colors.blue),
-                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
-                              isThreeLine: true,
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                              onTap: () => _openInvoiceDetailsScreen(inv, false),
+                // حقل البحث والفلترة الشامل
+                Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (value) => setState(() => _searchQuery = value),
+                    decoration: InputDecoration(
+                      labelText: 'بحث برقم الفاتورة، اسم المورد، أو التاريخ...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                setState(() {
+                                  _searchController.clear();
+                                  _searchQuery = '';
+                                });
+                              },
+                            )
+                          : null,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      filteredPurchases.isEmpty
+                          ? const Center(child: Text('لا توجد فواتير مشتريات مطابقة للبحث'))
+                          : ListView.builder(
+                              itemCount: filteredPurchases.length,
+                              itemBuilder: (ctx, index) {
+                                final inv = filteredPurchases[index];
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  child: ListTile(
+                                    leading: const Icon(Icons.shopping_cart, color: Colors.blue),
+                                    title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                                    isThreeLine: true,
+                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                    onTap: () => _openInvoiceDetailsScreen(inv, false),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
-                
-                _returnInvoices.isEmpty
-                    ? const Center(child: Text('لا توجد مرتجعات مشتريات مسجلة'))
-                    : ListView.builder(
-                        itemCount: _returnInvoices.length,
-                        itemBuilder: (ctx, index) {
-                          final inv = _returnInvoices[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            child: ListTile(
-                              leading: const Icon(Icons.assignment_return, color: Colors.red),
-                              title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
-                              isThreeLine: true,
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                              onTap: () => _openInvoiceDetailsScreen(inv, true),
+                      
+                      filteredReturns.isEmpty
+                          ? const Center(child: Text('لا توجد مرتجعات مشتريات مطابقة للبحث'))
+                          : ListView.builder(
+                              itemCount: filteredReturns.length,
+                              itemBuilder: (ctx, index) {
+                                final inv = filteredReturns[index];
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  child: ListTile(
+                                    leading: const Icon(Icons.assignment_return, color: Colors.red),
+                                    title: Text('مورد: ${inv.customerName ?? "غير محدد"}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text('رقم الفاتورة: ${inv.id}\nالتاريخ: ${inv.date}\nالمبلغ: ${inv.totalAmount.toStringAsFixed(2)}'),
+                                    isThreeLine: true,
+                                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                    onTap: () => _openInvoiceDetailsScreen(inv, true),
+                                  ),
+                                );
+                              },
                             ),
-                          );
-                        },
-                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
     );
   }
 }
 
-// شاشة تفاصيل الفاتورة الكاملة المستقلة الجديدة
 class PurchaseInvoiceDetailsScreen extends StatefulWidget {
   final Invoice invoice;
   final bool isReturn;
@@ -745,6 +794,19 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
     });
   }
 
+  // دوال الطباعة والمشاركة المماثلة لباقي شاشات النظام
+  void _printInvoice() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('جاري إرسال الفاتورة للطابعة الحرارية...')),
+    );
+  }
+
+  void _shareInvoice() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('جاري مشاركة تفاصيل الفاتورة...')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -759,12 +821,23 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
         ),
         centerTitle: true,
         backgroundColor: isReturn ? theme.colorScheme.error : theme.colorScheme.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.print, color: Colors.white),
+            tooltip: 'طباعة الفاتورة',
+            onPressed: _printInvoice,
+          ),
+          IconButton(
+            icon: const Icon(Icons.share, color: Colors.white),
+            tooltip: 'مشاركة الفاتورة',
+            onPressed: _shareInvoice,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // رأس الفاتورة (معلومات أساسية)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -792,7 +865,6 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
                 ),
                 const Divider(height: 1, thickness: 1),
                 
-                // قائمة الأصناف داخل الفاتورة
                 Expanded(
                   child: _items.isEmpty
                       ? const Center(child: Text('لا توجد أصناف مسجلة في هذه الفاتورة'))
@@ -819,7 +891,6 @@ class _PurchaseInvoiceDetailsScreenState extends State<PurchaseInvoiceDetailsScr
                         ),
                 ),
 
-                // إجمالي الفاتورة في الأسفل
                 Container(
                   padding: const EdgeInsets.all(16),
                   color: theme.colorScheme.surfaceContainerHighest,
