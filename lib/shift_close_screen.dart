@@ -16,7 +16,7 @@ class ShiftSummary {
   final double creditReturns;
   final double totalReturns;
   
-  final double netCashInDrawer; // النقدية المتوقعة بالصندوق (تقتصر على المبيعات والمرتجعات النقدية فقط)
+  final double netCashInDrawer; // النقدية المتوقعة بالصندوق (المبيعات والمرتجعات النقدية للوردية الحالية فقط)
 
   ShiftSummary({
     required this.shiftNumber,
@@ -54,47 +54,50 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Future<void> _calculateShiftSummary() async {
     setState(() => _isLoading = true);
 
-    // 1. جلب رقم الوردية التالية
-    final int nextShiftNumber = await DBHelper.getNextShiftNumber();
+    // 1. جلب معرف الوردية المفتوحة حالياً (ليبدا العد الصحيح من 1 للوردية الحالية)
+    final int currentShiftId = await DBHelper.getCurrentShiftId();
 
-    // 2. جلب الفواتير غير المغلقة فقط للوردية الحالية
-    final invoices = await DBHelper.getUnclosedInvoices(); 
+    // 2. جلب الفواتير غير المغلقة الخاصة بهذه الوردية فقط عبر الـ shiftId
+    final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
+    final invoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId).toList();
 
-    int salesCount = 0;
+    // جلب مرتجعات المبيعات غير المغلقة الخاصة بهذه الوردية
+    final allReturnInvoices = await DBHelper.getUnclosedReturnInvoices();
+    final returnInvoices = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId).toList();
+
+    int salesCount = invoices.length;
     double cashSales = 0.0;
     double creditSales = 0.0;
-    
-    int returnsCount = 0;
+
+    for (var inv in invoices) {
+      if (inv.paymentType == 'cash') {
+        cashSales += inv.totalAmount;
+      } else {
+        creditSales += inv.totalAmount;
+      }
+    }
+
+    int returnsCount = returnInvoices.length;
     double cashReturns = 0.0;
     double creditReturns = 0.0;
 
-    for (var inv in invoices) {
-      if (inv.invoiceType == 'sale') {
-        salesCount++;
-        if (inv.paymentType == 'cash') {
-          cashSales += inv.totalAmount;
-        } else {
-          creditSales += inv.totalAmount;
-        }
-      } else if (inv.invoiceType == 'return') {
-        returnsCount++;
-        if (inv.paymentType == 'cash') {
-          cashReturns += inv.totalAmount;
-        } else {
-          creditReturns += inv.totalAmount;
-        }
+    for (var ret in returnInvoices) {
+      if (ret.paymentType == 'cash') {
+        cashReturns += ret.totalAmount;
+      } else {
+        creditReturns += ret.totalAmount;
       }
     }
 
     double totalSales = cashSales + creditSales;
     double totalReturns = cashReturns + creditReturns;
     
-    // صافي النقد المفروض توفره في الدرج بناءً على المبيعات والمرتجعات النقدية فقط (تم إستبعاد السندات تماماً)
+    // صافي النقد المفروض توفره في الدرج للوردية الحالية فقط
     double netCashInDrawer = cashSales - cashReturns;
 
     setState(() {
       _summary = ShiftSummary(
-        shiftNumber: nextShiftNumber,
+        shiftNumber: currentShiftId,
         salesCount: salesCount,
         cashSales: cashSales,
         creditSales: creditSales,
@@ -128,8 +131,8 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد إغلاق الوردية رقم (${_summary!.shiftNumber})'),
         content: Text(
-          'سيتم إغلاق الوردية وتصفير المبالغ المعلقة وتوريد النقدية الفعلية إلى الصندوق الرئيسي.\n\n'
-          'النقدية المتوقعة: ${_summary!.netCashInDrawer.toStringAsFixed(2)}\n'
+          'سيتم إغلاق الوردية الحالية، ترحيل المبيعات والمرتجعات النقدية إلى الصندوق، وبدء وردية جديدة برقم جديد وتصفير العدادات.\n\n'
+          'النقدية المتوقعة بالدرج: ${_summary!.netCashInDrawer.toStringAsFixed(2)}\n'
           'النقدية الفعلية: ${actualCash.toStringAsFixed(2)}\n'
           'الفارق: ${_cashDifference.toStringAsFixed(2)}',
         ),
@@ -155,7 +158,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Future<void> _processShiftClosure(double actualCash) async {
     setState(() => _isLoading = true);
 
-    // إرسال البيانات لدالة الإغلاق (مع تمرير النقدية الفعلية للدرج ليتم توريدها للصندوق العام)
+    // إغلاق الوردية الحالية وتغيير حالة الفواتير إلى مغلقة (isClosed = 1) لترسخ للصندوق
     await DBHelper.closeShift(
       shiftNumber: _summary!.shiftNumber,
       expectedCash: _summary!.netCashInDrawer,
@@ -166,21 +169,16 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       transferredToMainVault: actualCash, 
     );
 
-    _printShiftReport();
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تم إغلاق الوردية رقم (${_summary!.shiftNumber}) بنجاح وبدء وردية جديدة!'),
+          content: Text('تم إغلاق الوردية رقم (${_summary!.shiftNumber}) بنجاح وتصفير مبيعاتها للصندوق!'),
           backgroundColor: Colors.green.shade700,
         ),
       );
+      // تحديث الشاشة لجلب الوردية الجديدة (التي تبدأ بصفر مبيعات)
       _calculateShiftSummary();
     }
-  }
-
-  void _printShiftReport() {
-    // أمر إرسال تقرير إغلاق الوردية إلى الطابعة الحرارية
   }
 
   Widget _buildItemRow(String title, String value, {bool isBold = false, Color? color}) {
@@ -252,7 +250,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      // كارت تفاصيل المبيعات
+                      // تفاصيل المبيعات
                       Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -261,7 +259,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('تفاصيل المبيعات',
+                              const Text('تفاصيل المبيعات (الوردية الحالية)',
                                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
                               const Divider(),
                               _buildItemRow('عدد فواتير المبيعات:', '${_summary!.salesCount} فاتورة'),
@@ -275,7 +273,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       ),
                       const SizedBox(height: 10),
 
-                      // كارت تفاصيل المرتجعات
+                      // تفاصيل المرتجعات
                       Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -284,7 +282,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('تفاصيل المرتجعات',
+                              const Text('تفاصيل مرتجعات المبيعات (الوردية الحالية)',
                                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
                               const Divider(),
                               _buildItemRow('عدد فواتير المرتجعات:', '${_summary!.returnsCount} فاتورة'),
@@ -298,7 +296,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       ),
                       const SizedBox(height: 10),
 
-                      // كارت ملخص الصندوق والنقدية المتوقعة (بدون سندات)
+                      // صافي النقدية المتوقعة للترحيل للصندوق
                       Card(
                         color: Colors.green.shade50,
                         elevation: 3,
@@ -308,11 +306,11 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('النقدية المتوقعة بالصندوق (الدرج)',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                              const Text('النقدية المتوقعة بالصندوق عند الإغلاق (مبيعات - مرتجعات كاش)',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
                               const Divider(),
                               _buildItemRow(
-                                'الصافي المعلق للتصفير والترحيل:',
+                                'الصافي القابل للترحيل للصندوق:',
                                 '${_summary!.netCashInDrawer.toStringAsFixed(2)}',
                                 isBold: true,
                                 color: Colors.green.shade900,
@@ -323,7 +321,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       ),
                       const SizedBox(height: 15),
 
-                      // إدخال النقدية الفعلية
                       TextField(
                         controller: _actualCashController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -352,7 +349,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
                       const SizedBox(height: 25),
 
-                      // زر تأكيد إغلاق الوردية
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -365,7 +361,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           ),
                           icon: const Icon(Icons.lock, color: Colors.white),
                           label: const Text(
-                            'تأكيد إغلاق الوردية وتصفير الصندوق',
+                            'تأكيد إغلاق الوردية وتوريد المبالغ للصندوق',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                           onPressed: _confirmCloseShift,
