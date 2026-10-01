@@ -33,7 +33,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // جلب البيانات من دالة DBHelper (قم بربط كل دالة طبقاً لما هو معرف لديك في DBHelper)
       final sales = await DBHelper.getTotalSales();
       final cost = await DBHelper.getSalesCost();
       final purchases = await DBHelper.getTotalPurchases();
@@ -59,16 +58,20 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      // في حال لم تكن الدوال موجودة بنفس الاسم بعد في DBHelper، تجنباً لإيقاف التطبيق
       setState(() => _isLoading = false);
     }
   }
 
-  // حساب صافي الربح
-  // (المبيعات الصافية - تكلفة المبيعات) + الإيرادات الأخرى - المصروفات
+  // المعادلة المحاسبية الدقيقة لصافي الربح والخسارة
   double get _netProfit {
+    // 1. صافي المبيعات الفعلي (إجمالي المبيعات مطروحاً منه مردودات المبيعات التي رجعت)
     final netSales = _totalSales - _salesReturns;
+
+    // 2. مجمل الربح (صافي المبيعات ناقصاً تكلفة البضاعة المباعة)
     final grossProfit = netSales - _salesCost;
+
+    // 3. صافي الربح النهائي (مجمل الربح مضافاً إليه الإيرادات الأخرى ومطروحاً منه المصروفات التشغيلية)
+    // ملاحظة: المشتريات ومردوداتها تؤثر على المخزون وتكلفة المبيعات، لذا لا تُجمع هنا تجنباً لتكرار الحساب.
     return grossProfit + _totalRevenues - _totalExpenses;
   }
 
@@ -136,7 +139,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
-  // ودجت بطاقة صافي الربح (تتغير ألوانها بحسب الربح/الخسارة)
+  // ودجت بطاقة صافي الربح
   Widget _buildNetProfitCard() {
     final isProfit = _netProfit >= 0;
     return Card(
@@ -164,7 +167,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              '${_netProfit.toStringAsFixed(2)}',
+              _netProfit.toStringAsFixed(2),
               style: const TextStyle(
                 fontSize: 28,
                 color: Colors.white,
