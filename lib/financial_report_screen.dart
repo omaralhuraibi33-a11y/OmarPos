@@ -62,18 +62,14 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     }
   }
 
-  // المعادلة المحاسبية الدقيقة لصافي الربح والخسارة
-  double get _netProfit {
-    // 1. صافي المبيعات الفعلي (إجمالي المبيعات مطروحاً منه مردودات المبيعات التي رجعت)
-    final netSales = _totalSales - _salesReturns;
+  // 1. إجمالي المبيعات الحقيقي (بعد إنقاص المرتجع)
+  double get _actualNetSales => _totalSales - _salesReturns;
 
-    // 2. مجمل الربح (صافي المبيعات ناقصاً تكلفة البضاعة المباعة)
-    final grossProfit = netSales - _salesCost;
+  // 2. الربح الأساسي من المبيعات (المبيعات الحقيقية - تكلفة المبيعات) وهو ما تقصده تماماً
+  double get _salesProfit => _actualNetSales - _salesCost;
 
-    // 3. صافي الربح النهائي (مجمل الربح مضافاً إليه الإيرادات الأخرى ومطروحاً منه المصروفات التشغيلية)
-    // ملاحظة: المشتريات ومردوداتها تؤثر على المخزون وتكلفة المبيعات، لذا لا تُجمع هنا تجنباً لتكرار الحساب.
-    return grossProfit + _totalRevenues - _totalExpenses;
-  }
+  // 3. صافي الربح النهائي (ربح المبيعات + أي إيرادات أخرى - المصروفات)
+  double get _netProfit => _salesProfit + _totalRevenues - _totalExpenses;
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +94,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
                   children: [
-                    // كارت صافي الربح الرئيسي
+                    // كارت الأرباح والخسارة المبني على خطوتك الصحيحة
                     _buildNetProfitCard(),
 
                     const SizedBox(height: 16),
@@ -122,6 +118,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                       children: [
                         _buildStatCard('إجمالي المبيعات', _totalSales, Icons.point_of_sale, Colors.teal),
                         _buildStatCard('إجمالي مردود المبيعات', _salesReturns, Icons.assignment_return, Colors.deepOrange),
+                        _buildStatCard('المبيعات الحقيقية (الصافي)', _actualNetSales, Icons.sell, Colors.teal.shade700),
                         _buildStatCard('تكلفة المبيعات', _salesCost, Icons.inventory_2_outlined, Colors.brown),
                         _buildStatCard('إجمالي المشتريات', _totalPurchases, Icons.shopping_bag, Colors.blue),
                         _buildStatCard('إجمالي مردود المشتريات', _purchasesReturns, Icons.assignment_return_outlined, Colors.purple),
@@ -139,7 +136,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
-  // ودجت بطاقة صافي الربح
+  // كارت يعرض طريقتك الدقيقة تماماً للحساب
   Widget _buildNetProfitCard() {
     final isProfit = _netProfit >= 0;
     return Card(
@@ -147,7 +144,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       color: isProfit ? Colors.green.shade800 : Colors.red.shade800,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             Row(
@@ -160,7 +157,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isProfit ? 'صافي الربح' : 'صافي الخسارة',
+                  isProfit ? 'صافي الربح النهائي' : 'صافي الخسارة النهائية',
                   style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -174,13 +171,52 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
+            const Divider(color: Colors.white54, height: 24),
+            // تسلسل الخطوات حسب طريقتك الصحيحة تماماً:
+            Column(
+              children: [
+                _buildEquationRow('إجمالي المبيعات:', _totalSales),
+                _buildEquationRow('ناقصاً المرتجع:', -_salesReturns, isMinus: true),
+                _buildEquationRow('= إجمالي المبيعات الحقيقي:', _actualNetSales, isBold: true),
+                _buildEquationRow('ناقصاً تكلفة المبيعات:', -_salesCost, isMinus: true),
+                _buildEquationRow('= ربح المبيعات الأساسي:', _salesProfit, isBold: true),
+                if (_totalRevenues > 0) _buildEquationRow('مضافاً الإيرادات الأخرى:', _totalRevenues),
+                if (_totalExpenses > 0) _buildEquationRow('ناقصاً المصروفات:', -_totalExpenses, isMinus: true),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ودجت تصميم البطاقات الفرعية
+  Widget _buildEquationRow(String label, double value, {bool isMinus = false, bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: isBold ? Colors.white : Colors.white70,
+              fontSize: isBold ? 13 : 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            '${isMinus ? "- " : ""}${value.abs().toStringAsFixed(2)}',
+            style: TextStyle(
+              color: isBold ? Colors.white : Colors.white70,
+              fontSize: isBold ? 13 : 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatCard(String title, double amount, IconData icon, Color color) {
     return Card(
       elevation: 2,
