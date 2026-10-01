@@ -452,7 +452,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 13, // رفع الإصدار لدعم الجداول المستقلة للمشتريات
+      version: 13,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -493,7 +493,6 @@ class DBHelper {
           )
         ''');
 
-        // ==================== الجداول المستقلة للمشتريات ====================
         await db.execute('''
           CREATE TABLE purchase_invoices(
             id TEXT PRIMARY KEY,
@@ -522,7 +521,6 @@ class DBHelper {
           )
         ''');
 
-        // ==================== الجداول المستقلة للمرتجعات (مبيعات) ====================
         await db.execute('''
           CREATE TABLE return_invoices(
             id TEXT PRIMARY KEY,
@@ -551,7 +549,6 @@ class DBHelper {
           )
         ''');
 
-        // ==================== الجداول المستقلة لمرتجعات المشتريات ====================
         await db.execute('''
           CREATE TABLE purchase_return_invoices(
             id TEXT PRIMARY KEY,
@@ -719,7 +716,6 @@ class DBHelper {
           )
         ''');
 
-        // إضافة المستخدمين الافتراضيين
         final allPerms = {for (var m in allModules) m: true};
         final cashierPerms = {
           for (var m in allModules) m: (m == 'نقطة البيع' || m == 'إغلاق الصندوق / الوردية')
@@ -733,14 +729,11 @@ class DBHelper {
         await db.insert('users', AppUser(id: '3', name: 'كاشير 2', pin: '0000', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
         await db.insert('users', AppUser(id: '4', name: 'مشرف', pin: '1111', isAdmin: false, showInLogin: true, permissions: supervisorPerms).toMap());
 
-        // عميل نقدي افتراضي
         await db.insert('customers', Customer(id: 'cash_default', name: 'عميل نقدي', phone: '', balance: 0.0).toMap());
 
-        // إضافة طرق دفع افتراضية
         await db.insert('payment_methods', {'id': '1', 'name': 'نقدي'});
         await db.insert('payment_methods', {'id': '2', 'name': 'آجل'});
 
-        // إنشاء الوردية الأولى
         await db.insert('shifts', {
           'startTime': DateTime.now().toString(),
           'userId': '1',
@@ -879,7 +872,6 @@ class DBHelper {
     );
   }
 
-  // ==================== الوردية الحالية وإغلاق الوردية ====================
   static Future<int> getCurrentShiftId() async {
     final db = await database;
     final res = await db.query('shifts', where: "status = 'open'", orderBy: 'id DESC', limit: 1);
@@ -942,7 +934,6 @@ class DBHelper {
     await db.update('purchase_return_invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
     await db.update('vouchers', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
 
-    // 💡 التعديل هنا: توريد النقدية الفعلية للصندوق العام عبر سند قبض تلقائي لكي تظهر في الصندوق والتقارير المالية
     if (transferredToMainVault > 0) {
       await db.insert('vouchers', {
         'id': 'shift_trans_${currentShiftId}_${DateTime.now().millisecondsSinceEpoch}',
@@ -1020,7 +1011,6 @@ class DBHelper {
     return maps.map((m) => Voucher.fromMap(m)).toList();
   }
 
-  // ==================== فواتير المبيعات ====================
   static Future<List<Invoice>> getAllInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('invoices', orderBy: 'date DESC');
@@ -1066,7 +1056,6 @@ class DBHelper {
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير المشتريات (الجداول المستقلة الجديدة) ====================
   static Future<List<Invoice>> getAllPurchaseInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('purchase_invoices', orderBy: 'date DESC');
@@ -1084,7 +1073,7 @@ class DBHelper {
       await addSupplierTransaction(
         supplierId: invoice.customerId!,
         type: 'فاتورة مشتريات أجلة',
-        credit: invoice.totalAmount, // زيادة رصيد المورد (دائن)
+        credit: invoice.totalAmount,
         debit: 0.0,
         date: invoice.date,
         notes: invoice.notes,
@@ -1110,7 +1099,6 @@ class DBHelper {
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير مرتجعات المبيعات ====================
   static Future<List<Invoice>> getAllReturnInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('return_invoices', orderBy: 'date DESC');
@@ -1154,7 +1142,6 @@ class DBHelper {
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== فواتير مرتجعات المشتريات ====================
   static Future<List<Invoice>> getAllPurchaseReturnInvoices() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('purchase_return_invoices', orderBy: 'date DESC');
@@ -1173,7 +1160,7 @@ class DBHelper {
         supplierId: invoice.customerId!,
         type: 'مرتجع مشتريات',
         credit: 0.0,
-        debit: invoice.totalAmount, // تخفيض رصيد المورد (مدين)
+        debit: invoice.totalAmount,
         date: invoice.date,
         notes: invoice.notes,
       );
@@ -1198,7 +1185,6 @@ class DBHelper {
     return maps.map((m) => InvoiceItem.fromMap(m)).toList();
   }
 
-  // ==================== المستخدمين والعملاء ====================
   static Future<List<AppUser>> getAllUsers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('users');
@@ -1250,7 +1236,6 @@ class DBHelper {
     await db.delete('customer_transactions', where: 'customerId = ?', whereArgs: [id]);
   }
 
-  // ==================== حركات وسندات العملاء ====================
   static Future<List<CustomerTransaction>> getCustomerTransactions(String customerId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -1262,7 +1247,6 @@ class DBHelper {
     return maps.map((m) => CustomerTransaction.fromMap(m)).toList();
   }
 
-  // دالة كشف حساب العميل المطلوبة
   static Future<List<Map<String, dynamic>>> getCustomerStatement(String customerId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -1303,7 +1287,6 @@ class DBHelper {
     });
   }
 
-  // ==================== إدارة السندات (قبض / صرف / مصروفات) ====================
   static Future<void> addVoucher(Voucher voucher) async {
     final db = await database;
     if (voucher.shiftId <= 0) {
@@ -1361,7 +1344,6 @@ class DBHelper {
     return maps.map((m) => Voucher.fromMap(m)).toList();
   }
 
-  // ==================== الموردين وحساباتهم ====================
   static Future<List<Supplier>> getAllSuppliers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('suppliers');
@@ -1418,7 +1400,6 @@ class DBHelper {
     });
   }
 
-  // ==================== عمليات المجموعات والأصناف ====================
   static Future<List<Category>> getAllCategories() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('categories');
@@ -1476,7 +1457,6 @@ class DBHelper {
     );
   }
 
-  // ==================== إعدادات النظام والملاحظات وطرق الدفع ====================
   static Future<void> saveSetting(String key, String value) async {
     final db = await database;
     await db.insert(
@@ -1495,7 +1475,6 @@ class DBHelper {
     return defaultValue;
   }
 
-  // ==================== دوال إدارة الطابعات ====================
   static Future<List<Map<String, dynamic>>> getSavedPrinters() async {
     final savedJson = await getSetting('printers_list');
     if (savedJson == null || savedJson.isEmpty) return [];
@@ -1563,7 +1542,6 @@ class DBHelper {
     await db.delete('prep_notes', where: 'note = ?', whereArgs: [note]);
   }
 
-  // ==================== مسح البيانات والتصفير ====================
   static Future<void> resetAllRecordsAndBalances() async {
     final db = await database;
     await db.delete('invoices');
@@ -1631,7 +1609,6 @@ class DBHelper {
     await db.delete('products');
   }
 
-  // ==================== النسخ الاحتياطي والاستعادة ====================
   static Future<void> closeDatabase() async {
     if (_db != null && _db!.isOpen) {
       await _db!.close();
@@ -1674,7 +1651,7 @@ class DBHelper {
     }
   }
 
-  // ==================== دوال التقرير المالي ====================
+  // ==================== دوال التقرير المالي (محدثة لتتوافق مع الجداول المستقلة) ====================
   static Future<double> getTotalSales() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1693,6 +1670,7 @@ class DBHelper {
 
   static Future<double> getTotalPurchases() async {
     final db = await database;
+    // تم التعديل للاستعلام من جدول مشتريات المستقل الجديد
     final result = await db.rawQuery(
       "SELECT SUM(totalAmount) as total FROM purchase_invoices",
     );
@@ -1744,6 +1722,7 @@ class DBHelper {
 
   static Future<double> getSalesReturnsTotal() async {
     final db = await database;
+    // تم التعديل للاستعلام من جدول مرتجعات المبيعات المستقل
     final result = await db.rawQuery(
       "SELECT SUM(totalAmount) as total FROM return_invoices",
     );
@@ -1752,6 +1731,7 @@ class DBHelper {
 
   static Future<double> getPurchasesReturnsTotal() async {
     final db = await database;
+    // تم التعديل للاستعلام من جدول مرتجعات المشتريات المستقل
     final result = await db.rawQuery(
       "SELECT SUM(totalAmount) as total FROM purchase_return_invoices",
     );
