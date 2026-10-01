@@ -1651,7 +1651,7 @@ class DBHelper {
     }
   }
 
-  // ==================== دوال التقرير المالي (محدثة لتتوافق مع الجداول المستقلة) ====================
+  // ==================== دوال التقرير المالي (محدثة ومحدثة بدقة محاسبية) ====================
   static Future<double> getTotalSales() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1662,15 +1662,29 @@ class DBHelper {
 
   static Future<double> getSalesCost() async {
     final db = await database;
-    final result = await db.rawQuery(
-      "SELECT SUM(quantity * purchasePrice) as total FROM products",
-    );
-    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+    
+    // 1. حساب تكلفة الأصناف المباعة فعلياً من تفاصيل فواتير البيع
+    final salesCostResult = await db.rawQuery('''
+      SELECT SUM(ii.quantity * p.purchasePrice) as total 
+      FROM invoice_items ii
+      JOIN products p ON ii.productId = p.id
+    ''');
+    double totalSalesCost = (salesCostResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    // 2. حساب تكلفة الأصناف المرتجعة من تفاصيل فواتير مرتجع المبيعات لاستبعادها
+    final returnsCostResult = await db.rawQuery('''
+      SELECT SUM(rii.quantity * p.purchasePrice) as total 
+      FROM return_invoice_items rii
+      JOIN products p ON rii.productId = p.id
+    ''');
+    double totalReturnsCost = (returnsCostResult.first['total'] as num?)?.toDouble() ?? 0.0;
+
+    // تكلفة المبيعات الفعلية = تكلفة المبيعات ناقصاً تكلفة المرتجعات
+    return totalSalesCost - totalReturnsCost;
   }
 
   static Future<double> getTotalPurchases() async {
     final db = await database;
-    // تم التعديل للاستعلام من جدول مشتريات المستقل الجديد
     final result = await db.rawQuery(
       "SELECT SUM(totalAmount) as total FROM purchase_invoices",
     );
@@ -1722,7 +1736,6 @@ class DBHelper {
 
   static Future<double> getSalesReturnsTotal() async {
     final db = await database;
-    // تم التعديل للاستعلام من جدول مرتجعات المبيعات المستقل
     final result = await db.rawQuery(
       "SELECT SUM(totalAmount) as total FROM return_invoices",
     );
@@ -1731,7 +1744,6 @@ class DBHelper {
 
   static Future<double> getPurchasesReturnsTotal() async {
     final db = await database;
-    // تم التعديل للاستعلام من جدول مرتجعات المشتريات المستقل
     final result = await db.rawQuery(
       "SELECT SUM(totalAmount) as total FROM purchase_return_invoices",
     );
