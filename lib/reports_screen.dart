@@ -20,13 +20,16 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
 
   // البيانات المجلوبة
   List<Invoice> _allInvoices = [];
+  List<Invoice> _allPurchaseInvoices = [];
+  List<Invoice> _allReturnInvoices = [];
+  List<Invoice> _allPurchaseReturnInvoices = [];
   List<Voucher> _allVouchers = [];
   List<Product> _allProducts = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 8, vsync: this); // عدد التبويبات 8
     _setPeriod('today');
   }
 
@@ -69,22 +72,24 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     setState(() => _isLoading = true);
 
     final invoices = await DBHelper.getAllInvoices();
+    final purchaseInvoices = await DBHelper.getAllPurchaseInvoices();
+    final returnInvoices = await DBHelper.getAllReturnInvoices();
+    final purchaseReturnInvoices = await DBHelper.getAllPurchaseReturnInvoices();
     final vouchers = await DBHelper.getAllVouchers();
     final products = await DBHelper.getAllProducts();
 
+    bool filterDate(String dateStr) {
+      final date = DateTime.tryParse(dateStr) ?? DateTime.now();
+      return date.isAfter(_startDate.subtract(const Duration(seconds: 1))) &&
+          date.isBefore(_endDate.add(const Duration(seconds: 1)));
+    }
+
     setState(() {
-      _allInvoices = invoices.where((inv) {
-        final date = DateTime.tryParse(inv.date) ?? DateTime.now();
-        return date.isAfter(_startDate.subtract(const Duration(seconds: 1))) &&
-            date.isBefore(_endDate.add(const Duration(seconds: 1)));
-      }).toList();
-
-      _allVouchers = vouchers.where((v) {
-        final date = DateTime.tryParse(v.date) ?? DateTime.now();
-        return date.isAfter(_startDate.subtract(const Duration(seconds: 1))) &&
-            date.isBefore(_endDate.add(const Duration(seconds: 1)));
-      }).toList();
-
+      _allInvoices = invoices.where((inv) => filterDate(inv.date)).toList();
+      _allPurchaseInvoices = purchaseInvoices.where((inv) => filterDate(inv.date)).toList();
+      _allReturnInvoices = returnInvoices.where((inv) => filterDate(inv.date)).toList();
+      _allPurchaseReturnInvoices = purchaseReturnInvoices.where((inv) => filterDate(inv.date)).toList();
+      _allVouchers = vouchers.where((v) => filterDate(v.date)).toList();
       _allProducts = products;
       _isLoading = false;
     });
@@ -103,9 +108,12 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
           isScrollable: true,
           tabs: const [
             Tab(icon: Icon(Icons.point_of_sale), text: 'المبيعات'),
+            Tab(icon: Icon(Icons.assignment_return), text: 'مرتجع المبيعات'),
             Tab(icon: Icon(Icons.shopping_cart), text: 'المشتريات'),
-            Tab(icon: Icon(Icons.lock_clock), text: 'الإغلاقات'),
+            Tab(icon: Icon(Icons.remove_shopping_cart), text: 'مرتجع المشتريات'),
+            Tab(icon: Icon(Icons.lock_clock), text: 'إغلاق الصندوق'),
             Tab(icon: Icon(Icons.money_off), text: 'المصروفات'),
+            Tab(icon: Icon(Icons.attach_money), text: 'المقبوضات'),
             Tab(icon: Icon(Icons.inventory_2), text: 'جرد المخزن'),
           ],
         ),
@@ -155,9 +163,12 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                     controller: _tabController,
                     children: [
                       _buildSalesReport(),
+                      _buildReturnSalesReport(),
                       _buildPurchasesReport(),
+                      _buildPurchaseReturnsReport(),
                       _buildShiftsReport(),
                       _buildExpensesReport(),
+                      _buildReceiptsReport(),
                       _buildInventoryReport(),
                     ],
                   ),
@@ -213,17 +224,141 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     );
   }
 
-  // 2. تقرير المشتريات
+  // 2. تقرير مرتجع المبيعات
+  Widget _buildReturnSalesReport() {
+    double totalReturns = _allReturnInvoices.fold(0, (sum, item) => sum + item.totalAmount);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          _buildSummaryCard('إجمالي مرتجعات المبيعات', totalReturns.toStringAsFixed(2), Colors.orange, [
+            _buildRowDetail('عدد فواتير المرتجع:', '${_allReturnInvoices.length} فاتورة'),
+          ]),
+          const SizedBox(height: 10),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _allReturnInvoices.length,
+            itemBuilder: (ctx, i) {
+              final inv = _allReturnInvoices[i];
+              return Card(
+                child: ListTile(
+                  title: Text('مرتجع رقم: #${inv.id}'),
+                  subtitle: Text('التاريخ: ${inv.date} | العميل: ${inv.customerName ?? "نقدي"}'),
+                  trailing: Text('-${inv.totalAmount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 3. تقرير المشتريات
   Widget _buildPurchasesReport() {
-    return const Center(child: Text('جدول المشتريات ينشط عند تسجيل فواتير الشراء'));
+    double totalPurchases = _allPurchaseInvoices.fold(0, (sum, item) => sum + item.totalAmount);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          _buildSummaryCard('إجمالي المشتريات', totalPurchases.toStringAsFixed(2), Colors.indigo, [
+            _buildRowDetail('عدد فواتير الشراء:', '${_allPurchaseInvoices.length} فاتورة'),
+          ]),
+          const SizedBox(height: 10),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _allPurchaseInvoices.length,
+            itemBuilder: (ctx, i) {
+              final inv = _allPurchaseInvoices[i];
+              return Card(
+                child: ListTile(
+                  title: Text('شراء رقم: #${inv.id}'),
+                  subtitle: Text('التاريخ: ${inv.date} | المورد: ${inv.customerName ?? "غير محدد"}'),
+                  trailing: Text('${inv.totalAmount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 
-  // 3. تقرير الإغلاقات والورديات
+  // 4. تقرير مرتجع المشتريات
+  Widget _buildPurchaseReturnsReport() {
+    double totalPurchaseReturns = _allPurchaseReturnInvoices.fold(0, (sum, item) => sum + item.totalAmount);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          _buildSummaryCard('إجمالي مرتجع المشتريات', totalPurchaseReturns.toStringAsFixed(2), Colors.purple, [
+            _buildRowDetail('عدد الفواتير:', '${_allPurchaseReturnInvoices.length} فاتورة'),
+          ]),
+          const SizedBox(height: 10),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _allPurchaseReturnInvoices.length,
+            itemBuilder: (ctx, i) {
+              final inv = _allPurchaseReturnInvoices[i];
+              return Card(
+                child: ListTile(
+                  title: Text('مرتجع شراء رقم: #${inv.id}'),
+                  subtitle: Text('التاريخ: ${inv.date} | المورد: ${inv.customerName ?? "غير محدد"}'),
+                  trailing: Text('${inv.totalAmount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple)),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 5. تقرير إغلاق الصندوق
   Widget _buildShiftsReport() {
-    return const Center(child: Text('سجل إغلاقات الصندوق المغلقة خلال هذه الفترة'));
+    // جلب سندات القبض والتوريد الناتجة عن إغلاقات الصندوق ضمن الفترة الزمنية الحالية
+    final shiftVouchers = _allVouchers.where((v) => v.notes.contains('إغلاق الوردية')).toList();
+    double totalTransferred = shiftVouchers.fold(0, (sum, item) => sum + item.amount);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          _buildSummaryCard('إجمالي المبالغ المُرحّلة للصندوق', totalTransferred.toStringAsFixed(2), Colors.blueGrey, [
+            _buildRowDetail('عدد عمليات الإغلاق:', '${shiftVouchers.length} وردية'),
+          ]),
+          const SizedBox(height: 10),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: shiftVouchers.length,
+            itemBuilder: (ctx, i) {
+              final v = shiftVouchers[i];
+              return Card(
+                child: ListTile(
+                  title: Text(v.targetName ?? 'إغلاق وردية'),
+                  subtitle: Text('التاريخ: ${v.date} | ملاحظات: ${v.notes}'),
+                  trailing: Text('${v.amount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 
-  // 4. تقرير المصروفات
+  // 6. تقرير المصروفات
   Widget _buildExpensesReport() {
     final expenses = _allVouchers.where((v) => v.voucherType == 'expense' || v.voucherType == 'payment').toList();
     double totalExpenses = expenses.fold(0, (sum, item) => sum + item.amount);
@@ -257,7 +392,41 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     );
   }
 
-  // 5. تقرير جرد المخزن
+  // 7. تقرير المقبوضات
+  Widget _buildReceiptsReport() {
+    final receipts = _allVouchers.where((v) => v.voucherType == 'receipt').toList();
+    double totalReceipts = receipts.fold(0, (sum, item) => sum + item.amount);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          _buildSummaryCard('إجمالي المقبوضات', totalReceipts.toStringAsFixed(2), Colors.green, [
+            _buildRowDetail('عدد السندات:', '${receipts.length} سند'),
+          ]),
+          const SizedBox(height: 10),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: receipts.length,
+            itemBuilder: (ctx, i) {
+              final rec = receipts[i];
+              return Card(
+                child: ListTile(
+                  title: Text(rec.targetName ?? 'سند قبض عام'),
+                  subtitle: Text('${rec.date} | ${rec.notes}'),
+                  trailing: Text('+${rec.amount.toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 8. تقرير جرد المخزن
   Widget _buildInventoryReport() {
     double totalPurchaseValue = 0;
     double totalSellValue = 0;
