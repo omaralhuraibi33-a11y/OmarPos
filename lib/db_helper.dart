@@ -1338,6 +1338,77 @@ class DBHelper {
     }
   }
 
+  // ==================== دوال تعديل وحذف السندات المضافة حديثاً ====================
+  static Future<void> updateVoucher(Voucher newVoucher) async {
+    final db = await database;
+    // 1. جلب السند القديم لمعرفة تأثيره السابق على الأرصدة
+    final oldVoucherMaps = await db.query('vouchers', where: 'id = ?', whereArgs: [newVoucher.id]);
+    if (oldVoucherMaps.isNotEmpty) {
+      final oldVoucher = Voucher.fromMap(oldVoucherMaps.first);
+      
+      // التراجع عن تأثير السند القديم في أرصدة العملاء أو الموردين
+      if (oldVoucher.targetType == 'customer' && oldVoucher.targetId != null) {
+        if (oldVoucher.voucherType == 'receipt') {
+          // كان سند قبض (قلل دين العميل)، بالتراجع نزيد دينه مؤقتاً بعكس العملية
+          await addCustomerTransaction(customerId: oldVoucher.targetId!, type: 'إلغاء/تعديل سند قبض', credit: 0.0, debit: oldVoucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'تعديل السند');
+        } else if (oldVoucher.voucherType == 'payment') {
+          // كان سند صرف (زاد دين العميل)، بالتراجع نقلل دينه
+          await addCustomerTransaction(customerId: oldVoucher.targetId!, type: 'إلغاء/تعديل سند صرف', credit: oldVoucher.amount, debit: 0.0, date: DateTime.now().toString().split('.')[0], notes: 'تعديل السند');
+        }
+      } else if (oldVoucher.targetType == 'supplier' && oldVoucher.targetId != null) {
+        if (oldVoucher.voucherType == 'payment') {
+          await addSupplierTransaction(supplierId: oldVoucher.targetId!, type: 'إلغاء/تعديل سند صرف', credit: oldVoucher.amount, debit: 0.0, date: DateTime.now().toString().split('.')[0], notes: 'تعديل السند');
+        } else if (oldVoucher.voucherType == 'receipt') {
+          await addSupplierTransaction(supplierId: oldVoucher.targetId!, type: 'إلغاء/تعديل سند قبض', credit: 0.0, debit: oldVoucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'تعديل السند');
+        }
+      }
+    }
+
+    // 2. تحديث السند بالبيانات الجديدة
+    await db.update('vouchers', newVoucher.toMap(), where: 'id = ?', whereArgs: [newVoucher.id]);
+
+    // 3. تطبيق التأثير الجديد للسند بعد التعديل
+    if (newVoucher.targetType == 'customer' && newVoucher.targetId != null) {
+      if (newVoucher.voucherType == 'receipt') {
+        await addCustomerTransaction(customerId: newVoucher.targetId!, type: 'سند قبض', credit: newVoucher.amount, debit: 0.0, date: newVoucher.date, notes: newVoucher.notes);
+      } else if (newVoucher.voucherType == 'payment') {
+        await addCustomerTransaction(customerId: newVoucher.targetId!, type: 'سند صرف', credit: 0.0, debit: newVoucher.amount, date: newVoucher.date, notes: newVoucher.notes);
+      }
+    } else if (newVoucher.targetType == 'supplier' && newVoucher.targetId != null) {
+      if (newVoucher.voucherType == 'payment') {
+        await addSupplierTransaction(supplierId: newVoucher.targetId!, type: 'سند صرف', credit: 0.0, debit: newVoucher.amount, date: newVoucher.date, notes: newVoucher.notes);
+      } else if (newVoucher.voucherType == 'receipt') {
+        await addSupplierTransaction(supplierId: newVoucher.targetId!, type: 'سند قبض', credit: newVoucher.amount, debit: 0.0, date: newVoucher.date, notes: newVoucher.notes);
+      }
+    }
+  }
+
+  static Future<void> deleteVoucher(String id) async {
+    final db = await database;
+    final voucherMaps = await db.query('vouchers', where: 'id = ?', whereArgs: [id]);
+    if (voucherMaps.isNotEmpty) {
+      final voucher = Voucher.fromMap(voucherMaps.first);
+
+      // التراجع عن تأثير السند المحذوف على أرصدة العملاء أو الموردين
+      if (voucher.targetType == 'customer' && voucher.targetId != null) {
+        if (voucher.voucherType == 'receipt') {
+          await addCustomerTransaction(customerId: voucher.targetId!, type: 'حذف سند قبض', credit: 0.0, debit: voucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
+        } else if (voucher.voucherType == 'payment') {
+          await addCustomerTransaction(customerId: voucher.targetId!, type: 'حذف سند صرف', credit: voucher.amount, debit: 0.0, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
+        }
+      } else if (voucher.targetType == 'supplier' && voucher.targetId != null) {
+        if (voucher.voucherType == 'payment') {
+          await addSupplierTransaction(supplierId: voucher.targetId!, type: 'حذف سند صرف', credit: voucher.amount, debit: 0.0, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
+        } else if (voucher.voucherType == 'receipt') {
+          await addSupplierTransaction(supplierId: voucher.targetId!, type: 'حذف سند قبض', credit: 0.0, debit: voucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
+        }
+      }
+
+      // حذف السند من الجدول
+      await db.delete('vouchers', where: 'id = ?', whereArgs: [id]);
+    }
+  }
+
   static Future<List<Voucher>> getAllVouchers() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('vouchers', orderBy: 'date DESC');
@@ -1651,7 +1722,7 @@ class DBHelper {
     }
   }
 
-  // ==================== دوال التقرير المالي (محدثة ومحدثة بدقة محاسبية) ====================
+  // ==================== دوال التقرير المالي ====================
   static Future<double> getTotalSales() async {
     final db = await database;
     final result = await db.rawQuery(
@@ -1663,7 +1734,6 @@ class DBHelper {
   static Future<double> getSalesCost() async {
     final db = await database;
     
-    // 1. حساب تكلفة الأصناف المباعة فعلياً من تفاصيل فواتير البيع
     final salesCostResult = await db.rawQuery('''
       SELECT SUM(ii.quantity * p.purchasePrice) as total 
       FROM invoice_items ii
@@ -1671,7 +1741,6 @@ class DBHelper {
     ''');
     double totalSalesCost = (salesCostResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
-    // 2. حساب تكلفة الأصناف المرتجعة من تفاصيل فواتير مرتجع المبيعات لاستبعادها
     final returnsCostResult = await db.rawQuery('''
       SELECT SUM(rii.quantity * p.purchasePrice) as total 
       FROM return_invoice_items rii
@@ -1679,7 +1748,6 @@ class DBHelper {
     ''');
     double totalReturnsCost = (returnsCostResult.first['total'] as num?)?.toDouble() ?? 0.0;
 
-    // تكلفة المبيعات الفعلية = تكلفة المبيعات ناقصاً تكلفة المرتجعات
     return totalSalesCost - totalReturnsCost;
   }
 
