@@ -15,7 +15,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   double _totalSales = 0.0;             // إجمالي المبيعات
   double _salesCost = 0.0;              // تكلفة المبيعات
   double _totalPurchases = 0.0;         // إجمالي المشتريات
-  double _totalRevenues = 0.0;          // إجمالي الإيرادات
+  double _totalRevenues = 0.0;          // إجمالي الإيرادات (للعرض فقط في البطاقة ولا تدخل في حساب الربح)
   double _totalExpenses = 0.0;          // إجمالي المصروفات
   double _suppliersBalance = 0.0;       // إجمالي الباقي للموردين
   double _customersBalance = 0.0;       // إجمالي الباقي على العملاء
@@ -62,14 +62,11 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     }
   }
 
-  // 1. إجمالي المبيعات الحقيقي (بعد إنقاص المرتجع)
+  // 1. صافي المبيعات (إجمالي المبيعات - المرتجعات)
   double get _actualNetSales => _totalSales - _salesReturns;
 
-  // 2. الربح الأساسي من المبيعات (المبيعات الحقيقية - تكلفة المبيعات) وهو ما تقصده تماماً
-  double get _salesProfit => _actualNetSales - _salesCost;
-
-  // 3. صافي الربح النهائي (ربح المبيعات + أي إيرادات أخرى - المصروفات)
-  double get _netProfit => _salesProfit + _totalRevenues - _totalExpenses;
+  // 2. المعادلة المطلوبة للأرباح والخسائر: (صافي المبيعات - تكلفة المبيعات - المصروفات)
+  double get _netProfit => _actualNetSales - _salesCost - _totalExpenses;
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +91,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
                   children: [
-                    // كارت الأرباح والخسارة المبني على خطوتك الصحيحة
+                    // كارت الأرباح والخسارة حسب رغبتك الدقيقة
                     _buildNetProfitCard(),
 
                     const SizedBox(height: 16),
@@ -118,7 +115,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                       children: [
                         _buildStatCard('إجمالي المبيعات', _totalSales, Icons.point_of_sale, Colors.teal),
                         _buildStatCard('إجمالي مردود المبيعات', _salesReturns, Icons.assignment_return, Colors.deepOrange),
-                        _buildStatCard('المبيعات الحقيقية (الصافي)', _actualNetSales, Icons.sell, Colors.teal.shade700),
+                        _buildStatCard('صافي المبيعات', _actualNetSales, Icons.sell, Colors.teal.shade700),
                         _buildStatCard('تكلفة المبيعات', _salesCost, Icons.inventory_2_outlined, Colors.brown),
                         _buildStatCard('إجمالي المشتريات', _totalPurchases, Icons.shopping_bag, Colors.blue),
                         _buildStatCard('إجمالي مردود المشتريات', _purchasesReturns, Icons.assignment_return_outlined, Colors.purple),
@@ -136,7 +133,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
-  // كارت يعرض طريقتك الدقيقة تماماً للحساب
+  // كارت يعرض المعادلة المخصصة تماماً كما طلبته
   Widget _buildNetProfitCard() {
     final isProfit = _netProfit >= 0;
     return Card(
@@ -157,7 +154,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isProfit ? 'صافي الربح النهائي' : 'صافي الخسارة النهائية',
+                  isProfit ? 'صافي الربح' : 'صافي الخسارة',
                   style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ],
@@ -172,16 +169,15 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               ),
             ),
             const Divider(color: Colors.white54, height: 24),
-            // تسلسل الخطوات حسب طريقتك الصحيحة تماماً:
+            // تسلسل الخطوات حسب ما طلبته حرفياً:
             Column(
               children: [
                 _buildEquationRow('إجمالي المبيعات:', _totalSales),
-                _buildEquationRow('ناقصاً المرتجع:', -_salesReturns, isMinus: true),
-                _buildEquationRow('= إجمالي المبيعات الحقيقي:', _actualNetSales, isBold: true),
+                _buildEquationRow('ناقصاً المرتجعات:', -_salesReturns, isMinus: true),
+                _buildEquationRow('= صافي المبيعات:', _actualNetSales, isBold: true),
                 _buildEquationRow('ناقصاً تكلفة المبيعات:', -_salesCost, isMinus: true),
-                _buildEquationRow('= ربح المبيعات الأساسي:', _salesProfit, isBold: true),
-                if (_totalRevenues > 0) _buildEquationRow('مضافاً الإيرادات الأخرى:', _totalRevenues),
-                if (_totalExpenses > 0) _buildEquationRow('ناقصاً المصروفات:', -_totalExpenses, isMinus: true),
+                if (_totalExpenses > 0)
+                  _buildEquationRow('ناقصاً المصروفات:', -_totalExpenses, isMinus: true),
               ],
             ),
           ],
