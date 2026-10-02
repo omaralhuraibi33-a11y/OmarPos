@@ -27,16 +27,19 @@ class _VouchersScreenState extends State<VouchersScreen> {
     });
   }
 
-  void _showAddVoucherDialog() {
-    String voucherType = 'receipt'; // 'receipt' (قبض), 'payment' (صرف), 'expense' (مصروف)
-    String targetType = 'customer';  // 'customer', 'supplier', 'general'
+  // نافذة إضافة أو تعديل سند (تستخدم للحالتين لتجنب تكرار الكود)
+  void _showVoucherDialog({Voucher? voucherToEdit}) {
+    final bool isEditing = voucherToEdit != null;
+
+    String voucherType = voucherToEdit?.voucherType ?? 'receipt'; // 'receipt', 'payment', 'expense'
+    String targetType = voucherToEdit?.targetType ?? 'customer';  // 'customer', 'supplier', 'general'
     
     Customer? selectedCustomer;
     Supplier? selectedSupplier;
     
-    final amountController = TextEditingController();
-    final notesController = TextEditingController();
-    final expenseNameController = TextEditingController();
+    final amountController = TextEditingController(text: isEditing ? voucherToEdit.amount.toString() : '');
+    final notesController = TextEditingController(text: isEditing ? voucherToEdit.notes : '');
+    final expenseNameController = TextEditingController(text: (isEditing && voucherType == 'expense') ? voucherToEdit.targetName : '');
 
     List<Customer> customersList = [];
     List<Supplier> suppliersList = [];
@@ -46,13 +49,27 @@ class _VouchersScreenState extends State<VouchersScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            // تحميل البيانات لأول مرة داخل الحوار
+            // تحميل البيانات لأول مرة داخل الحوار وتحديد العميل/المورد الحالي عند التعديل
             if (customersList.isEmpty && suppliersList.isEmpty) {
               DBHelper.getAllCustomers().then((c) {
-                setDialogState(() => customersList = c);
+                setDialogState(() {
+                  customersList = c;
+                  if (isEditing && voucherToEdit.targetId != null) {
+                    try {
+                      selectedCustomer = customersList.firstWhere((element) => element.id == voucherToEdit.targetId);
+                    } catch (_) {}
+                  }
+                });
               });
               DBHelper.getAllSuppliers().then((s) {
-                setDialogState(() => suppliersList = s);
+                setDialogState(() {
+                  suppliersList = s;
+                  if (isEditing && voucherToEdit.targetId != null) {
+                    try {
+                      selectedSupplier = suppliersList.firstWhere((element) => element.id == voucherToEdit.targetId);
+                    } catch (_) {}
+                  }
+                });
               });
             }
 
@@ -65,7 +82,7 @@ class _VouchersScreenState extends State<VouchersScreen> {
             }
 
             return AlertDialog(
-              title: const Text('إضافة سند جديد', textAlign: TextAlign.center),
+              title: Text(isEditing ? 'تعديل السند' : 'إضافة سند جديد', textAlign: TextAlign.center),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -252,31 +269,94 @@ class _VouchersScreenState extends State<VouchersScreen> {
                       targetName = selectedSupplier!.name;
                     }
 
-                    final newVoucher = Voucher(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    final voucherObj = Voucher(
+                      id: isEditing ? voucherToEdit.id : DateTime.now().millisecondsSinceEpoch.toString(),
                       voucherType: voucherType,
                       targetType: targetType,
                       targetId: targetId,
                       targetName: targetName,
                       amount: amount,
-                      date: DateTime.now().toString().split('.')[0],
+                      date: isEditing ? voucherToEdit.date : DateTime.now().toString().split('.')[0],
                       notes: notesController.text.trim(),
                     );
 
-                    await DBHelper.addVoucher(newVoucher);
+                    if (isEditing) {
+                      await DBHelper.updateVoucher(voucherObj); // تأكد من توفر هذه الدالة في db_helper أو استبدلها بالطريقة المناسبة
+                    } else {
+                      await DBHelper.addVoucher(voucherObj);
+                    }
 
                     if (mounted) {
                       Navigator.pop(ctx);
                       _loadVouchers();
                     }
                   },
-                  child: const Text('حفظ السند'),
+                  child: Text(isEditing ? 'تعديل' : 'حفظ السند'),
                 ),
               ],
             );
           },
         );
       },
+    );
+  }
+
+  // عرض تفاصيل السند
+  void _showVoucherDetails(Voucher v) {
+    String typeTitle = 'سند قبض';
+    if (v.voucherType == 'payment') typeTitle = 'سند صرف';
+    if (v.voucherType == 'expense') typeTitle = 'سند مصروفات';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(typeTitle, textAlign: TextAlign.center),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('الجهة / الاسم: ${v.targetName ?? 'عام'}'),
+            const SizedBox(height: 6),
+            Text('المبلغ: ${v.amount.toStringAsFixed(2)}'),
+            const SizedBox(height: 6),
+            Text('التاريخ: ${v.date}'),
+            const SizedBox(height: 6),
+            Text('الملاحظات: ${v.notes.isNotEmpty ? v.notes : 'لا توجد ملاحظات'}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // حذف السند مع تأكيد الحذف
+  void _deleteVoucher(String id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تأكيد الحذف'),
+        content: const Text('هل أنت متأكد من حذف هذا السند؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              await DBHelper.deleteVoucher(id); // تأكد من توفر الدالة في db_helper
+              Navigator.pop(ctx);
+              _loadVouchers();
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -323,20 +403,69 @@ class _VouchersScreenState extends State<VouchersScreen> {
                         ),
                         subtitle: Text('${v.date}\n${v.notes}'),
                         isThreeLine: v.notes.isNotEmpty,
-                        trailing: Text(
-                          '${v.amount.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: typeColor,
-                          ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              v.amount.toStringAsFixed(2),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: typeColor,
+                              ),
+                            ),
+                            // قائمة الخيارات (عرض، تعديل، حذف)
+                            PopupMenuButton<String>(
+                              onSelected: (value) {
+                                if (value == 'view') {
+                                  _showVoucherDetails(v);
+                                } else if (value == 'edit') {
+                                  _showVoucherDialog(voucherToEdit: v);
+                                } else if (value == 'delete') {
+                                  _deleteVoucher(v.id);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'view',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.visibility, size: 18, color: Colors.blue),
+                                      SizedBox(width: 8),
+                                      Text('عرض التفاصيل'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit, size: 18, color: Colors.orange),
+                                      SizedBox(width: 8),
+                                      Text('تعديل'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete, size: 18, color: Colors.red),
+                                      SizedBox(width: 8),
+                                      Text('حذف'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     );
                   },
                 ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddVoucherDialog,
+        onPressed: () => _showVoucherDialog(),
         icon: const Icon(Icons.add),
         label: const Text('سند جديد'),
       ),
