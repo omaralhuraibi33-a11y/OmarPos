@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:image/image.dart' as img;
 import 'db_helper.dart';
 
 class CartItem {
@@ -87,6 +90,9 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
+  // ==========================================
+  // دالة الطباعة المعدلة: تحويل الفاتورة إلى صورة (Raster Image)
+  // ==========================================
   Future<void> _printReceiptDirect({
     required String invoiceId,
     required String paymentMethod,
@@ -98,7 +104,6 @@ class _PosScreenState extends State<PosScreen> {
     try {
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
       
-      // 1. التحقق من وجود طابعات مسجلة
       if (savedPrintersJson == null || savedPrintersJson.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -115,14 +120,7 @@ class _PosScreenState extends State<PosScreen> {
       final List<dynamic> decoded = jsonDecode(savedPrintersJson);
       List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
       
-      if (printers.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تنبيه: قائمة الطابعات فارغة.'), backgroundColor: Colors.orange),
-          );
-        }
-        return;
-      }
+      if (printers.isEmpty) return;
 
       final storeName = await DBHelper.getSetting('store_name') ?? 'متجري';
       final storePhone = await DBHelper.getSetting('store_phone') ?? '';
@@ -134,6 +132,135 @@ class _PosScreenState extends State<PosScreen> {
       final activeTotal = customTotal ?? _totalAmount;
       final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
 
+      // 1. بناء عنصر الـ Widget الخاص بالفاتورة لكي يتم تحويله إلى صورة بدقة عالية
+      const double receiptWidth = 384.0; // عرض مناسب للطابعات الحرارية (58مم)
+      
+      final receiptWidget = Material(
+        color: Colors.white,
+        child: Container(
+          width: receiptWidth,
+          padding: const EdgeInsets.all(10.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(storeName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+              if (storePhone.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text('هاتف: $storePhone', style: const TextStyle(fontSize: 12, color: Colors.black)),
+              ],
+              if (taxNumber.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text('الرقم الضريبي: $taxNumber', style: const TextStyle(fontSize: 12, color: Colors.black)),
+              ],
+              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+              
+              if (isReturn) ...[
+                const Text('*** سند مرتجع مبيعات ***', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                const SizedBox(height: 4),
+              ],
+
+              Align(
+                alignment: Alignment.centerRight,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('رقم الفاتورة: $invoiceId', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                    Text('العميل: $activeCustomer', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                    Text('طريقة الدفع: $paymentMethod', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                    Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: const TextStyle(fontSize: 11, color: Colors.black)),
+                  ],
+                ),
+              ),
+              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+              
+              // عناوين الأصناف
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('الإجمالي', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text('الكمية × السعر', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text('الصنف', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                ],
+              ),
+              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+
+              // قائمة المنتجات
+              ...activeCart.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(_formatNum(item.total), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                          Text('${_formatNum(item.quantity)} × ${_formatNum(item.unitPrice)}', style: const TextStyle(fontSize: 11, color: Colors.black)),
+                          Expanded(
+                            child: Text(
+                              item.product.name, 
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (item.preparationNotes.isNotEmpty)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text('  ملاحظات: ${item.preparationNotes}', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.black)),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+
+              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+
+              if (showItemCount) ...[
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('إجمالي عدد الأصناف: ${_formatNum(activeCart.fold(0.0, (sum, i) => sum + i.quantity))}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                ),
+                const SizedBox(height: 4),
+              ],
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_formatNum(activeTotal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+                  const Text('الإجمالي العام:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                ],
+              ),
+              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+              const SizedBox(height: 4),
+              Text(invoiceFooter, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.black)),
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+      );
+
+      // 2. تحويل الـ Widget إلى صورة رستر (Raster Image) برمجياً دون الحاجة لحزم إضافية خارجية معقدة
+      final ui.Image? capturedImage = await _renderWidgetToImage(receiptWidget, receiptWidth);
+      if (capturedImage == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('فشل تحويل الفاتورة إلى صورة للطباعة'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
+
+      // تحويل الـ ui.Image إلى مصفوفة بايتات تناسب مكتبة الطابعة
+      final ByteData? byteData = await capturedImage.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
+      
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+      final img.Image? decodedImage = img.decodeImage(pngBytes);
+      if (decodedImage == null) return;
+
       final profile = await CapabilityProfile.load();
       bool printedSuccessfully = false;
       String lastErrorDetails = '';
@@ -143,7 +270,6 @@ class _PosScreenState extends State<PosScreen> {
         final usage = printer['usage'] ?? 'زبون';
         final bool isAutoPrint = printer['autoPrint'] ?? true;
         
-        // تخطي الطابعة إذا كانت معطلة طباعتها التلقائية
         if (!isAutoPrint) continue;
 
         attemptedPrintersCount++;
@@ -153,61 +279,8 @@ class _PosScreenState extends State<PosScreen> {
 
         List<int> bytes = [];
 
-        if (usage == 'زبون') {
-          bytes += generator.text(storeName, styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
-          if (storePhone.isNotEmpty) {
-            bytes += generator.text('هاتف: $storePhone', styles: const PosStyles(align: PosAlign.center));
-          }
-          if (taxNumber.isNotEmpty) {
-            bytes += generator.text('الرقم الضريبي: $taxNumber', styles: const PosStyles(align: PosAlign.center));
-          }
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-          
-          if (isReturn) {
-            bytes += generator.text('*** سند مرتجع مبيعات ***', styles: const PosStyles(align: PosAlign.center, bold: true));
-          }
-
-          bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.right));
-          bytes += generator.text('العميل: $activeCustomer', styles: const PosStyles(align: PosAlign.right));
-          bytes += generator.text('طريقة الدفع: $paymentMethod', styles: const PosStyles(align: PosAlign.right));
-          bytes += generator.text('التاريخ: ${DateTime.now().toString().split('.')[0]}', styles: const PosStyles(align: PosAlign.right));
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-
-          for (var item in activeCart) {
-            bytes += generator.text('${item.product.name} (${item.quantity} x ${item.unitPrice}) = ${_formatNum(item.total)}', styles: const PosStyles(align: PosAlign.right));
-            if (item.preparationNotes.isNotEmpty) {
-              bytes += generator.text('  ملاحظات: ${item.preparationNotes}', styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB));
-            }
-          }
-
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-          
-          if (showItemCount) {
-            double totalItemsQty = activeCart.fold(0.0, (sum, i) => sum + i.quantity);
-            bytes += generator.text('إجمالي عدد الأصناف: ${_formatNum(totalItemsQty)}', styles: const PosStyles(align: PosAlign.right, bold: true));
-          }
-
-          bytes += generator.text('الإجمالي العام: ${_formatNum(activeTotal)}', styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2));
-          
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-          bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
-        } else if (usage == 'مطبخ') {
-          bytes += generator.text(
-            isReturn ? '--- مرتجع مطبخ ---' : '--- طلب مطبخ ---', 
-            styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2),
-          );
-          bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
-          bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
-          for (var item in activeCart) {
-            bytes += generator.text('${item.product.name}  x${item.quantity}', styles: const PosStyles(align: PosAlign.right, bold: true));
-            if (item.preparationNotes.isNotEmpty) {
-              bytes += generator.text('  [${item.preparationNotes}]', styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB, bold: true));
-            }
-          }
-        } else {
-          continue; 
-        }
-
+        // طباعة الصورة مباشرة (Raster Image) لتفادي أخطاء وتعارض الحروف العربية
+        bytes += generator.image(decodedImage);
         bytes += generator.feed(2);
         bytes += generator.cut();
 
@@ -261,7 +334,7 @@ class _PosScreenState extends State<PosScreen> {
         } else if (printedSuccessfully) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم الحفظ وطباعة الفاتورة بنجاح!'),
+              content: Text('تم الحفظ وطباعة الفاتورة (كصورة) بنجاح!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -283,6 +356,45 @@ class _PosScreenState extends State<PosScreen> {
         );
       }
     }
+  }
+
+  // دالة مساعدة لعمل رندر (Render) لعنصر الواجهة وتحويله إلى صورة بدون حزم خارجية
+  Future<ui.Image?> _renderWidgetToImage(Widget widget, double width) async {
+    final RenderRepaintBoundary repaintBoundary = RenderRepaintBoundary();
+    final BuildContext? context = this.context;
+    if (context == null) return null;
+
+    final PipelineOwner pipelineOwner = PipelineOwner();
+    final BuildOwner buildOwner = BuildOwner(focusManager: FocusManager());
+
+    final RenderView renderView = RenderView(
+      view: View.of(context),
+      child: RenderPositionedBox(alignment: Alignment.center, child: repaintBoundary),
+      configuration: ViewConfiguration(
+        size: Size(width, 1000),
+        devicePixelRatio: 2.0, // دقة وضوح الصورة
+      ),
+    );
+
+    pipelineOwner.rootNode = renderView;
+    renderView.prepareInitialFrame();
+
+    final Element element = RenderObjectToWidgetAdapter<RenderBox>(
+      container: repaintBoundary,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: widget,
+      ),
+    ).attachToRoot(buildOwner);
+
+    buildOwner.buildScope(element);
+    buildOwner.finalizeTree();
+
+    pipelineOwner.flushLayout();
+    pipelineOwner.flushCompositingBits();
+    pipelineOwner.flushPaint();
+
+    return await repaintBoundary.toImage(pixelRatio: 2.0);
   }
 
   void _openInvoicesHistoryPage() async {
