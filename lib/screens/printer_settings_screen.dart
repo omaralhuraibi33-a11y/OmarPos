@@ -45,6 +45,11 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     setState(() => _isTesting = true);
 
     try {
+      // إذا كان مقاس الورق A4 قد لا يدعم حزمة esc_pos بنفس الطريقة الحرارية البحتة إلا إذا عومل كـ 80mm أو تم تخطيها حسب نظامك، هنا نتحقق لتجنب الخطأ
+      if (printer['paperSize'] == 'A4') {
+        throw 'طابعات الـ A4 تتطلب نظام طباعة مستندات (PDF)، يرجى تجربة الطابعات الحرارية المعتادة للحراري المباشر.';
+      }
+
       final profile = await CapabilityProfile.load();
       final generator = Generator(
         printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80,
@@ -116,12 +121,12 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     final macCtrl = TextEditingController(text: printerToEdit?['macAddress'] ?? '');
 
     String connection = printerToEdit?['connection'] ?? 'بلوتوث';
-    String usage = printerToEdit?['usage'] ?? 'زبون';
-    String paperSize = printerToEdit?['paperSize'] ?? '80';
+    String usage = printerToEdit?['usage'] ?? 'زبون'; // القيم المتاحة: 'زبون', 'مطبخ', 'تقرير'
+    String paperSize = printerToEdit?['paperSize'] ?? '80'; // القيم المتاحة: '57', '78', '80', 'A4'
     String selectedBtDevice = printerToEdit?['btDevice'] ?? '';
     
-    // قيمة التفعيل التلقائي الخاصة بهذه الطابعة (افتراضياً مفعلة true)
     bool printerAutoPrint = printerToEdit?['autoPrint'] ?? true;
+    bool isDefaultPrinter = printerToEdit?['isDefault'] ?? false; // خيار طابعة افتراضية
 
     showDialog(
       context: context,
@@ -136,7 +141,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   DropdownButtonFormField<String>(
                     value: usage,
                     decoration: const InputDecoration(labelText: 'نوع الطابعة (الاستخدام)'),
-                    items: ['مطبخ', 'زبون'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                    items: ['مطبخ', 'زبون', 'تقرير'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                     onChanged: (val) {
                       setDlgState(() {
                         usage = val!;
@@ -144,10 +149,21 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     },
                   ),
                   const SizedBox(height: 8),
-                  // خيار الطباعة التلقائية الخاص بهذه الطابعة يظهر ويتغير نصه بناءً على نوعها (زبون أو مطبخ)
+                  // خيار الطابعة الافتراضية لهذا النوع
+                  SwitchListTile(
+                    title: const Text(
+                      'تعيين كطابعة افتراضية لهذا النوع',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text('ستكون الطابعة الرئيسية لعمليات الـ "$usage"'),
+                    value: isDefaultPrinter,
+                    onChanged: (val) => setDlgState(() => isDefaultPrinter = val),
+                  ),
+                  const SizedBox(height: 8),
+                  // خيار الطباعة التلقائية الخاص بهذه الطابعة
                   SwitchListTile(
                     title: Text(
-                      usage == 'زبون' ? 'طباعة الزبون تلقائياً لهذه الطابعة' : 'طباعة المطبخ تلقائياً لهذه الطابعة',
+                      'طباعة تلقائية لهذه الطابعة ($usage)',
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                     value: printerAutoPrint,
@@ -255,7 +271,9 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   DropdownButtonFormField<String>(
                     value: paperSize,
                     decoration: const InputDecoration(labelText: 'مقاس الورق'),
-                    items: ['57', '78', '80'].map((e) => DropdownMenuItem(value: e, child: Text('$e mm'))).toList(),
+                    items: ['57', '78', '80', 'A4']
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e == 'A4' ? 'A4' : '$e mm')))
+                        .toList(),
                     onChanged: (val) => setDlgState(() => paperSize = val!),
                   ),
                 ],
@@ -273,15 +291,27 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     'btDevice': selectedBtDevice,
                     'macAddress': macCtrl.text.trim(),
                     'ip': ipCtrl.text.trim(),
-                    'autoPrint': printerAutoPrint, // حفظ حالة الطباعة التلقائية المستقلة لهذه الطابعة
+                    'autoPrint': printerAutoPrint,
+                    'isDefault': isDefaultPrinter, // حفظ حالة الطابعة الافتراضية
                   };
+
                   setState(() {
+                    // إذا تم جعل هذه الطابعة افتراضية، نقوم بإلغاء الافتراضية عن باقي الطابعات التي تشاركها نفس الـ usage
+                    if (isDefaultPrinter) {
+                      for (var p in _printers) {
+                        if (p['usage'] == usage) {
+                          p['isDefault'] = false;
+                        }
+                      }
+                    }
+
                     if (editIndex == null) {
                       _printers.add(printerData);
                     } else {
                       _printers[editIndex] = printerData;
                     }
                   });
+
                   await _saveSettings();
                   if (context.mounted) Navigator.pop(ctx);
                 },
@@ -316,17 +346,38 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                   itemBuilder: (ctx, i) {
                     final p = _printers[i];
                     bool isAuto = p['autoPrint'] ?? true;
+                    bool isDefault = p['isDefault'] ?? false;
+
                     return Card(
+                      color: isDefault ? Colors.blue.shade50 : null, // تمييز الطابعة الافتراضية بلون خفيف
                       child: ListTile(
                         leading: Icon(
                           p['connection'] == 'بلوتوث' ? Icons.bluetooth : Icons.wifi,
-                          color: Colors.blue,
+                          color: isDefault ? Colors.blue.shade800 : Colors.blue,
                         ),
-                        title: Text('${p['name']} (${p['usage']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        title: Row(
+                          children: [
+                            Text('${p['name']} (${p['usage']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            if (isDefault) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              child: const Text(
+                                  'افتراضية',
+                                  style: TextStyle(color: Colors.white, fontSize: 10),
+                                ),
+                              ),
+                            ]
+                          ],
+                        ),
                         subtitle: Text(
                           (p['connection'] == 'بلوتوث'
-                              ? 'الاتصال: بلوتوث (${p['macAddress']}) | المقاس: ${p['paperSize']}mm'
-                              : 'الاتصال: IP (${p['ip']}) | المقاس: ${p['paperSize']}mm') +
+                              ? 'الاتصال: بلوتوث (${p['macAddress']}) | المقاس: ${p['paperSize'] == 'A4' ? 'A4' : '${p['paperSize']}mm'}'
+                              : 'الاتصال: IP (${p['ip']}) | المقاس: ${p['paperSize'] == 'A4' ? 'A4' : '${p['paperSize']}mm'}') +
                           '\nالحالة: ${isAuto ? "تلقائي (مفعل)" : "معطل"}',
                         ),
                         isThreeLine: true,
