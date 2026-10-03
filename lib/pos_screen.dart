@@ -229,7 +229,7 @@ class _PosScreenState extends State<PosScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(_formatNum(activeTotal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
-                    const Text('الإجمالي العام:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                    const Text('الإجمالي العام:', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
                   ],
                 ),
                 const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
@@ -242,11 +242,10 @@ class _PosScreenState extends State<PosScreen> {
         ),
       );
 
-      // التقاط الفاتورة كصورة بايتات باستخدام حزمة screenshot
-      Uint8List? pngBytes = await screenshotController.captureFromWidget(
+      // التقاط الفاتورة كصورة بايتات متوافقة تماماً مع حزمة screenshot
+      Uint8List pngBytes = await screenshotController.captureFromWidget(
         receiptWidget,
         delay: const Duration(milliseconds: 50),
-        targetWidth: receiptWidth.toInt(),
       );
 
       final img.Image? decodedImage = img.decodeImage(pngBytes);
