@@ -242,11 +242,12 @@ class _PosScreenState extends State<PosScreen> {
         ),
       );
 
-      // التقاط الفاتورة كصورة بايتات متوافقة تماماً مع حزمة screenshot
-      Uint8List pngBytes = await screenshotController.captureFromWidget(
+      // التقاط الفاتورة كصورة بايتات باستخدام Screenshot باجتيال آمن تماماً
+      final dynamic capturedResult = await screenshotController.captureFromWidget(
         receiptWidget,
-        delay: const Duration(milliseconds: 50),
       );
+      
+      final Uint8List pngBytes = capturedResult is Future ? await capturedResult : capturedResult;
 
       final img.Image? decodedImage = img.decodeImage(pngBytes);
       if (decodedImage == null) return;
@@ -1687,6 +1688,7 @@ class InvoiceDetailsPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Row(
+                            mainAxisAlignment: MainVersionBlock = ... ,
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
