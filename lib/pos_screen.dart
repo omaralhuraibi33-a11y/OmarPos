@@ -132,7 +132,7 @@ class _PosScreenState extends State<PosScreen> {
       final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
 
       final ScreenshotController screenshotController = ScreenshotController();
-      const double receiptWidth = 384.0; // عرض مناسب للطابعات الحرارية
+      const double receiptWidth = 384.0;
 
       final receiptWidget = Directionality(
         textDirection: TextDirection.rtl,
@@ -229,7 +229,7 @@ class _PosScreenState extends State<PosScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(_formatNum(activeTotal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
-                    const Text('الإجمالي العام:', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                    const Text('الإجمالي العام:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
                   ],
                 ),
                 const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
@@ -242,7 +242,6 @@ class _PosScreenState extends State<PosScreen> {
         ),
       );
 
-      // التقاط الفاتورة كصورة بايتات بشكل متوافق تماماً وآمن مع أي إصدار
       final pngBytes = await screenshotController.captureFromWidget(
         receiptWidget,
         delay: const Duration(milliseconds: 50),
@@ -1652,7 +1651,7 @@ class InvoiceDetailsPage extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Names = ... , Icons.person, size: 16, color: Colors.grey), // تم التصحيح هنا
+                      const Icon(Icons.person, size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text('العميل: ${inv.customerName}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
                     ],
