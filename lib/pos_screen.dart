@@ -242,7 +242,7 @@ class _PosScreenState extends State<PosScreen> {
         ),
       );
 
-      // التقاط الفاتورة كصورة بايتات باستخدام Screenshot باجتيال آمن تماماً
+      // التقاط الفاتورة كصورة بايتات آمنة تماماً ومتوافقة مع حزمة screenshot
       final dynamic capturedResult = await screenshotController.captureFromWidget(
         receiptWidget,
       );
@@ -1688,7 +1688,6 @@ class InvoiceDetailsPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Row(
-                            mainAxisAlignment: MainVersionBlock = ... ,
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text('السعر: ${_formatNum(itm.price)} | الكمية: ${_formatNum(itm.quantity)}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
