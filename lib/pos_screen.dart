@@ -73,6 +73,7 @@ class _PosScreenState extends State<PosScreen> {
       custs.insert(0, defaultCust);
     }
 
+    if (!mounted) return;
     setState(() {
       _categories = cats;
       _allProducts = prods;
@@ -95,17 +96,28 @@ class _PosScreenState extends State<PosScreen> {
     double? customTotal,
     bool isReturn = false,
   }) async {
-    if (!_isPrinterConnected) return;
+    if (!_isPrinterConnected) {
+      debugPrint('الطباعة ملغاة: الطابعة مفصولة في الواجهة');
+      return;
+    }
 
     try {
-      // 1. جلب عنوان الطابعة الافتراضية المسجلة في جدول الإعدادات
       final String? defaultPrinterAddress = await DBHelper.getSetting('default_printer');
-
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
-      if (savedPrintersJson == null || savedPrintersJson.isEmpty) return; 
+      
+      if (savedPrintersJson == null || savedPrintersJson.isEmpty) {
+        debugPrint('خطأ طباعة: لا توجد أي طابعات مسجلة في جدول printers_list');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تنبيه: لم يتم تسجيل أي طابعة في الإعدادات!'), backgroundColor: Colors.red),
+          );
+        }
+        return; 
+      }
 
       final List<dynamic> decoded = jsonDecode(savedPrintersJson);
       List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      
       if (printers.isEmpty) return;
 
       final autoCustomer = await DBHelper.getSetting('auto_customer') == 'true';
@@ -122,17 +134,15 @@ class _PosScreenState extends State<PosScreen> {
       final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
 
       final profile = await CapabilityProfile.load();
+      bool printedSuccessfully = false;
 
       for (var printer in printers) {
         final usage = printer['usage'] ?? 'زبون';
         final printerAddr = printer['connection'] == 'واي فاي' ? (printer['ip'] ?? '') : (printer['macAddress'] ?? '');
 
-        // التحقق مما إذا كانت هذه الطابعة هي الطابعة الافتراضية المحددة
         bool isDefault = defaultPrinterAddress != null && defaultPrinterAddress.isNotEmpty && printerAddr == defaultPrinterAddress;
 
-        // فلترة الطابعات بناءً على الاستخدام والإعدادات الافتراضية
         if (usage == 'زبون') {
-          // إذا تم تحديد طابعة افتراضية، نعتمدها حصرياً لفواتير الزبون، وإذا لم تُحدد نعتمد خيار auto_customer
           if (defaultPrinterAddress != null && defaultPrinterAddress.isNotEmpty) {
             if (!isDefault) continue;
           } else {
@@ -188,11 +198,7 @@ class _PosScreenState extends State<PosScreen> {
         } else {
           bytes += generator.text(
             isReturn ? '--- مرتجع مطبخ ---' : '--- طلب مطبخ ---', 
-            styles: const PosStyles(
-              align: PosAlign.center, 
-              bold: true, 
-              height: PosTextSize.size2,
-            ),
+            styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2),
           );
           bytes += generator.text('رقم الفاتورة: $invoiceId', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
@@ -214,6 +220,7 @@ class _PosScreenState extends State<PosScreen> {
             socket.add(bytes);
             await socket.flush();
             await socket.close();
+            printedSuccessfully = true;
           }
         } else if (printer['connection'] == 'بلوتوث') {
           final String mac = (printer['macAddress'] ?? '').trim();
@@ -222,16 +229,22 @@ class _PosScreenState extends State<PosScreen> {
             if (connected) {
               await PrintBluetoothThermal.writeBytes(bytes);
               await PrintBluetoothThermal.disconnect;
+              printedSuccessfully = true;
             }
           }
         }
+      }
+
+      if (!printedSuccessfully && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم الحفظ، لكن تعذر إرسال البيانات للطابعة (تأكد من الاتصال)'), backgroundColor: Colors.orange),
+        );
       }
     } catch (e) {
       debugPrint('خطأ في الطباعة المباشرة: $e');
     }
   }
 
-  // تم تحويل شاشة سجل الفواتير لتصبح صفحة كاملة باستخدام Navigator.push
   void _openInvoicesHistoryPage() async {
     final salesInvoices = await DBHelper.getAllInvoices();
     final returnInvoices = await DBHelper.getAllReturnInvoices();
@@ -253,7 +266,6 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // باقي الدوال والتصميم الأساسي...
   int _getGridCrossAxisCount() {
     if (_isProductsFullScreen) {
       switch (_posItemSizeSetting) {
@@ -431,7 +443,7 @@ class _PosScreenState extends State<PosScreen> {
                       item.preparationNotes = item.preparationNotes.isEmpty ? newNote : '${item.preparationNotes} - $newNote';
                     });
                   }
-                  Navigator.pop(ctx);
+                  if (ctx.mounted) Navigator.pop(ctx);
                 },
                 child: const Text('حفظ الملاحظة'),
               ),
@@ -1152,6 +1164,7 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
                 final freshReturns = await DBHelper.getAllReturnInvoices();
                 freshSales.sort((a, b) => b.date.compareTo(a.date));
                 freshReturns.sort((a, b) => b.date.compareTo(a.date));
+                if (!mounted) return;
                 setState(() {
                   _salesInvoices = freshSales;
                   _returnInvoices = freshReturns;
@@ -1198,7 +1211,7 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
                             firstDate: DateTime(2020),
                             lastDate: DateTime.now(),
                           );
-                          if (picked != null) {
+                          if (picked != null && mounted) {
                             setState(() {
                               _dateFilterType = 'custom';
                               _customStartDate = picked.start;
