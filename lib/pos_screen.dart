@@ -96,14 +96,17 @@ class _PosScreenState extends State<PosScreen> {
     bool isReturn = false,
   }) async {
     try {
-      final String? defaultPrinterAddress = await DBHelper.getSetting('default_printer');
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
       
+      // 1. التحقق من وجود طابعات مسجلة
       if (savedPrintersJson == null || savedPrintersJson.isEmpty) {
-        debugPrint('خطأ طباعة: لا توجد أي طابعات مسجلة في جدول printers_list');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تنبيه: لم يتم تسجيل أي طابعة في الإعدادات!'), backgroundColor: Colors.red),
+            const SnackBar(
+              content: Text('خطأ طباعة: لا توجد أي طابعة مسجلة في "إعدادات الطابعات"!'), 
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ),
           );
         }
         return; 
@@ -112,7 +115,14 @@ class _PosScreenState extends State<PosScreen> {
       final List<dynamic> decoded = jsonDecode(savedPrintersJson);
       List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
       
-      if (printers.isEmpty) return;
+      if (printers.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تنبيه: قائمة الطابعات فارغة.'), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
 
       final storeName = await DBHelper.getSetting('store_name') ?? 'متجري';
       final storePhone = await DBHelper.getSetting('store_phone') ?? '';
@@ -126,15 +136,18 @@ class _PosScreenState extends State<PosScreen> {
 
       final profile = await CapabilityProfile.load();
       bool printedSuccessfully = false;
+      String lastErrorDetails = '';
+      int attemptedPrintersCount = 0;
 
       for (var printer in printers) {
         final usage = printer['usage'] ?? 'زبون';
-        final printerAddr = printer['connection'] == 'واي فاي' ? (printer['ip'] ?? '') : (printer['macAddress'] ?? '');
         final bool isAutoPrint = printer['autoPrint'] ?? true;
         
         // تخطي الطابعة إذا كانت معطلة طباعتها التلقائية
         if (!isAutoPrint) continue;
 
+        attemptedPrintersCount++;
+        final printerName = printer['name'] ?? 'طابعة';
         final paperSizeVal = printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80;
         final generator = Generator(paperSizeVal, profile);
 
@@ -192,7 +205,7 @@ class _PosScreenState extends State<PosScreen> {
             }
           }
         } else {
-          continue; // تخطي طابعات التقارير في فواتير المبيعات
+          continue; 
         }
 
         bytes += generator.feed(2);
@@ -200,41 +213,75 @@ class _PosScreenState extends State<PosScreen> {
 
         if (printer['connection'] == 'واي فاي') {
           final String ip = (printer['ip'] ?? '').trim();
-          if (ip.isNotEmpty) {
-            try {
-              final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 3));
-              socket.add(bytes);
-              await socket.flush();
-              await socket.close();
-              printedSuccessfully = true;
-            } catch (e) {
-              debugPrint('فشل الاتصال بطابعة الواي فاي $ip: $e');
-            }
+          if (ip.isEmpty) {
+            lastErrorDetails = 'الطابعة ($printerName): عنوان الـ IP فارغ!';
+            continue;
+          }
+          try {
+            final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
+            socket.add(bytes);
+            await socket.flush();
+            await socket.close();
+            printedSuccessfully = true;
+          } catch (e) {
+            lastErrorDetails = 'فشل الاتصال بالواي فاي ($printerName - $ip): $e';
+            debugPrint(lastErrorDetails);
           }
         } else if (printer['connection'] == 'بلوتوث') {
           final String mac = (printer['macAddress'] ?? '').trim();
-          if (mac.isNotEmpty) {
-            try {
-              bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
-              if (connected) {
-                await PrintBluetoothThermal.writeBytes(bytes);
-                await PrintBluetoothThermal.disconnect;
-                printedSuccessfully = true;
-              }
-            } catch (e) {
-              debugPrint('فشل الاتصال بطابعة البلوتوث $mac: $e');
+          if (mac.isEmpty) {
+            lastErrorDetails = 'الطابعة ($printerName): عنوان الـ MAC للبلوتوث فارغ!';
+            continue;
+          }
+          try {
+            bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+            if (connected) {
+              await PrintBluetoothThermal.writeBytes(bytes);
+              await PrintBluetoothThermal.disconnect;
+              printedSuccessfully = true;
+            } else {
+              lastErrorDetails = 'تعذر الاتصال بطابعة البلوتوث ($printerName)';
             }
+          } catch (e) {
+            lastErrorDetails = 'خطأ بلوتوث ($printerName): $e';
+            debugPrint(lastErrorDetails);
           }
         }
       }
 
-      if (!printedSuccessfully && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم الحفظ، لكن تعذر إرسال البيانات للطابعة (تأكد من إعدادات الطابعات والاتصال)'), backgroundColor: Colors.orange),
-        );
+      if (mounted) {
+        if (attemptedPrintersCount == 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تنبيه: تم الحفظ، ولكن جميع الطابعات المسجلة معطلة (الطباعة التلقائية متوقفة لها)!'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        } else if (printedSuccessfully) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم الحفظ وطباعة الفاتورة بنجاح!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('فشلت الطباعة. السبب: ${lastErrorDetails.isNotEmpty ? lastErrorDetails : "تأكد من تشغيل الطابعة والاتصال"}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       }
     } catch (e) {
-      debugPrint('خطأ في الطباعة المباشرة: $e');
+      debugPrint('خطأ استثنائي في الطباعة: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ غير متوقع أثناء الطباعة: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -564,15 +611,6 @@ class _PosScreenState extends State<PosScreen> {
         isReturn: true,
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تم حفظ مرتجع المبيعات بنجاح برقم ($formattedPrintId)'),
-            backgroundColor: Colors.orange.shade800,
-          ),
-        );
-      }
-
     } else {
       final salesInvoices = await DBHelper.getAllInvoices();
       int maxSaleId = 0;
@@ -624,15 +662,6 @@ class _PosScreenState extends State<PosScreen> {
         customTotal: totalSnapshot,
         isReturn: false,
       );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تم حفظ الفاتورة بنجاح برقم ($formattedPrintId)'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
     }
 
     await _loadData();
