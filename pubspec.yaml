@@ -19,6 +19,7 @@ dependencies:
   esc_pos_utils_plus: ^2.0.1
   intl: ^0.18.1
   file_selector: ^1.0.3
+  screenshot: ^3.0.0 # أو أحدث إصدار
 
 dev_dependencies:
   flutter_test:
