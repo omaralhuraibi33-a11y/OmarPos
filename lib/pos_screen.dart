@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
+import 'package:screenshot/screenshot.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
@@ -91,7 +90,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   // ==========================================
-  // دالة الطباعة المعدلة: تحويل الفاتورة إلى صورة (Raster Image)
+  // دالة الطباعة المعدلة: طباعة الفاتورة كصورة عبر Screenshot
   // ==========================================
   Future<void> _printReceiptDirect({
     required String invoiceId,
@@ -132,132 +131,124 @@ class _PosScreenState extends State<PosScreen> {
       final activeTotal = customTotal ?? _totalAmount;
       final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
 
-      // 1. بناء عنصر الـ Widget الخاص بالفاتورة لكي يتم تحويله إلى صورة بدقة عالية
-      const double receiptWidth = 384.0; // عرض مناسب للطابعات الحرارية (58مم)
-      
-      final receiptWidget = Material(
-        color: Colors.white,
-        child: Container(
-          width: receiptWidth,
-          padding: const EdgeInsets.all(10.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(storeName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
-              if (storePhone.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text('هاتف: $storePhone', style: const TextStyle(fontSize: 12, color: Colors.black)),
-              ],
-              if (taxNumber.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text('الرقم الضريبي: $taxNumber', style: const TextStyle(fontSize: 12, color: Colors.black)),
-              ],
-              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-              
-              if (isReturn) ...[
-                const Text('*** سند مرتجع مبيعات ***', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
-                const SizedBox(height: 4),
-              ],
+      final ScreenshotController screenshotController = ScreenshotController();
+      const double receiptWidth = 384.0; // عرض مناسب للطابعات الحرارية
 
-              Align(
-                alignment: Alignment.centerRight,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('رقم الفاتورة: $invoiceId', style: const TextStyle(fontSize: 12, color: Colors.black)),
-                    Text('العميل: $activeCustomer', style: const TextStyle(fontSize: 12, color: Colors.black)),
-                    Text('طريقة الدفع: $paymentMethod', style: const TextStyle(fontSize: 12, color: Colors.black)),
-                    Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: const TextStyle(fontSize: 11, color: Colors.black)),
-                  ],
-                ),
-              ),
-              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-              
-              // عناوين الأصناف
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('الإجمالي', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                  Text('الكمية × السعر', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                  Text('الصنف', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+      final receiptWidget = Directionality(
+        textDirection: TextDirection.rtl,
+        child: Material(
+          color: Colors.white,
+          child: Container(
+            width: receiptWidth,
+            padding: const EdgeInsets.all(10.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(storeName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+                if (storePhone.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text('هاتف: $storePhone', style: const TextStyle(fontSize: 12, color: Colors.black)),
                 ],
-              ),
-              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                if (taxNumber.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text('الرقم الضريبي: $taxNumber', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                ],
+                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                
+                if (isReturn) ...[
+                  const Text('*** سند مرتجع مبيعات ***', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                  const SizedBox(height: 4),
+                ],
 
-              // قائمة المنتجات
-              ...activeCart.map((item) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                Align(
+                  alignment: Alignment.centerRight,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(_formatNum(item.total), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                          Text('${_formatNum(item.quantity)} × ${_formatNum(item.unitPrice)}', style: const TextStyle(fontSize: 11, color: Colors.black)),
-                          Expanded(
-                            child: Text(
-                              item.product.name, 
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (item.preparationNotes.isNotEmpty)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Text('  ملاحظات: ${item.preparationNotes}', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.black)),
-                        ),
+                      Text('رقم الفاتورة: $invoiceId', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                      Text('العميل: $activeCustomer', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                      Text('طريقة الدفع: $paymentMethod', style: const TextStyle(fontSize: 12, color: Colors.black)),
+                      Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: const TextStyle(fontSize: 11, color: Colors.black)),
                     ],
                   ),
-                );
-              }),
-
-              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-
-              if (showItemCount) ...[
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text('إجمالي عدد الأصناف: ${_formatNum(activeCart.fold(0.0, (sum, i) => sum + i.quantity))}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
                 ),
-                const SizedBox(height: 4),
-              ],
+                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('الإجمالي', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('الكمية × السعر', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('الصنف', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ],
+                ),
+                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(_formatNum(activeTotal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
-                  const Text('الإجمالي العام:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                ...activeCart.map((item) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(_formatNum(item.total), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                            Text('${_formatNum(item.quantity)} × ${_formatNum(item.unitPrice)}', style: const TextStyle(fontSize: 11, color: Colors.black)),
+                            Expanded(
+                              child: Text(
+                                item.product.name, 
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (item.preparationNotes.isNotEmpty)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text('  ملاحظات: ${item.preparationNotes}', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.black)),
+                          ),
+                      ],
+                    ),
+                  );
+                }),
+
+                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+
+                if (showItemCount) ...[
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('إجمالي عدد الأصناف: ${_formatNum(activeCart.fold(0.0, (sum, i) => sum + i.quantity))}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ),
+                  const SizedBox(height: 4),
                 ],
-              ),
-              const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-              const SizedBox(height: 4),
-              Text(invoiceFooter, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.black)),
-              const SizedBox(height: 10),
-            ],
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_formatNum(activeTotal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
+                    const Text('الإجمالي العام:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ],
+                ),
+                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                const SizedBox(height: 4),
+                Text(invoiceFooter, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.black)),
+                const SizedBox(height: 10),
+              ],
+            ),
           ),
         ),
       );
 
-      // 2. تحويل الـ Widget إلى صورة رستر (Raster Image) برمجياً دون الحاجة لحزم إضافية خارجية معقدة
-      final ui.Image? capturedImage = await _renderWidgetToImage(receiptWidget, receiptWidth);
-      if (capturedImage == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('فشل تحويل الفاتورة إلى صورة للطباعة'), backgroundColor: Colors.red),
-          );
-        }
-        return;
-      }
+      // التقاط الفاتورة كصورة بايتات باستخدام حزمة screenshot
+      Uint8List? pngBytes = await screenshotController.captureFromWidget(
+        receiptWidget,
+        delay: const Duration(milliseconds: 50),
+        targetWidth: receiptWidth.toInt(),
+      );
 
-      // تحويل الـ ui.Image إلى مصفوفة بايتات تناسب مكتبة الطابعة
-      final ByteData? byteData = await capturedImage.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return;
-      
-      final Uint8List pngBytes = byteData.buffer.asUint8List();
       final img.Image? decodedImage = img.decodeImage(pngBytes);
       if (decodedImage == null) return;
 
@@ -279,7 +270,6 @@ class _PosScreenState extends State<PosScreen> {
 
         List<int> bytes = [];
 
-        // طباعة الصورة مباشرة (Raster Image) لتفادي أخطاء وتعارض الحروف العربية
         bytes += generator.image(decodedImage);
         bytes += generator.feed(2);
         bytes += generator.cut();
@@ -356,45 +346,6 @@ class _PosScreenState extends State<PosScreen> {
         );
       }
     }
-  }
-
-  // دالة مساعدة لعمل رندر (Render) لعنصر الواجهة وتحويله إلى صورة بدون حزم خارجية
-  Future<ui.Image?> _renderWidgetToImage(Widget widget, double width) async {
-    final RenderRepaintBoundary repaintBoundary = RenderRepaintBoundary();
-    final BuildContext? context = this.context;
-    if (context == null) return null;
-
-    final PipelineOwner pipelineOwner = PipelineOwner();
-    final BuildOwner buildOwner = BuildOwner(focusManager: FocusManager());
-
-    final RenderView renderView = RenderView(
-      view: View.of(context),
-      child: RenderPositionedBox(alignment: Alignment.center, child: repaintBoundary),
-      configuration: ViewConfiguration(
-        size: Size(width, 1000),
-        devicePixelRatio: 2.0, // دقة وضوح الصورة
-      ),
-    );
-
-    pipelineOwner.rootNode = renderView;
-    renderView.prepareInitialFrame();
-
-    final Element element = RenderObjectToWidgetAdapter<RenderBox>(
-      container: repaintBoundary,
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        child: widget,
-      ),
-    ).attachToRoot(buildOwner);
-
-    buildOwner.buildScope(element);
-    buildOwner.finalizeTree();
-
-    pipelineOwner.flushLayout();
-    pipelineOwner.flushCompositingBits();
-    pipelineOwner.flushPaint();
-
-    return await repaintBoundary.toImage(pixelRatio: 2.0);
   }
 
   void _openInvoicesHistoryPage() async {
