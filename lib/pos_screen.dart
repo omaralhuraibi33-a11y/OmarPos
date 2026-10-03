@@ -98,6 +98,9 @@ class _PosScreenState extends State<PosScreen> {
     if (!_isPrinterConnected) return;
 
     try {
+      // 1. جلب عنوان الطابعة الافتراضية المسجلة في جدول الإعدادات
+      final String? defaultPrinterAddress = await DBHelper.getSetting('default_printer');
+
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
       if (savedPrintersJson == null || savedPrintersJson.isEmpty) return; 
 
@@ -122,8 +125,21 @@ class _PosScreenState extends State<PosScreen> {
 
       for (var printer in printers) {
         final usage = printer['usage'] ?? 'زبون';
+        final printerAddr = printer['connection'] == 'واي فاي' ? (printer['ip'] ?? '') : (printer['macAddress'] ?? '');
 
-        if (usage == 'زبون' && !autoCustomer) continue;
+        // التحقق مما إذا كانت هذه الطابعة هي الطابعة الافتراضية المحددة
+        bool isDefault = defaultPrinterAddress != null && defaultPrinterAddress.isNotEmpty && printerAddr == defaultPrinterAddress;
+
+        // فلترة الطابعات بناءً على الاستخدام والإعدادات الافتراضية
+        if (usage == 'زبون') {
+          // إذا تم تحديد طابعة افتراضية، نعتمدها حصرياً لفواتير الزبون، وإذا لم تُحدد نعتمد خيار auto_customer
+          if (defaultPrinterAddress != null && defaultPrinterAddress.isNotEmpty) {
+            if (!isDefault) continue;
+          } else {
+            if (!autoCustomer) continue;
+          }
+        }
+
         if (usage == 'مطبخ' && !autoKitchen) continue;
 
         final paperSizeVal = printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80;
@@ -1352,7 +1368,6 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
             : await DBHelper.getInvoiceItems(inv.id);
         if (!context.mounted) return;
         
-        // تم تحويل شاشة التفاصيل لتفتح كصفحة كاملة عبر Navigator.push
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -1508,7 +1523,6 @@ class InvoiceDetailsPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. رأس الفاتورة
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -1560,7 +1574,6 @@ class InvoiceDetailsPage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             
-            // 2. قائمة الأصناف
             const Text('قائمة الأصناف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 4),
             Expanded(
@@ -1602,7 +1615,6 @@ class InvoiceDetailsPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // 3. أسفل الصفحة (الإجمالي)
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
