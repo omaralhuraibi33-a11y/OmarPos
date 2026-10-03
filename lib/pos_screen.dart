@@ -29,7 +29,6 @@ class PosScreen extends StatefulWidget {
 
 class _PosScreenState extends State<PosScreen> {
   bool _isTouchMode = true;
-  bool _isPrinterConnected = true;
   bool _isInvoiceExpanded = false;
   bool _isProductsFullScreen = false;
   bool _isReturnMode = false;
@@ -96,11 +95,6 @@ class _PosScreenState extends State<PosScreen> {
     double? customTotal,
     bool isReturn = false,
   }) async {
-    if (!_isPrinterConnected) {
-      debugPrint('الطباعة ملغاة: الطابعة مفصولة في الواجهة');
-      return;
-    }
-
     try {
       final String? defaultPrinterAddress = await DBHelper.getSetting('default_printer');
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
@@ -120,9 +114,6 @@ class _PosScreenState extends State<PosScreen> {
       
       if (printers.isEmpty) return;
 
-      final autoCustomer = await DBHelper.getSetting('auto_customer') == 'true';
-      final autoKitchen = await DBHelper.getSetting('auto_kitchen') == 'true';
-
       final storeName = await DBHelper.getSetting('store_name') ?? 'متجري';
       final storePhone = await DBHelper.getSetting('store_phone') ?? '';
       final taxNumber = await DBHelper.getSetting('tax_number') ?? '';
@@ -139,18 +130,10 @@ class _PosScreenState extends State<PosScreen> {
       for (var printer in printers) {
         final usage = printer['usage'] ?? 'زبون';
         final printerAddr = printer['connection'] == 'واي فاي' ? (printer['ip'] ?? '') : (printer['macAddress'] ?? '');
-
-        bool isDefault = defaultPrinterAddress != null && defaultPrinterAddress.isNotEmpty && printerAddr == defaultPrinterAddress;
-
-        if (usage == 'زبون') {
-          if (defaultPrinterAddress != null && defaultPrinterAddress.isNotEmpty) {
-            if (!isDefault) continue;
-          } else {
-            if (!autoCustomer) continue;
-          }
-        }
-
-        if (usage == 'مطبخ' && !autoKitchen) continue;
+        final bool isAutoPrint = printer['autoPrint'] ?? true;
+        
+        // تخطي الطابعة إذا كانت معطلة طباعتها التلقائية
+        if (!isAutoPrint) continue;
 
         final paperSizeVal = printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80;
         final generator = Generator(paperSizeVal, profile);
@@ -195,7 +178,7 @@ class _PosScreenState extends State<PosScreen> {
           
           bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
           bytes += generator.text(invoiceFooter, styles: const PosStyles(align: PosAlign.center));
-        } else {
+        } else if (usage == 'مطبخ') {
           bytes += generator.text(
             isReturn ? '--- مرتجع مطبخ ---' : '--- طلب مطبخ ---', 
             styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2),
@@ -208,6 +191,8 @@ class _PosScreenState extends State<PosScreen> {
               bytes += generator.text('  [${item.preparationNotes}]', styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB, bold: true));
             }
           }
+        } else {
+          continue; // تخطي طابعات التقارير في فواتير المبيعات
         }
 
         bytes += generator.feed(2);
@@ -216,20 +201,28 @@ class _PosScreenState extends State<PosScreen> {
         if (printer['connection'] == 'واي فاي') {
           final String ip = (printer['ip'] ?? '').trim();
           if (ip.isNotEmpty) {
-            final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 3));
-            socket.add(bytes);
-            await socket.flush();
-            await socket.close();
-            printedSuccessfully = true;
+            try {
+              final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 3));
+              socket.add(bytes);
+              await socket.flush();
+              await socket.close();
+              printedSuccessfully = true;
+            } catch (e) {
+              debugPrint('فشل الاتصال بطابعة الواي فاي $ip: $e');
+            }
           }
         } else if (printer['connection'] == 'بلوتوث') {
           final String mac = (printer['macAddress'] ?? '').trim();
           if (mac.isNotEmpty) {
-            bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
-            if (connected) {
-              await PrintBluetoothThermal.writeBytes(bytes);
-              await PrintBluetoothThermal.disconnect;
-              printedSuccessfully = true;
+            try {
+              bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+              if (connected) {
+                await PrintBluetoothThermal.writeBytes(bytes);
+                await PrintBluetoothThermal.disconnect;
+                printedSuccessfully = true;
+              }
+            } catch (e) {
+              debugPrint('فشل الاتصال بطابعة البلوتوث $mac: $e');
             }
           }
         }
@@ -237,7 +230,7 @@ class _PosScreenState extends State<PosScreen> {
 
       if (!printedSuccessfully && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم الحفظ، لكن تعذر إرسال البيانات للطابعة (تأكد من الاتصال)'), backgroundColor: Colors.orange),
+          const SnackBar(content: Text('تم الحفظ، لكن تعذر إرسال البيانات للطابعة (تأكد من إعدادات الطابعات والاتصال)'), backgroundColor: Colors.orange),
         );
       }
     } catch (e) {
@@ -562,16 +555,14 @@ class _PosScreenState extends State<PosScreen> {
 
       final formattedPrintId = 'RET-${invoiceId.padLeft(6, '0')}';
 
-      if (_isPrinterConnected) {
-        await _printReceiptDirect(
-          invoiceId: formattedPrintId,
-          paymentMethod: paymentMethod,
-          customCart: cartSnapshot,
-          customerName: customerNameSnapshot,
-          customTotal: totalSnapshot,
-          isReturn: true,
-        );
-      }
+      await _printReceiptDirect(
+        invoiceId: formattedPrintId,
+        paymentMethod: paymentMethod,
+        customCart: cartSnapshot,
+        customerName: customerNameSnapshot,
+        customTotal: totalSnapshot,
+        isReturn: true,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -625,16 +616,14 @@ class _PosScreenState extends State<PosScreen> {
 
       final formattedPrintId = 'INV-${invoiceId.padLeft(6, '0')}';
 
-      if (_isPrinterConnected) {
-        await _printReceiptDirect(
-          invoiceId: formattedPrintId,
-          paymentMethod: paymentMethod,
-          customCart: cartSnapshot,
-          customerName: customerNameSnapshot,
-          customTotal: totalSnapshot,
-          isReturn: false,
-        );
-      }
+      await _printReceiptDirect(
+        invoiceId: formattedPrintId,
+        paymentMethod: paymentMethod,
+        customCart: cartSnapshot,
+        customerName: customerNameSnapshot,
+        customTotal: totalSnapshot,
+        isReturn: false,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -678,11 +667,6 @@ class _PosScreenState extends State<PosScreen> {
             tooltip: 'سجل الفواتير والمرتجعات',
             icon: const Icon(Icons.receipt_long, color: Colors.amberAccent),
             onPressed: _openInvoicesHistoryPage,
-          ),
-          IconButton(
-            tooltip: _isPrinterConnected ? 'الطابعة متصلة' : 'الطابعة مفصولة',
-            icon: Icon(Icons.print, color: _isPrinterConnected ? Colors.greenAccent : Colors.redAccent),
-            onPressed: () => setState(() => _isPrinterConnected = !_isPrinterConnected),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
