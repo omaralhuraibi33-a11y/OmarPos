@@ -90,7 +90,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   // ==========================================
-  // دالة الطباعة المعدلة: طباعة الفاتورة كصورة محسنة للطابعات الحرارية
+  // دالة الطباعة المعدلة: جدول منسق بدقة للطابعة الحرارية
   // ==========================================
   Future<void> _printReceiptDirect({
     required String invoiceId,
@@ -175,45 +175,62 @@ class _PosScreenState extends State<PosScreen> {
                 ),
                 const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
                 
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('الإجمالي', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                    Text('الكمية × السعر', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                    Text('الصنف', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                  ],
-                ),
-                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-
-                ...activeCart.map((item) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // تصميم الجدول المنظم بدقة (الصنف | الكمية | السعر | الإجمالي)
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.black, width: 1),
+                  ),
+                  child: Column(
+                    children: [
+                      // رأس الجدول
+                      Container(
+                        decoration: const BoxDecoration(
+                          border: Border(bottom: BorderSide(color: Colors.black, width: 1)),
+                        ),
+                        child: const Row(
                           children: [
-                            Text(_formatNum(item.total), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                            Text('${_formatNum(item.quantity)} × ${_formatNum(item.unitPrice)}', style: const TextStyle(fontSize: 11, color: Colors.black)),
-                            Expanded(
-                              child: Text(
-                                item.product.name, 
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
-                              ),
-                            ),
+                            Expanded(flex: 3, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الصنف', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            Container(width: 1, height: 24, color: Colors.black),
+                            Expanded(flex: 1, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الكمية', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            Container(width: 1, height: 24, color: Colors.black),
+                            Expanded(flex: 2, child: Padding(padding: EdgeInsets.all(4.0), child: Text('السعر', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            Container(width: 1, height: 24, color: Colors.black),
+                            Expanded(flex: 2, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الإجمالي', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
                           ],
                         ),
-                        if (item.preparationNotes.isNotEmpty)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Text('  ملاحظات: ${item.preparationNotes}', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.black)),
+                      ),
+                      // صفوف الأصناف داخل الجدول
+                      ...activeCart.map((item) {
+                        return Container(
+                          decoration: const BoxDecoration(
+                            border: Border(bottom: BorderSide(color: Colors.black38, width: 0.5)),
                           ),
-                      ],
-                    ),
-                  );
-                }),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(item.product.name, textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                                  Container(width: 1, color: Colors.black38),
+                                  Expanded(flex: 1, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.quantity), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.black)))),
+                                  Container(width: 1, color: Colors.black38),
+                                  Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.unitPrice), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.black)))),
+                                  Container(width: 1, color: Colors.black38),
+                                  Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.total), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                                ],
+                              ),
+                              if (item.preparationNotes.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6.0, bottom: 2.0),
+                                  child: Text('ملاحظات: ${item.preparationNotes}', style: const TextStyle(fontSize: 9, fontStyle: FontStyle.italic, color: Colors.black)),
+                                ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
 
                 const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
 
@@ -250,7 +267,6 @@ class _PosScreenState extends State<PosScreen> {
       final img.Image? rawImage = img.decodeImage(pngBytes);
       if (rawImage == null) return;
 
-      // ضبط الحجم ومعالجة البكسلات لتكون أبيض وأسود نقي لتوضيح الحروف العربية للطابعة
       final printerWidth = 384;
       final img.Image decodedImage = img.copyResize(rawImage, width: printerWidth);
       
@@ -338,7 +354,7 @@ class _PosScreenState extends State<PosScreen> {
         } else if (printedSuccessfully) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم الحفظ وطباعة الفاتورة (كصورة) بنجاح!'),
+              content: Text('تم الحفظ وطباعة الفاتورة بجدول منظم بنجاح!'),
               backgroundColor: Colors.green,
             ),
           );
