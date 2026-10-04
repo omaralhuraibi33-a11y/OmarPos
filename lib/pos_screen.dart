@@ -175,7 +175,7 @@ class _PosScreenState extends State<PosScreen> {
                 ),
                 const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
                 
-                // تصميم الجدول المنظم بدقة (الصنف | الكمية | السعر | الإجمالي)
+                // تصميم الجدول المنظم بدقة (تمت ازالة الـ const لتجنب أي خطأ في البناء)
                 Container(
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.black, width: 1),
@@ -187,15 +187,15 @@ class _PosScreenState extends State<PosScreen> {
                         decoration: const BoxDecoration(
                           border: Border(bottom: BorderSide(color: Colors.black, width: 1)),
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Expanded(flex: 3, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الصنف', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            const Expanded(flex: 3, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الصنف', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
                             Container(width: 1, height: 24, color: Colors.black),
-                            Expanded(flex: 1, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الكمية', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            const Expanded(flex: 1, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الكمية', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
                             Container(width: 1, height: 24, color: Colors.black),
-                            Expanded(flex: 2, child: Padding(padding: EdgeInsets.all(4.0), child: Text('السعر', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            const Expanded(flex: 2, child: Padding(padding: EdgeInsets.all(4.0), child: Text('السعر', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
                             Container(width: 1, height: 24, color: Colors.black),
-                            Expanded(flex: 2, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الإجمالي', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            const Expanded(flex: 2, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الإجمالي', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
                           ],
                         ),
                       ),
