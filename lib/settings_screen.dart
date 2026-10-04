@@ -5,7 +5,7 @@ import 'screens/printer_settings_screen.dart';
 import 'screens/prep_notes_screen.dart';
 import 'screens/appearance_settings_screen.dart';
 import 'screens/store_data_screen.dart';
-import 'screens/invoice_settings_screen.dart';
+// تم حذف استيراد invoice_settings_screen لعدم الحاجة إليها
 import 'screens/backup_settings_screen.dart';
 import 'screens/payment_methods_screen.dart';
 import 'screens/wipe_data_screen.dart';
@@ -76,18 +76,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute(builder: (_) => const StoreDataScreen()),
             ),
           ),
+          // تم حذف زر إعدادات الفاتورة من هنا نهائياً
           _buildMainButton(
-            title: '5. إعدادات الفاتورة',
-            subtitle: 'رأس وخلفية الفاتورة، الرقم الضريبي، رسالة الشكر',
-            icon: Icons.receipt,
-            color: Colors.deepOrange,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const InvoiceSettingsScreen()),
-            ),
-          ),
-          _buildMainButton(
-            title: '6. النسخ الاحتياطي والاستعادة',
+            title: '5. النسخ الاحتياطي والاستعادة',
             subtitle: 'نسخ قواطع البيانات محلياً أو سحابياً واسترجاعها',
             icon: Icons.backup,
             color: Colors.green,
@@ -97,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           _buildMainButton(
-            title: '7. طرق الدفع المتاحة',
+            title: '6. طرق الدفع المتاحة',
             subtitle: 'إضافة/تعديل خيارات الدفع (نقدي، أجل، إضافة طرق جديدة)',
             icon: Icons.payment,
             color: Colors.indigo,
@@ -107,7 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           _buildMainButton(
-            title: '8. مسح البيانات والتصفير',
+            title: '7. مسح البيانات والتصفير',
             subtitle: 'تصفير المبيعات أو تهيئة النظام بالكامل (منطقة خطرة)',
             icon: Icons.delete_forever,
             color: Colors.red,
