@@ -90,7 +90,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   // ==========================================
-  // دالة الطباعة المعدلة: طباعة الفاتورة كصورة عبر Screenshot
+  // دالة الطباعة المعدلة: طباعة الفاتورة كصورة محسنة للطابعات الحرارية
   // ==========================================
   Future<void> _printReceiptDirect({
     required String invoiceId,
@@ -247,8 +247,24 @@ class _PosScreenState extends State<PosScreen> {
         delay: const Duration(milliseconds: 50),
       );
 
-      final img.Image? decodedImage = img.decodeImage(pngBytes);
-      if (decodedImage == null) return;
+      final img.Image? rawImage = img.decodeImage(pngBytes);
+      if (rawImage == null) return;
+
+      // ضبط الحجم ومعالجة البكسلات لتكون أبيض وأسود نقي لتوضيح الحروف العربية للطابعة
+      final printerWidth = 384;
+      final img.Image decodedImage = img.copyResize(rawImage, width: printerWidth);
+      
+      for (int y = 0; y < decodedImage.height; y++) {
+        for (int x = 0; x < decodedImage.width; x++) {
+          final pixel = decodedImage.getPixel(x, y);
+          final luminance = img.getLuminance(pixel);
+          if (luminance > 160) {
+            decodedImage.setPixelRgba(x, y, 255, 255, 255, 255);
+          } else {
+            decodedImage.setPixelRgba(x, y, 0, 0, 0, 255);
+          }
+        }
+      }
 
       final profile = await CapabilityProfile.load();
       bool printedSuccessfully = false;
