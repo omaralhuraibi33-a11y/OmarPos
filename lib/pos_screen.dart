@@ -175,14 +175,12 @@ class _PosScreenState extends State<PosScreen> {
                 ),
                 const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
                 
-                // تصميم الجدول المنظم بدقة (تمت ازالة الـ const لتجنب أي خطأ في البناء)
                 Container(
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.black, width: 1),
                   ),
                   child: Column(
                     children: [
-                      // رأس الجدول
                       Container(
                         decoration: const BoxDecoration(
                           border: Border(bottom: BorderSide(color: Colors.black, width: 1)),
@@ -199,7 +197,6 @@ class _PosScreenState extends State<PosScreen> {
                           ],
                         ),
                       ),
-                      // صفوف الأصناف داخل الجدول
                       ...activeCart.map((item) {
                         return Container(
                           decoration: const BoxDecoration(
@@ -288,7 +285,6 @@ class _PosScreenState extends State<PosScreen> {
       int attemptedPrintersCount = 0;
 
       for (var printer in printers) {
-        final usage = printer['usage'] ?? 'زبون';
         final bool isAutoPrint = printer['autoPrint'] ?? true;
         
         if (!isAutoPrint) continue;
@@ -588,16 +584,15 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   void _showPaymentDialog() {
-    String selectedMethod = _isCashCustomer ? 'نقدي' : (_paymentMethods.isNotEmpty ? _paymentMethods.first : 'نقدي');
+    List<String> availableMethods = _paymentMethods.isNotEmpty ? _paymentMethods : ['نقدي', 'آجل'];
+    String selectedMethod = availableMethods.first;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) {
-          final availableMethods = _isCashCustomer ? ['نقدي'] : _paymentMethods;
-
           return AlertDialog(
-            title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع واختيار طريقة الدفع'),
+            title: Text(_isReturnMode ? 'إتمام مرتجع المبيعات' : 'إتمام الدفع واختيار شروط وطرق الدفع'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -608,15 +603,10 @@ class _PosScreenState extends State<PosScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text('العميل الحالي: ${_selectedCustomer?.name ?? "عميل نقدي"}'),
-                if (_isCashCustomer)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 6.0),
-                    child: Text('تنبيه: العميل النقدي لا يقبل سوى الدفع النقدي.', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   value: availableMethods.contains(selectedMethod) ? selectedMethod : availableMethods.first,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'طريقة الدفع'),
+                  decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'شروط / طريقة الدفع'),
                   items: availableMethods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
                   onChanged: (val) {
                     if (val != null) setDlgState(() => selectedMethod = val);
@@ -650,7 +640,12 @@ class _PosScreenState extends State<PosScreen> {
     final now = DateTime.now().toString().split('.')[0];
     final shiftId = await DBHelper.getCurrentShiftId();
     final customerId = _selectedCustomer?.id ?? 'cash_default';
-    final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
+    
+    // فحص مرن لتحديد ما إذا كان الدفع أجلاً بناءً على الخيارات المسترجعة
+    final isCredit = paymentMethod.contains('آجل') || 
+                     paymentMethod.contains('أجل') || 
+                     paymentMethod.contains('أقساط') || 
+                     paymentMethod != 'نقدي';
     
     if (_isReturnMode) {
       final returnInvoices = await DBHelper.getAllReturnInvoices();
