@@ -7,7 +7,7 @@ import 'screens/appearance_settings_screen.dart';
 import 'screens/store_data_screen.dart';
 // تم حذف استيراد invoice_settings_screen لعدم الحاجة إليها
 import 'screens/backup_settings_screen.dart';
-import 'screens/payment_methods_screen.dart';
+// تم حذف استيراد payment_methods_screen لعدم الحاجة إليها
 import 'screens/wipe_data_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -87,18 +87,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute(builder: (_) => const BackupSettingsScreen()),
             ),
           ),
+          // تم حذف زر طرق الدفع المتاحة بالكامل من هنا
           _buildMainButton(
-            title: '6. طرق الدفع المتاحة',
-            subtitle: 'إضافة/تعديل خيارات الدفع (نقدي، أجل، إضافة طرق جديدة)',
-            icon: Icons.payment,
-            color: Colors.indigo,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PaymentMethodsScreen()),
-            ),
-          ),
-          _buildMainButton(
-            title: '7. مسح البيانات والتصفير',
+            title: '6. مسح البيانات والتصفير',
             subtitle: 'تصفير المبيعات أو تهيئة النظام بالكامل (منطقة خطرة)',
             icon: Icons.delete_forever,
             color: Colors.red,
