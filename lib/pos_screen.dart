@@ -90,7 +90,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   // ==========================================
-  // دالة الطباعة المحدثة: تدعم مقاس الورق الفعلي وحجم الجدول المتحرك مع الخط
+  // دالة الطباعة المعدلة: بالترتيب الجديد للفاتورة والإجمالي وتاريخ الطباعة
   // ==========================================
   Future<void> _printReceiptDirect({
     required String invoiceId,
@@ -147,15 +147,14 @@ class _PosScreenState extends State<PosScreen> {
         attemptedPrintersCount++;
         final printerName = printer['name'] ?? 'طابعة';
         
-        // 1. تحديد مقاس الورق الحعلي (57 مم أو 80 مم) من إعدادات الطابعة
+        // تحديد مقاس الورق (57 مم أو 80 مم)
         final String paperSizeStr = printer['paperSize'] ?? '80';
         final paperSizeVal = paperSizeStr == '57' ? PaperSize.mm58 : PaperSize.mm80;
         
-        // 2. تحديد أبعاد الودجت وصورة الطباعة بناءً على مقاس الورق
         final double receiptWidth = paperSizeStr == '57' ? 384.0 : 576.0;
         final int targetImageWidth = paperSizeStr == '57' ? 384 : 576;
         
-        // 3. جلب مقاس الخط المختار للطابعة وتحديد معامل التكبير (Font Scale)
+        // جلب مقاس الخط ومعامل التكبير
         String fontSizeSetting = printer['fontSize'] ?? 'normal';
         double fontScale = 1.0;
         switch (fontSizeSetting) {
@@ -174,7 +173,13 @@ class _PosScreenState extends State<PosScreen> {
             break;
         }
 
-        // بناء ويدجت الإيصال مع تكبير الجدول والنصوص تلقائياً
+        // تجهيز اسم يوم الطباعة بالعربي مع التاريخ والوقت
+        final now = DateTime.now();
+        const daysInArabic = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+        final dayName = daysInArabic[now.weekday - 1];
+        final formattedDateTime = '$dayName، ${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}  ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+        // بناء ويدجت الإيصال
         final receiptWidget = Directionality(
           textDirection: TextDirection.rtl,
           child: Material(
@@ -202,21 +207,29 @@ class _PosScreenState extends State<PosScreen> {
                     SizedBox(height: 4 * fontScale),
                   ],
 
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('رقم الفاتورة: $invoiceId', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
-                        Text('العميل: $activeCustomer', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
-                        Text('طريقة الدفع: $paymentMethod', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
-                        Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
-                      ],
-                    ),
+                  // ترتيب بيانات الفاتورة موزعة بين اليمين واليسار باحترافية
+                  Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('رقم الفاتورة: $invoiceId', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                          Text('طريقة الدفع: $paymentMethod', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                        ],
+                      ),
+                      SizedBox(height: 3 * fontScale),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('العميل: $activeCustomer', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                          Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                        ],
+                      ),
+                    ],
                   ),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   
-                  // جدول الأصناف المتمدد تلقائياً مع حجم الخط
+                  // جدول الأصناف المتمدد مع حجم الخط
                   Container(
                     decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.0 * fontScale)),
                     child: Column(
@@ -279,13 +292,21 @@ class _PosScreenState extends State<PosScreen> {
                     SizedBox(height: 4 * fontScale),
                   ],
 
+                  // تعديل الإجمالي (بدون كلمة العام، الكلمة على اليمين والقيمة بجانبها على اليسار)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      Text('الإجمالي:', style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                       Text(_formatNum(activeTotal), style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
-                      Text('الإجمالي العام:', style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                     ],
                   ),
+                  SizedBox(height: 2 * fontScale),
+                  // طباعة يوم الطباعة والتاريخ والوقت تحته مباشرة
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('طبع في: $formattedDateTime', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black54)),
+                  ),
+
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   SizedBox(height: 4 * fontScale),
                   Text(invoiceFooter, textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
@@ -304,7 +325,6 @@ class _PosScreenState extends State<PosScreen> {
         final img.Image? rawImage = img.decodeImage(pngBytes);
         if (rawImage == null) continue;
 
-        // تعديل أبعاد الصورة لتتطابق تماماً مع مقاس الطابعة الفعلي
         final img.Image decodedImage = img.copyResize(rawImage, width: targetImageWidth);
         
         for (int y = 0; y < decodedImage.height; y++) {
@@ -370,7 +390,7 @@ class _PosScreenState extends State<PosScreen> {
         } else if (printedSuccessfully) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم الحفظ وطباعة الفاتورة بحجم الخط ومقاس الطابعة بنجاح!'),
+              content: Text('تم الحفظ وطباعة الفاتورة بالشكل المطلوب بنجاح!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -1107,7 +1127,7 @@ class _PosScreenState extends State<PosScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_isReturnMode ? 'إجمالي المسترجع:' : 'الإجمالي العام:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(_isReturnMode ? 'إجمالي المسترجع:' : 'الإجمالي:', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               Text(
                 _formatNum(_totalAmount),
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
