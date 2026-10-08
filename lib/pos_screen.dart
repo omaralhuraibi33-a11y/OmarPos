@@ -360,6 +360,7 @@ class _PosScreenState extends State<PosScreen> {
 
         final generator = Generator(paperSizeVal, profile);
         List<int> bytes = [];
+
         bytes += generator.image(decodedImage);
         bytes += generator.feed(2);
         bytes += generator.cut();
@@ -374,7 +375,8 @@ class _PosScreenState extends State<PosScreen> {
             await socket.close();
             printedSuccessfully = true;
           } catch (e) {
-            lastErrorDetails = 'فشل الاتصال بالواي فاي: $e';
+            lastErrorDetails = 'فشل الاتصال بالواي فاي ($printerName - $ip): $e';
+            debugPrint(lastErrorDetails);
           }
         } else if (printer['connection'] == 'بلوتوث') {
           final String mac = (printer['macAddress'] ?? '').trim();
@@ -385,30 +387,61 @@ class _PosScreenState extends State<PosScreen> {
               await PrintBluetoothThermal.writeBytes(bytes);
               await PrintBluetoothThermal.disconnect;
               printedSuccessfully = true;
+            } else {
+              lastErrorDetails = 'تعذر الاتصال بطابعة البلوتوث ($printerName)';
             }
           } catch (e) {
-            lastErrorDetails = 'خطأ بلوتوث: $e';
+            lastErrorDetails = 'خطأ بلوتوث ($printerName): $e';
+            debugPrint(lastErrorDetails);
           }
         }
       }
 
       if (mounted) {
-        if (printedSuccessfully) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الحفظ وطباعة الفاتورة بنجاح!'), backgroundColor: Colors.green));
+        if (attemptedPrintersCount == 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تنبيه: تم الحفظ، ولكن جميع الطابعات المسجلة معطلة أو غير موجهة للزبائن!'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        } else if (printedSuccessfully) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم الحفظ وطباعة الفاتورة بحجم الخط ومقاس الطابعة بنجاح!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('فشلت الطباعة. السبب: ${lastErrorDetails.isNotEmpty ? lastErrorDetails : "تأكد من تشغيل الطابعة والاتصال"}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
         }
       }
     } catch (e) {
-      debugPrint('خطأ طباعة: $e');
+      debugPrint('خطأ استثنائي في الطباعة: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('حدث خطأ غير متوقع أثناء الطباعة: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
   void _openInvoicesHistoryPage() async {
     final salesInvoices = await DBHelper.getAllInvoices();
     final returnInvoices = await DBHelper.getAllReturnInvoices();
+
     salesInvoices.sort((a, b) => b.date.compareTo(a.date));
     returnInvoices.sort((a, b) => b.date.compareTo(a.date));
 
     if (!mounted) return;
+
     Navigator.push(
       context,
       MaterialPageRoute(
