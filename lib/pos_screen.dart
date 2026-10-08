@@ -89,8 +89,23 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
+  // دالة تحويل مقاس الخط من إعدادات الطابعة إلى PosTextSize الخاص بمكتبة الطباعة
+  PosTextSize _getPosTextSize(String sizeStr) {
+    switch (sizeStr) {
+      case 'medium':
+        return PosTextSize.size1;
+      case 'large':
+        return PosTextSize.size2;
+      case 'huge':
+        return PosTextSize.size3;
+      case 'normal':
+      default:
+        return PosTextSize.size1;
+    }
+  }
+
   // ==========================================
-  // دالة الطباعة المعدلة: جدول منسق بدقة للطابعة الحرارية
+  // دالة الطباعة المعدلة: تقرأ مقاس الخط من إعدادات الطابعة وتطبقه
   // ==========================================
   Future<void> _printReceiptDirect({
     required String invoiceId,
@@ -134,154 +149,6 @@ class _PosScreenState extends State<PosScreen> {
       final ScreenshotController screenshotController = ScreenshotController();
       const double receiptWidth = 384.0;
 
-      final receiptWidget = Directionality(
-        textDirection: TextDirection.rtl,
-        child: Material(
-          color: Colors.white,
-          child: Container(
-            width: receiptWidth,
-            padding: const EdgeInsets.all(10.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(storeName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
-                if (storePhone.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text('هاتف: $storePhone', style: const TextStyle(fontSize: 12, color: Colors.black)),
-                ],
-                if (taxNumber.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text('الرقم الضريبي: $taxNumber', style: const TextStyle(fontSize: 12, color: Colors.black)),
-                ],
-                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-                
-                if (isReturn) ...[
-                  const Text('*** سند مرتجع مبيعات ***', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
-                  const SizedBox(height: 4),
-                ],
-
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text('رقم الفاتورة: $invoiceId', style: const TextStyle(fontSize: 12, color: Colors.black)),
-                      Text('العميل: $activeCustomer', style: const TextStyle(fontSize: 12, color: Colors.black)),
-                      Text('طريقة الدفع: $paymentMethod', style: const TextStyle(fontSize: 12, color: Colors.black)),
-                      Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: const TextStyle(fontSize: 11, color: Colors.black)),
-                    ],
-                  ),
-                ),
-                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-                
-                // تصميم الجدول المنظم بدقة (تمت ازالة الـ const لتجنب أي خطأ في البناء)
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.black, width: 1),
-                  ),
-                  child: Column(
-                    children: [
-                      // رأس الجدول
-                      Container(
-                        decoration: const BoxDecoration(
-                          border: Border(bottom: BorderSide(color: Colors.black, width: 1)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Expanded(flex: 3, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الصنف', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                            Container(width: 1, height: 24, color: Colors.black),
-                            const Expanded(flex: 1, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الكمية', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                            Container(width: 1, height: 24, color: Colors.black),
-                            const Expanded(flex: 2, child: Padding(padding: EdgeInsets.all(4.0), child: Text('السعر', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                            Container(width: 1, height: 24, color: Colors.black),
-                            const Expanded(flex: 2, child: Padding(padding: EdgeInsets.all(4.0), child: Text('الإجمالي', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                          ],
-                        ),
-                      ),
-                      // صفوف الأصناف داخل الجدول
-                      ...activeCart.map((item) {
-                        return Container(
-                          decoration: const BoxDecoration(
-                            border: Border(bottom: BorderSide(color: Colors.black38, width: 0.5)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(item.product.name, textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                                  Container(width: 1, color: Colors.black38),
-                                  Expanded(flex: 1, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.quantity), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.black)))),
-                                  Container(width: 1, color: Colors.black38),
-                                  Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.unitPrice), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.black)))),
-                                  Container(width: 1, color: Colors.black38),
-                                  Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.total), textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                                ],
-                              ),
-                              if (item.preparationNotes.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 6.0, bottom: 2.0),
-                                  child: Text('ملاحظات: ${item.preparationNotes}', style: const TextStyle(fontSize: 9, fontStyle: FontStyle.italic, color: Colors.black)),
-                                ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-
-                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-
-                if (showItemCount) ...[
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text('إجمالي عدد الأصناف: ${_formatNum(activeCart.fold(0.0, (sum, i) => sum + i.quantity))}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
-                  ),
-                  const SizedBox(height: 4),
-                ],
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(_formatNum(activeTotal), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black)),
-                    const Text('الإجمالي العام:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
-                  ],
-                ),
-                const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
-                const SizedBox(height: 4),
-                Text(invoiceFooter, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.black)),
-                const SizedBox(height: 10),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      final pngBytes = await screenshotController.captureFromWidget(
-        receiptWidget,
-        delay: const Duration(milliseconds: 50),
-      );
-
-      final img.Image? rawImage = img.decodeImage(pngBytes);
-      if (rawImage == null) return;
-
-      final printerWidth = 384;
-      final img.Image decodedImage = img.copyResize(rawImage, width: printerWidth);
-      
-      for (int y = 0; y < decodedImage.height; y++) {
-        for (int x = 0; x < decodedImage.width; x++) {
-          final pixel = decodedImage.getPixel(x, y);
-          final luminance = img.getLuminance(pixel);
-          if (luminance > 160) {
-            decodedImage.setPixelRgba(x, y, 255, 255, 255, 255);
-          } else {
-            decodedImage.setPixelRgba(x, y, 0, 0, 0, 255);
-          }
-        }
-      }
-
       final profile = await CapabilityProfile.load();
       bool printedSuccessfully = false;
       String lastErrorDetails = '';
@@ -292,12 +159,163 @@ class _PosScreenState extends State<PosScreen> {
         final bool isAutoPrint = printer['autoPrint'] ?? true;
         
         if (!isAutoPrint) continue;
+        if (usage != 'زبون' && usage != 'تقرير') continue; // تخصيص للعملاء
 
         attemptedPrintersCount++;
         final printerName = printer['name'] ?? 'طابعة';
         final paperSizeVal = printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80;
-        final generator = Generator(paperSizeVal, profile);
+        
+        // جلب حجم الخط المخصص لهذه الطابعة من الإعدادات
+        String fontSizeSetting = printer['fontSize'] ?? 'normal';
+        PosTextSize textSize = _getPosTextSize(fontSizeSetting);
 
+        // بناء ويدجت الإيصال مع تطبيق مقاس الخط المختار
+        final receiptWidget = Directionality(
+          textDirection: TextDirection.rtl,
+          child: Material(
+            color: Colors.white,
+            child: Container(
+              width: receiptWidth,
+              padding: const EdgeInsets.all(10.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(storeName, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 24 : (textSize == PosTextSize.size2 ? 20 : 16), fontWeight: FontWeight.bold, color: Colors.black)),
+                  if (storePhone.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text('هاتف: $storePhone', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                  ],
+                  if (taxNumber.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text('الرقم الضريبي: $taxNumber', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                  ],
+                  const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                  
+                  if (isReturn) ...[
+                    const Text('*** سند مرتجع مبيعات ***', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                    const SizedBox(height: 4),
+                  ],
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('رقم الفاتورة: $invoiceId', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                        Text('العميل: $activeCustomer', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                        Text('طريقة الدفع: $paymentMethod', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                        Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, color: Colors.black)),
+                      ],
+                    ),
+                  ),
+                  const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                  
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.black, width: 1),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          decoration: const BoxDecoration(
+                            border: Border(bottom: BorderSide(color: Colors.black, width: 1)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الصنف', textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                              Container(width: 1, height: 24, color: Colors.black),
+                              Expanded(flex: 1, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الكمية', textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                              Container(width: 1, height: 24, color: Colors.black),
+                              Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('السعر', textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                              Container(width: 1, height: 24, color: Colors.black),
+                              Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الإجمالي', textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            ],
+                          ),
+                        ),
+                        ...activeCart.map((item) {
+                          return Container(
+                            decoration: const BoxDecoration(
+                              border: Border(bottom: BorderSide(color: Colors.black38, width: 0.5)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(item.product.name, textAlign: TextAlign.right, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                                    Container(width: 1, color: Colors.black38),
+                                    Expanded(flex: 1, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.quantity), textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, color: Colors.black)))),
+                                    Container(width: 1, color: Colors.black38),
+                                    Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.unitPrice), textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, color: Colors.black)))),
+                                    Container(width: 1, color: Colors.black38),
+                                    Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.total), textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                                  ],
+                                ),
+                                if (item.preparationNotes.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 6.0, bottom: 2.0),
+                                    child: Text('ملاحظات: ${item.preparationNotes}', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 13 : 9, fontStyle: FontStyle.italic, color: Colors.black)),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+
+                  const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+
+                  if (showItemCount) ...[
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text('إجمالي عدد الأصناف: ${_formatNum(activeCart.fold(0.0, (sum, i) => sum + i.quantity))}', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(_formatNum(activeTotal), style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 20 : 16, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('الإجمالي العام:', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 18 : 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                    ],
+                  ),
+                  const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                  const SizedBox(height: 4),
+                  Text(invoiceFooter, textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        final pngBytes = await screenshotController.captureFromWidget(
+          receiptWidget,
+          delay: const Duration(milliseconds: 50),
+        );
+
+        final img.Image? rawImage = img.decodeImage(pngBytes);
+        if (rawImage == null) continue;
+
+        const int printerWidth = 384;
+        final img.Image decodedImage = img.copyResize(rawImage, width: printerWidth);
+        
+        for (int y = 0; y < decodedImage.height; y++) {
+          for (int x = 0; x < decodedImage.width; x++) {
+            final pixel = decodedImage.getPixel(x, y);
+            final luminance = img.getLuminance(pixel);
+            if (luminance > 160) {
+              decodedImage.setPixelRgba(x, y, 255, 255, 255, 255);
+            } else {
+              decodedImage.setPixelRgba(x, y, 0, 0, 0, 255);
+            }
+          }
+        }
+
+        final generator = Generator(paperSizeVal, profile);
         List<int> bytes = [];
 
         bytes += generator.image(decodedImage);
@@ -306,10 +324,7 @@ class _PosScreenState extends State<PosScreen> {
 
         if (printer['connection'] == 'واي فاي') {
           final String ip = (printer['ip'] ?? '').trim();
-          if (ip.isEmpty) {
-            lastErrorDetails = 'الطابعة ($printerName): عنوان الـ IP فارغ!';
-            continue;
-          }
+          if (ip.isEmpty) continue;
           try {
             final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
             socket.add(bytes);
@@ -322,10 +337,7 @@ class _PosScreenState extends State<PosScreen> {
           }
         } else if (printer['connection'] == 'بلوتوث') {
           final String mac = (printer['macAddress'] ?? '').trim();
-          if (mac.isEmpty) {
-            lastErrorDetails = 'الطابعة ($printerName): عنوان الـ MAC للبلوتوث فارغ!';
-            continue;
-          }
+          if (mac.isEmpty) continue;
           try {
             bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
             if (connected) {
@@ -346,7 +358,7 @@ class _PosScreenState extends State<PosScreen> {
         if (attemptedPrintersCount == 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تنبيه: تم الحفظ، ولكن جميع الطابعات المسجلة معطلة (الطباعة التلقائية متوقفة لها)!'),
+              content: Text('تنبيه: تم الحفظ، ولكن جميع الطابعات المسجلة معطلة أو غير موجهة للزبائن!'),
               backgroundColor: Colors.orange,
               duration: Duration(seconds: 4),
             ),
@@ -354,7 +366,7 @@ class _PosScreenState extends State<PosScreen> {
         } else if (printedSuccessfully) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم الحفظ وطباعة الفاتورة بجدول منظم بنجاح!'),
+              content: Text('تم الحفظ وطباعة الفاتورة بحجم الخط المختار بنجاح!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -1002,8 +1014,8 @@ class _PosScreenState extends State<PosScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(_isReturnMode ? 'الصنف المراد إرجاعه' : 'الصنف / الملاحظات', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const Text('العدد', style: TextStyle(fontWeight: FontWeight.bold)),
-              const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('العدد', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Text('الإجمالي', style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),
