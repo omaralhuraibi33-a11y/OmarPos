@@ -40,16 +40,18 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     await DBHelper.saveSetting('printers_list', printersJson);
   }
 
-  // تحويل نص حجم الخط إلى حجم PosTextSize الخاص بمكتبة الطباعة
+  // تحويل القيمة البرمجية إلى حجم PosTextSize المناسب لمكتبة الطباعة
   PosTextSize _getPosTextSize(String sizeStr) {
     switch (sizeStr) {
-      case 'كبير':
-        return PosTextSize.size2; // ضعف الحجم العادي
-      case 'ضخم':
-        return PosTextSize.size3; // ثلاثة أضعاف
-      case 'عادي':
+      case 'medium':
+        return PosTextSize.size1; // متوسط (يمكن دمجه أو جعله بحجم مناسب)
+      case 'large':
+        return PosTextSize.size2; // كبير (ضعف الحجم)
+      case 'huge':
+        return PosTextSize.size3; // ضخم (ثلاثة أضعاف)
+      case 'normal':
       default:
-        return PosTextSize.size1; // الحجم العادي الصغير
+        return PosTextSize.size1; // عادي
     }
   }
 
@@ -68,8 +70,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
         profile,
       );
 
-      // جلب مقاس الخط المختار للطابعة (افتراضياً 'عادي' إذا لم يُحدد مسبقاً)
-      String fontSizeSetting = printer['fontSize'] ?? 'عادي';
+      String fontSizeSetting = printer['fontSize'] ?? 'normal';
       PosTextSize textSize = _getPosTextSize(fontSizeSetting);
 
       List<int> bytes = [];
@@ -81,7 +82,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
       
       bytes += generator.text('Printer: ${printer['name']}', styles: const PosStyles(align: PosAlign.center));
       bytes += generator.text('IP/MAC: ${printer['connection'] == 'واي فاي' ? printer['ip'] : printer['macAddress']}', styles: const PosStyles(align: PosAlign.center));
-      bytes += generator.text('حجم الخط: $fontSizeSetting', styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.text('Font Size: $fontSizeSetting', styles: const PosStyles(align: PosAlign.center));
       
       bytes += generator.feed(2);
       bytes += generator.cut();
@@ -140,7 +141,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     String connection = printerToEdit?['connection'] ?? 'بلوتوث';
     String usage = printerToEdit?['usage'] ?? 'زبون';
     String paperSize = printerToEdit?['paperSize'] ?? '80';
-    String fontSize = printerToEdit?['fontSize'] ?? 'عادي'; // الخيار الجديد لمقاس الخط
+    String fontSize = printerToEdit?['fontSize'] ?? 'normal'; // القيمة البرمجية الافتراضية
     String selectedBtDevice = printerToEdit?['btDevice'] ?? '';
     
     bool printerAutoPrint = printerToEdit?['autoPrint'] ?? true;
@@ -289,16 +290,19 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     onChanged: (val) => setDlgState(() => paperSize = val!),
                   ),
                   const SizedBox(height: 8),
-                  // حقل اختيار مقاس الخط الجديد
+                  // الخيارات الأربعة المطلوبة بدقة: عادي، متوسط، كبير، ضخم
                   DropdownButtonFormField<String>(
                     value: fontSize,
                     decoration: const InputDecoration(
                       labelText: 'مقاس الخط عند الطباعة',
                       border: OutlineInputBorder(),
                     ),
-                    items: ['عادي', 'كبير', 'ضخم']
-                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                        .toList(),
+                    items: const [
+                      DropdownMenuItem(value: 'normal', child: Text('عادي')),
+                      DropdownMenuItem(value: 'medium', child: Text('متوسط')),
+                      DropdownMenuItem(value: 'large', child: Text('كبير')),
+                      DropdownMenuItem(value: 'huge', child: Text('ضخم')),
+                    ],
                     onChanged: (val) => setDlgState(() => fontSize = val!),
                   ),
                 ],
@@ -313,7 +317,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     'connection': connection,
                     'usage': usage,
                     'paperSize': paperSize,
-                    'fontSize': fontSize, // حفظ مقاس الخط المختار
+                    'fontSize': fontSize, 
                     'btDevice': selectedBtDevice,
                     'macAddress': macCtrl.text.trim(),
                     'ip': ipCtrl.text.trim(),
@@ -349,6 +353,17 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     );
   }
 
+  // دالة مطابقة المقاس البرمجي ليعرض بالعربي في البطاقة الرئيسية
+  String _getArabicFontSizeName(String sizeKey) {
+    switch (sizeKey) {
+      case 'medium': return 'متوسط';
+      case 'large': return 'كبير';
+      case 'huge': return 'ضخم';
+      case 'normal':
+      default: return 'عادي';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -372,7 +387,8 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     final p = _printers[i];
                     bool isAuto = p['autoPrint'] ?? true;
                     bool isDefault = p['isDefault'] ?? false;
-                    String fontSize = p['fontSize'] ?? 'عادي';
+                    String fontSizeKey = p['fontSize'] ?? 'normal';
+                    String fontSizeArabic = _getArabicFontSizeName(fontSizeKey);
 
                     return Card(
                       color: isDefault ? Colors.blue.shade50 : null,
@@ -404,7 +420,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                           (p['connection'] == 'بلوتوث'
                               ? 'الاتصال: بلوتوث (${p['macAddress']}) | المقاس: ${p['paperSize']}mm'
                               : 'الاتصال: IP (${p['ip']}) | المقاس: ${p['paperSize']}mm') +
-                          '\nمقاس الخط: $fontSize | الحالة: ${isAuto ? "تلقائي (مفعل)" : "معطل"}',
+                          '\nمقاس الخط: $fontSizeArabic | الحالة: ${isAuto ? "تلقائي (مفعل)" : "معطل"}',
                         ),
                         isThreeLine: true,
                         trailing: Row(
@@ -425,7 +441,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
                               tooltip: 'حذف',
-                              onPressed: () async {
+                                onPressed: () async {
                                 setState(() {
                                   _printers.removeAt(i);
                                 });
