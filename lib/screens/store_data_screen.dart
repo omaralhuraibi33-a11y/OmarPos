@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'omar_pos/db_helper.dart'; // تأكد من مطابقة مسار الاستيراد لديك
+import 'db_helper.dart';
+
 
 class StoreDataScreen extends StatefulWidget {
   const StoreDataScreen({Key? key}) : super(key: key);
