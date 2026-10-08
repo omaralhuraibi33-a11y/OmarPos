@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'db_helper.dart';
+import '../db_helper.dart';
 
 
 class StoreDataScreen extends StatefulWidget {
