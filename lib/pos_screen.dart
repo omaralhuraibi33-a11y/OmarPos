@@ -241,7 +241,7 @@ class _PosScreenState extends State<PosScreen> {
                           width: 45 * fontScale,
                           height: 45 * fontScale,
                           decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
+                            shape: BoxShape.square,
                             color: Colors.black12,
                           ),
                           child: Icon(Icons.storefront, size: 28 * fontScale, color: Colors.black54),
