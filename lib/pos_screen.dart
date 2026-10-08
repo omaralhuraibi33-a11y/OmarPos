@@ -95,6 +95,7 @@ class _PosScreenState extends State<PosScreen> {
     List<CartItem>? customCart,
     String? customerName,
     double? customTotal,
+    double discountAmount = 0.0, // إضافة مبلغ الخصم للطباعة
     bool isReturn = false,
   }) async {
     try {
@@ -127,7 +128,9 @@ class _PosScreenState extends State<PosScreen> {
       final showItemCount = await DBHelper.getSetting('show_item_count') == 'true';
 
       final activeCart = customCart ?? _cart;
-      final activeTotal = customTotal ?? _totalAmount;
+      final activeSubTotal = customTotal ?? _totalAmount;
+      final activeDiscount = discountAmount;
+      final activeNetTotal = (activeSubTotal - activeDiscount) < 0 ? 0.0 : (activeSubTotal - activeDiscount);
       final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
 
       final ScreenshotController screenshotController = ScreenshotController();
@@ -296,14 +299,34 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                     SizedBox(height: 4 * fontScale),
                   ],
+                  
+                  // --- قسم الإجمالي، الخصم، وصافي الإجمالي في الفاتورة المطبوعة ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('الإجمالي:', style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
-                      Text(_formatNum(activeTotal), style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('الإجمالي:', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                      Text(_formatNum(activeSubTotal), style: TextStyle(fontSize: 13 * fontScale, color: Colors.black)),
                     ],
                   ),
                   SizedBox(height: 2 * fontScale),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('الخصم:', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                      Text(_formatNum(activeDiscount), style: TextStyle(fontSize: 13 * fontScale, color: Colors.black)),
+                    ],
+                  ),
+                  SizedBox(height: 2 * fontScale),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('صافي الإجمالي:', style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text(_formatNum(activeNetTotal), style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    ],
+                  ),
+                  // -------------------------------------------------------------
+
+                  SizedBox(height: 4 * fontScale),
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text('طبع في: $formattedDateTime', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black54)),
@@ -587,7 +610,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   // ==========================================
-  // نافذة إتمام الدفع المحدثة (تتضمن الخصم، الصافي، المبلغ المدفوع، والباقي)
+  // نافذة إتمام الدفع مع الخصم والصافي والباقي
   // ==========================================
   void _showPaymentDialog() {
     String selectedMethod = _isCashCustomer ? 'نقدي' : (_paymentMethods.isNotEmpty ? _paymentMethods.first : 'نقدي');
@@ -616,7 +639,7 @@ class _PosScreenState extends State<PosScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // إجمالي الفاتورة الأصلي
+                  // إجمالي الفاتورة
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -636,7 +659,13 @@ class _PosScreenState extends State<PosScreen> {
                       prefixIcon: Icon(Icons.money_off),
                     ),
                     onChanged: (val) {
-                      setDlgState(() {});
+                      setDlgState(() {
+                        // تحديث المبلغ المدفوع تلقائياً بناءً على الصافي الجديد إذا لزم الأمر
+                        double newDiscount = double.tryParse(val) ?? 0.0;
+                        double newNet = total - newDiscount;
+                        if (newNet < 0) newNet = 0;
+                        paidController.text = _formatNum(newNet);
+                      });
                     },
                   ),
                   const SizedBox(height: 10),
@@ -681,7 +710,7 @@ class _PosScreenState extends State<PosScreen> {
                     },
                   ),
 
-                  // مربعات المبلغ المدفوع والباقي (تظهر فقط إذا كان الدفع نقدياً)
+                  // مربعات المبلغ المدفوع والباقي (إذا كان الدفع نقدياً)
                   if (selectedMethod == 'نقدي') ...[
                     const SizedBox(height: 12),
                     TextField(
@@ -727,8 +756,7 @@ class _PosScreenState extends State<PosScreen> {
                 label: Text(_isReturnMode ? 'طباعة وحفظ المرتجع' : 'طباعة وحفظ الفاتورة', style: const TextStyle(color: Colors.white)),
                 onPressed: () {
                   Navigator.pop(ctx);
-                  // يمكنك تمرير أو حفظ netTotal (الصافي بعد الخصم) إذا أردت اعتماده في الفاتورة النهائية
-                  _processCheckout(selectedMethod, netTotal);
+                  _processCheckout(selectedMethod, netTotal, discount);
                 },
               ),
             ],
@@ -738,7 +766,7 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  Future<void> _processCheckout(String paymentMethod, double finalAmount) async {
+  Future<void> _processCheckout(String paymentMethod, double finalAmount, double discountAmount) async {
     final cartSnapshot = List<CartItem>.from(_cart);
     final totalSnapshot = finalAmount; // اعتماد صافي الإجمالي بعد الخصم
     final customerNameSnapshot = _selectedCustomer?.name ?? 'عميل نقدي';
@@ -793,7 +821,8 @@ class _PosScreenState extends State<PosScreen> {
         paymentMethod: paymentMethod,
         customCart: cartSnapshot,
         customerName: customerNameSnapshot,
-        customTotal: totalSnapshot,
+        customTotal: _totalAmount,
+        discountAmount: discountAmount,
         isReturn: true,
       );
 
@@ -842,7 +871,8 @@ class _PosScreenState extends State<PosScreen> {
         paymentMethod: paymentMethod,
         customCart: cartSnapshot,
         customerName: customerNameSnapshot,
-        customTotal: totalSnapshot,
+        customTotal: _totalAmount,
+        discountAmount: discountAmount,
         isReturn: false,
       );
     }
@@ -1247,6 +1277,7 @@ class InvoicesHistoryPage extends StatefulWidget {
     List<CartItem>? customCart,
     String? customerName,
     double? customTotal,
+    double discountAmount,
     bool isReturn,
   }) onPrintDirect;
 
@@ -1295,7 +1326,7 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('سجل الفواتير والمرتجعات')),
-      body: Center(child: Text('سجل الفواتير والمرتجعات متاح هنا')),
+      body: const Center(child: Text('سجل الفواتير والمرتجعات متاح هنا')),
     );
   }
 }
@@ -1311,6 +1342,7 @@ class InvoiceDetailsPage extends StatelessWidget {
     List<CartItem>? customCart,
     String? customerName,
     double? customTotal,
+    double discountAmount,
     bool isReturn,
   }) onPrintDirect;
 
