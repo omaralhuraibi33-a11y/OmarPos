@@ -90,7 +90,7 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   // ==========================================
-  // دالة الطباعة المعدلة: بالترتيب الجديد للفاتورة والإجمالي وتاريخ الطباعة
+  // دالة الطباعة المحدثة: شعار المتجر باليسار، والاسم/العنوان/الهاتف باليمين، وتذييل شاشة المتجر
   // ==========================================
   Future<void> _printReceiptDirect({
     required String invoiceId,
@@ -121,10 +121,13 @@ class _PosScreenState extends State<PosScreen> {
       
       if (printers.isEmpty) return;
 
-      final storeName = await DBHelper.getSetting('store_name') ?? 'متجري';
-      final storePhone = await DBHelper.getSetting('store_phone') ?? '';
-      final taxNumber = await DBHelper.getSetting('tax_number') ?? '';
-      final invoiceFooter = await DBHelper.getSetting('invoice_footer') ?? 'شكرا لزيارتكم';
+      // جلب بيانات المتجر وتذييل الفاتورة من قاعدة البيانات
+      final storeName = await DBHelper.getSetting('store_name') ?? 'omarsoft';
+      final storePhone = await DBHelper.getSetting('store_phone') ?? '771987636';
+      final storeAddress = await DBHelper.getSetting('store_address') ?? 'شارع تونس - خلف محطة اليرموك';
+      final invoiceFooter = await DBHelper.getSetting('invoice_footer') ?? 'شكراً لزيارتكم! نأمل رؤيتكم مجدداً.';
+      final storeImagePath = await DBHelper.getSetting('store_image_path') ?? '';
+      
       final showItemCount = await DBHelper.getSetting('show_item_count') == 'true';
 
       final activeCart = customCart ?? _cart;
@@ -147,14 +150,12 @@ class _PosScreenState extends State<PosScreen> {
         attemptedPrintersCount++;
         final printerName = printer['name'] ?? 'طابعة';
         
-        // تحديد مقاس الورق (57 مم أو 80 مم)
         final String paperSizeStr = printer['paperSize'] ?? '80';
         final paperSizeVal = paperSizeStr == '57' ? PaperSize.mm58 : PaperSize.mm80;
         
         final double receiptWidth = paperSizeStr == '57' ? 384.0 : 576.0;
         final int targetImageWidth = paperSizeStr == '57' ? 384 : 576;
         
-        // جلب مقاس الخط ومعامل التكبير
         String fontSizeSetting = printer['fontSize'] ?? 'normal';
         double fontScale = 1.0;
         switch (fontSizeSetting) {
@@ -173,13 +174,12 @@ class _PosScreenState extends State<PosScreen> {
             break;
         }
 
-        // تجهيز اسم يوم الطباعة بالعربي مع التاريخ والوقت
         final now = DateTime.now();
         const daysInArabic = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
         final dayName = daysInArabic[now.weekday - 1];
         final formattedDateTime = '$dayName، ${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}  ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
-        // بناء ويدجت الإيصال
+        // بناء ويدجت الإيصال بتصميم رأس الفاتورة الجديد (الشعار يسار، الاسم والعنوان والهاتف يمين)
         final receiptWidget = Directionality(
           textDirection: TextDirection.rtl,
           child: Material(
@@ -191,15 +191,64 @@ class _PosScreenState extends State<PosScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(storeName, style: TextStyle(fontSize: 18 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
-                  if (storePhone.isNotEmpty) ...[
-                    SizedBox(height: 2 * fontScale),
-                    Text('هاتف: $storePhone', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
-                  ],
-                  if (taxNumber.isNotEmpty) ...[
-                    SizedBox(height: 2 * fontScale),
-                    Text('الرقم الضريبي: $taxNumber', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
-                  ],
+                  // رأس الفاتورة: الشعار في اليسار، والاسم والعنوان ورقم الهاتف في اليمين
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // جهة اليمين: اسم المتجر، العنوان، الهاتف
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              storeName,
+                              style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black),
+                            ),
+                            if (storeAddress.isNotEmpty) ...[
+                              SizedBox(height: 2 * fontScale),
+                              Text(
+                                storeAddress,
+                                style: TextStyle(fontSize: 10 * fontScale, color: Colors.black87),
+                              ),
+                            ],
+                            if (storePhone.isNotEmpty) ...[
+                              SizedBox(height: 2 * fontScale),
+                              Text(
+                                'هاتف: $storePhone',
+                                style: TextStyle(fontSize: 10 * fontScale, color: Colors.black87),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // جهة اليسار: شعار المتجر
+                      if (storeImagePath.isNotEmpty && File(storeImagePath).existsSync())
+                        Container(
+                          width: 50 * fontScale,
+                          height: 50 * fontScale,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            image: DecorationImage(
+                              image: FileImage(File(storeImagePath)),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          width: 45 * fontScale,
+                          height: 45 * fontScale,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.black12,
+                          ),
+                          child: Icon(Icons.storefront, size: 28 * fontScale, color: Colors.black54),
+                        ),
+                    ],
+                  ),
+
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   
                   if (isReturn) ...[
@@ -207,7 +256,7 @@ class _PosScreenState extends State<PosScreen> {
                     SizedBox(height: 4 * fontScale),
                   ],
 
-                  // ترتيب بيانات الفاتورة موزعة بين اليمين واليسار باحترافية
+                  // بيانات الفاتورة
                   Column(
                     children: [
                       Row(
@@ -229,7 +278,7 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   
-                  // جدول الأصناف المتمدد مع حجم الخط
+                  // جدول الأصناف
                   Container(
                     decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.0 * fontScale)),
                     child: Column(
@@ -292,7 +341,7 @@ class _PosScreenState extends State<PosScreen> {
                     SizedBox(height: 4 * fontScale),
                   ],
 
-                  // تعديل الإجمالي (بدون كلمة العام، الكلمة على اليمين والقيمة بجانبها على اليسار)
+                  // الإجمالي
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -301,7 +350,8 @@ class _PosScreenState extends State<PosScreen> {
                     ],
                   ),
                   SizedBox(height: 2 * fontScale),
-                  // طباعة يوم الطباعة والتاريخ والوقت تحته مباشرة
+                  
+                  // تاريخ ووقت الطباعة
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text('طبع في: $formattedDateTime', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black54)),
@@ -309,6 +359,8 @@ class _PosScreenState extends State<PosScreen> {
 
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   SizedBox(height: 4 * fontScale),
+                  
+                  // تذييل الفاتورة من شاشة بيانات المتجر
                   Text(invoiceFooter, textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
                   SizedBox(height: 10 * fontScale),
                 ],
@@ -390,7 +442,7 @@ class _PosScreenState extends State<PosScreen> {
         } else if (printedSuccessfully) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم الحفظ وطباعة الفاتورة بالشكل المطلوب بنجاح!'),
+              content: Text('تم الحفظ وطباعة الفاتورة بالتصميم الجديد بنجاح!'),
               backgroundColor: Colors.green,
             ),
           );
