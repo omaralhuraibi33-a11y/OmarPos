@@ -89,23 +89,8 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // دالة تحويل مقاس الخط من إعدادات الطابعة إلى PosTextSize الخاص بمكتبة الطباعة
-  PosTextSize _getPosTextSize(String sizeStr) {
-    switch (sizeStr) {
-      case 'medium':
-        return PosTextSize.size1;
-      case 'large':
-        return PosTextSize.size2;
-      case 'huge':
-        return PosTextSize.size3;
-      case 'normal':
-      default:
-        return PosTextSize.size1;
-    }
-  }
-
   // ==========================================
-  // دالة الطباعة المعدلة: تقرأ مقاس الخط من إعدادات الطابعة وتطبقه
+  // دالة الطباعة المعدلة: تأخذ حجم الخط من إعدادات الطابعة وتطبقه على الفاتورة
   // ==========================================
   Future<void> _printReceiptDirect({
     required String invoiceId,
@@ -159,17 +144,32 @@ class _PosScreenState extends State<PosScreen> {
         final bool isAutoPrint = printer['autoPrint'] ?? true;
         
         if (!isAutoPrint) continue;
-        if (usage != 'زبون' && usage != 'تقرير') continue; // تخصيص للعملاء
+        if (usage != 'زبون' && usage != 'تقرير') continue;
 
         attemptedPrintersCount++;
         final printerName = printer['name'] ?? 'طابعة';
         final paperSizeVal = printer['paperSize'] == '57' ? PaperSize.mm58 : PaperSize.mm80;
         
-        // جلب حجم الخط المخصص لهذه الطابعة من الإعدادات
+        // جلب مقاس الخط المختار للطابعة من الإعدادات وتحديد معامل التكبير (Font Scale)
         String fontSizeSetting = printer['fontSize'] ?? 'normal';
-        PosTextSize textSize = _getPosTextSize(fontSizeSetting);
+        double fontScale = 1.0;
+        switch (fontSizeSetting) {
+          case 'medium':
+            fontScale = 1.25; // متوسط
+            break;
+          case 'large':
+            fontScale = 1.5;  // كبير
+            break;
+          case 'huge':
+            fontScale = 2.0;  // ضخم
+            break;
+          case 'normal':
+          default:
+            fontScale = 1.0;  // عادي
+            break;
+        }
 
-        // بناء ويدجت الإيصال مع تطبيق مقاس الخط المختار
+        // بناء ويدجت الإيصال مع تطبيق معامل التكبير على جميع أحجام الخطوط
         final receiptWidget = Directionality(
           textDirection: TextDirection.rtl,
           child: Material(
@@ -181,19 +181,19 @@ class _PosScreenState extends State<PosScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(storeName, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 24 : (textSize == PosTextSize.size2 ? 20 : 16), fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text(storeName, style: TextStyle(fontSize: 18 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   if (storePhone.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text('هاتف: $storePhone', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                    Text('هاتف: $storePhone', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
                   ],
                   if (taxNumber.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text('الرقم الضريبي: $taxNumber', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                    Text('الرقم الضريبي: $taxNumber', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
                   ],
-                  const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                  Text('------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   
                   if (isReturn) ...[
-                    const Text('*** سند مرتجع مبيعات ***', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('*** سند مرتجع مبيعات ***', style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                     const SizedBox(height: 4),
                   ],
 
@@ -202,19 +202,17 @@ class _PosScreenState extends State<PosScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('رقم الفاتورة: $invoiceId', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
-                        Text('العميل: $activeCustomer', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
-                        Text('طريقة الدفع: $paymentMethod', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
-                        Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, color: Colors.black)),
+                        Text('رقم الفاتورة: $invoiceId', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                        Text('العميل: $activeCustomer', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                        Text('طريقة الدفع: $paymentMethod', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                        Text('التاريخ: ${DateTime.now().toString().split('.')[0]}', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                       ],
                     ),
                   ),
-                  const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                  Text('------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   
                   Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.black, width: 1),
-                    ),
+                    decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1)),
                     child: Column(
                       children: [
                         Container(
@@ -223,13 +221,13 @@ class _PosScreenState extends State<PosScreen> {
                           ),
                           child: Row(
                             children: [
-                              Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الصنف', textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                              Container(width: 1, height: 24, color: Colors.black),
-                              Expanded(flex: 1, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الكمية', textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                              Container(width: 1, height: 24, color: Colors.black),
-                              Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('السعر', textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
-                              Container(width: 1, height: 24, color: Colors.black),
-                              Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الإجمالي', textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                              Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الصنف', textAlign: TextAlign.center, style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)))),
+                              Container(width: 1, height: 24 * fontScale, color: Colors.black),
+                              Expanded(flex: 1, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الكمية', textAlign: TextAlign.center, style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)))),
+                              Container(width: 1, height: 24 * fontScale, color: Colors.black),
+                              Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('السعر', textAlign: TextAlign.center, style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)))),
+                              Container(width: 1, height: 24 * fontScale, color: Colors.black),
+                              Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text('الإجمالي', textAlign: TextAlign.center, style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)))),
                             ],
                           ),
                         ),
@@ -243,19 +241,19 @@ class _PosScreenState extends State<PosScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(item.product.name, textAlign: TextAlign.right, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                                    Expanded(flex: 3, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(item.product.name, textAlign: TextAlign.right, style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)))),
                                     Container(width: 1, color: Colors.black38),
-                                    Expanded(flex: 1, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.quantity), textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, color: Colors.black)))),
+                                    Expanded(flex: 1, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.quantity), textAlign: TextAlign.center, style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)))),
                                     Container(width: 1, color: Colors.black38),
-                                    Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.unitPrice), textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, color: Colors.black)))),
+                                    Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.unitPrice), textAlign: TextAlign.center, style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)))),
                                     Container(width: 1, color: Colors.black38),
-                                    Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.total), textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 15 : 11, fontWeight: FontWeight.bold, color: Colors.black)))),
+                                    Expanded(flex: 2, child: Padding(padding: const EdgeInsets.all(4.0), child: Text(_formatNum(item.total), textAlign: TextAlign.center, style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)))),
                                   ],
                                 ),
                                 if (item.preparationNotes.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(right: 6.0, bottom: 2.0),
-                                    child: Text('ملاحظات: ${item.preparationNotes}', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 13 : 9, fontStyle: FontStyle.italic, color: Colors.black)),
+                                    child: Text('ملاحظات: ${item.preparationNotes}', style: TextStyle(fontSize: 9 * fontScale, fontStyle: FontStyle.italic, color: Colors.black)),
                                   ),
                               ],
                             ),
@@ -265,12 +263,12 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                   ),
 
-                  const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                  Text('------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
 
                   if (showItemCount) ...[
                     Align(
                       alignment: Alignment.centerRight,
-                      child: Text('إجمالي عدد الأصناف: ${_formatNum(activeCart.fold(0.0, (sum, i) => sum + i.quantity))}', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, fontWeight: FontWeight.bold, color: Colors.black)),
+                      child: Text('إجمالي عدد الأصناف: ${_formatNum(activeCart.fold(0.0, (sum, i) => sum + i.quantity))}', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                     ),
                     const SizedBox(height: 4),
                   ],
@@ -278,13 +276,13 @@ class _PosScreenState extends State<PosScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(_formatNum(activeTotal), style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 20 : 16, fontWeight: FontWeight.bold, color: Colors.black)),
-                      Text('الإجمالي العام:', style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 18 : 14, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text(_formatNum(activeTotal), style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('الإجمالي العام:', style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                     ],
                   ),
-                  const Text('------------------------------------------------', style: TextStyle(fontSize: 10, color: Colors.black)),
+                  Text('------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   const SizedBox(height: 4),
-                  Text(invoiceFooter, textAlign: TextAlign.center, style: TextStyle(fontSize: textSize == PosTextSize.size3 ? 16 : 12, color: Colors.black)),
+                  Text(invoiceFooter, textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
                   const SizedBox(height: 10),
                 ],
               ),
@@ -1014,8 +1012,8 @@ class _PosScreenState extends State<PosScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(_isReturnMode ? 'الصنف المراد إرجاعه' : 'الصنف / الملاحظات', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const Text('العدد', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const Text('الإجمالي', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Text('العدد', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),
