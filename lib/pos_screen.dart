@@ -226,10 +226,10 @@ class _PosScreenState extends State<PosScreen> {
                       // جهة اليسار: شعار المتجر
                       if (storeImagePath.isNotEmpty && File(storeImagePath).existsSync())
                         Container(
-                          width: 50 * fontScale,
-                          height: 50 * fontScale,
+                          width: 70 * fontScale,
+                          height: 70 * fontScale,
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
+                            shape: BoxShape.square,
                             image: DecorationImage(
                               image: FileImage(File(storeImagePath)),
                               fit: BoxFit.cover,
