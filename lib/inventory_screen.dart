@@ -13,17 +13,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
   List<Product> _products = [];
   bool _isLoading = true;
 
-  // ألوان جاهزة لاختيار لون المجموعة
-  final List<Color> _colorOptions = [
-    Colors.blue,
-    Colors.red,
-    Colors.green,
-    Colors.orange,
-    Colors.purple,
-    Colors.teal,
-    Colors.brown,
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -41,98 +30,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
     });
   }
 
-  // ==================== 1. إدارة المجموعات ====================
-  void _showCategoryDialog({Category? category}) {
-    final isEditing = category != null;
-    final nameController = TextEditingController(text: category?.name ?? '');
-    String selectedColorHex = category?.colorHex ?? '0xFF2196F3';
-    bool isKitchenPrint = category?.isKitchenPrint ?? false;
-    bool isActive = category?.isActive ?? true;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(isEditing ? 'تعديل مجموعة' : 'إضافة مجموعة جديدة'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'اسم المجموعة *'),
-                ),
-                const SizedBox(height: 15),
-                const Text('لون المجموعة:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 10,
-                  children: _colorOptions.map((color) {
-                    final colorHex = '0x${color.value.toRadixString(16).toUpperCase()}';
-                    final isSelected = selectedColorHex == colorHex;
-                    return GestureDetector(
-                      onTap: () {
-                        setDialogState(() => selectedColorHex = colorHex);
-                      },
-                      child: CircleAvatar(
-                        backgroundColor: color,
-                        radius: 18,
-                        child: isSelected ? const Icon(Icons.check, color: Colors.white) : null,
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 15),
-                SwitchListTile(
-                  title: const Text('طباعة المطبخ'),
-                  value: isKitchenPrint,
-                  onChanged: (val) => setDialogState(() => isKitchenPrint = val),
-                ),
-                SwitchListTile(
-                  title: const Text('نشط (تظهر في نقطة البيع)'),
-                  value: isActive,
-                  onChanged: (val) => setDialogState(() => isActive = val),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.trim().isEmpty) return;
-                final cat = Category(
-                  id: isEditing ? category.id : DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameController.text.trim(),
-                  colorHex: selectedColorHex,
-                  isKitchenPrint: isKitchenPrint,
-                  isActive: isActive,
-                );
-                await DBHelper.saveCategory(cat);
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  _loadData();
-                }
-              },
-              child: Text(isEditing ? 'تحديث' : 'حفظ'),
-            ),
-          ],
-        ),
+  // الانتقال إلى شاشة إضافة أو تعديل مجموعة (شاشة كاملة)
+  void _navigateToCategoryForm({Category? category}) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CategoryFormScreen(category: category),
       ),
     );
+    // إذا تم الحفظ بنجاح، نقوم بتحديث البيانات
+    if (result == true) {
+      _loadData();
+    }
   }
 
-  // ==================== 2. إدارة الأصناف ====================
-  void _showProductDialog({Product? product}) {
-    final isEditing = product != null;
-    final nameController = TextEditingController(text: product?.name ?? '');
-    final purchasePriceController = TextEditingController(text: product?.purchasePrice.toString() ?? '0.0');
-    final sellPriceController = TextEditingController(text: product?.sellPrice.toString() ?? '0.0');
-    final quantityController = TextEditingController(text: product?.quantity.toString() ?? '0.0');
-    String selectedCatId = product?.categoryId ?? (_categories.isNotEmpty ? _categories.first.id : '');
-    bool isActive = product?.isActive ?? true;
-
+  // الانتقال إلى شاشة إضافة أو تعديل صنف (شاشة كاملة)
+  void _navigateToProductForm({Product? product}) async {
     if (_categories.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('يرجى إضافة مجموعة أولاً قبل إضافة صنف')),
@@ -140,78 +53,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
       return;
     }
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(isEditing ? 'تعديل صنف' : 'إضافة صنف جديد'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'اسم الصنف *'),
-                ),
-                DropdownButtonFormField<String>(
-                  value: selectedCatId.isNotEmpty ? selectedCatId : null,
-                  decoration: const InputDecoration(labelText: 'المجموعة *'),
-                  items: _categories.map((cat) {
-                    return DropdownMenuItem(value: cat.id, child: Text(cat.name));
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => selectedCatId = val);
-                  },
-                ),
-                TextField(
-                  controller: purchasePriceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'سعر الشراء'),
-                ),
-                TextField(
-                  controller: sellPriceController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'سعر البيع'),
-                ),
-                TextField(
-                  controller: quantityController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'الكمية الحالية'),
-                ),
-                SwitchListTile(
-                  title: const Text('نشط (تظهر في نقطة البيع)'),
-                  value: isActive,
-                  onChanged: (val) => setDialogState(() => isActive = val),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
-            ElevatedButton(
-              onPressed: () async {
-                if (nameController.text.trim().isEmpty || selectedCatId.isEmpty) return;
-                final prod = Product(
-                  id: isEditing ? product.id : DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameController.text.trim(),
-                  categoryId: selectedCatId,
-                  purchasePrice: double.tryParse(purchasePriceController.text.trim()) ?? 0.0,
-                  sellPrice: double.tryParse(sellPriceController.text.trim()) ?? 0.0,
-                  quantity: double.tryParse(quantityController.text.trim()) ?? 0.0,
-                  isActive: isActive,
-                );
-                await DBHelper.saveProduct(prod);
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  _loadData();
-                }
-              },
-              child: Text(isEditing ? 'تحديث' : 'حفظ'),
-            ),
-          ],
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductFormScreen(
+          product: product,
+          categories: _categories,
         ),
       ),
     );
+    // إذا تم الحفظ بنجاح، نقوم بتحديث البيانات
+    if (result == true) {
+      _loadData();
+    }
   }
 
   @override
@@ -247,7 +101,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Widget _buildCategoriesTab() {
     return Scaffold(
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showCategoryDialog(),
+        onPressed: () => _navigateToCategoryForm(),
         child: const Icon(Icons.add),
       ),
       body: _categories.isEmpty
@@ -268,7 +122,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _showCategoryDialog(category: cat),
+                          onPressed: () => _navigateToCategoryForm(category: cat),
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
@@ -290,7 +144,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Widget _buildProductsTab() {
     return Scaffold(
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showProductDialog(),
+        onPressed: () => _navigateToProductForm(),
         child: const Icon(Icons.add),
       ),
       body: _products.isEmpty
@@ -312,7 +166,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         Icon(Icons.circle, color: prod.isActive ? Colors.green : Colors.grey, size: 14),
                         IconButton(
                           icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _showProductDialog(product: prod),
+                          onPressed: () => _navigateToProductForm(product: prod),
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
@@ -354,6 +208,260 @@ class _InventoryScreenState extends State<InventoryScreen> {
             )),
           ]);
         }).toList(),
+      ),
+    );
+  }
+}
+
+// ==================== شاشة إضافة / تعديل مجموعة (شاشة كاملة) ====================
+class CategoryFormScreen extends StatefulWidget {
+  final Category? category;
+  const CategoryFormScreen({Key? key, this.category}) : super(key: key);
+
+  @override
+  State<CategoryFormScreen> createState() => _CategoryFormScreenState();
+}
+
+class _CategoryFormScreenState extends State<CategoryFormScreen> {
+  late final TextEditingController _nameController;
+  late String _selectedColorHex;
+  late bool _isKitchenPrint;
+  late bool _isActive;
+
+  final List<Color> _colorOptions = [
+    Colors.blue,
+    Colors.red,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.teal,
+    Colors.brown,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.category?.name ?? '');
+    _selectedColorHex = widget.category?.colorHex ?? '0xFF2196F3';
+    _isKitchenPrint = widget.category?.isKitchenPrint ?? false;
+    _isActive = widget.category?.isActive ?? true;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.category != null;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isEditing ? 'تعديل مجموعة' : 'إضافة مجموعة جديدة'),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'اسم المجموعة *',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text('لون المجموعة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 12,
+              children: _colorOptions.map((color) {
+                final colorHex = '0x${color.value.toRadixString(16).toUpperCase()}';
+                final isSelected = _selectedColorHex == colorHex;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedColorHex = colorHex),
+                  child: CircleAvatar(
+                    backgroundColor: color,
+                    radius: 20,
+                    child: isSelected ? const Icon(Icons.check, color: Colors.white) : null,
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+            SwitchListTile(
+              title: const Text('طباعة المطبخ'),
+              value: _isKitchenPrint,
+              onChanged: (val) => setState(() => _isKitchenPrint = val),
+            ),
+            SwitchListTile(
+              title: const Text('نشط (تظهر في نقطة البيع)'),
+              value: _isActive,
+              onChanged: (val) => setState(() => _isActive = val),
+            ),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () async {
+                  if (_nameController.text.trim().isEmpty) return;
+                  final cat = Category(
+                    id: isEditing ? widget.category!.id : DateTime.now().millisecondsSinceEpoch.toString(),
+                    name: _nameController.text.trim(),
+                    colorHex: _selectedColorHex,
+                    isKitchenPrint: _isKitchenPrint,
+                    isActive: _isActive,
+                  );
+                  await DBHelper.saveCategory(cat);
+                  if (mounted) {
+                    Navigator.pop(context, true); // العودة مع تحديث البيانات
+                  }
+                },
+                child: Text(isEditing ? 'تحديث المجموعة' : 'حفظ المجموعة', style: const TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== شاشة إضافة / تعديل صنف (شاشة كاملة) ====================
+class ProductFormScreen extends StatefulWidget {
+  final Product? product;
+  final List<Category> categories;
+
+  const ProductFormScreen({Key? key, this.product, required this.categories}) : super(key: key);
+
+  @override
+  State<ProductFormScreen> createState() => _ProductFormScreenState();
+}
+
+class _ProductFormScreenState extends State<ProductFormScreen> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _purchasePriceController;
+  late final TextEditingController _sellPriceController;
+  late final TextEditingController _quantityController;
+  late String _selectedCatId;
+  late bool _isActive;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.product?.name ?? '');
+    _purchasePriceController = TextEditingController(text: widget.product?.purchasePrice.toString() ?? '0.0');
+    _sellPriceController = TextEditingController(text: widget.product?.sellPrice.toString() ?? '0.0');
+    _quantityController = TextEditingController(text: widget.product?.quantity.toString() ?? '0.0');
+    _selectedCatId = widget.product?.categoryId ?? (widget.categories.isNotEmpty ? widget.categories.first.id : '');
+    _isActive = widget.product?.isActive ?? true;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _purchasePriceController.dispose();
+    _sellPriceController.dispose();
+    _quantityController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditing = widget.product != null;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isEditing ? 'تعديل صنف' : 'إضافة صنف جديد'),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'اسم الصنف *',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _selectedCatId.isNotEmpty ? _selectedCatId : null,
+              decoration: const InputDecoration(
+                labelText: 'المجموعة *',
+                border: OutlineInputBorder(),
+              ),
+              items: widget.categories.map((cat) {
+                return DropdownMenuItem(value: cat.id, child: Text(cat.name));
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedCatId = val);
+              },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _purchasePriceController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'سعر الشراء',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _sellPriceController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'سعر البيع',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _quantityController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'الكمية الحالية',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              title: const Text('نشط (تظهر في نقطة البيع)'),
+              value: _isActive,
+              onChanged: (val) => setState(() => _isActive = val),
+            ),
+            const SizedBox(height: 30),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () async {
+                  if (_nameController.text.trim().isEmpty || _selectedCatId.isEmpty) return;
+                  final prod = Product(
+                    id: isEditing ? widget.product!.id : DateTime.now().millisecondsSinceEpoch.toString(),
+                    name: _nameController.text.trim(),
+                    categoryId: _selectedCatId,
+                    purchasePrice: double.tryParse(_purchasePriceController.text.trim()) ?? 0.0,
+                    sellPrice: double.tryParse(_sellPriceController.text.trim()) ?? 0.0,
+                    quantity: double.tryParse(_quantityController.text.trim()) ?? 0.0,
+                    isActive: _isActive,
+                  );
+                  await DBHelper.saveProduct(prod);
+                  if (mounted) {
+                    Navigator.pop(context, true); // العودة مع تحديث البيانات
+                  }
+                },
+                child: Text(isEditing ? 'تحديث الصنف' : 'حفظ الصنف', style: const TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
