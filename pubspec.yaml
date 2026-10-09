@@ -21,6 +21,8 @@ dependencies:
   file_selector: ^1.0.3
   screenshot: ^3.0.0 # أو أحدث إصدار
   image: ^4.1.5 # أو أحدث إصدار متوافق
+  pdf: ^3.10.4
+  printing: ^5.11.1
 
 dev_dependencies:
   flutter_test:
