@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'db_helper.dart';
 
 class FinancialReportScreen extends StatefulWidget {
@@ -15,7 +18,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   double _totalSales = 0.0;             // إجمالي المبيعات
   double _salesCost = 0.0;              // تكلفة المبيعات
   double _totalPurchases = 0.0;         // إجمالي المشتريات
-  double _totalRevenues = 0.0;          // إجمالي الإيرادات (للعرض فقط في البطاقة ولا تدخل في حساب الربح)
+  double _totalRevenues = 0.0;          // إجمالي الإيرادات
   double _totalExpenses = 0.0;          // إجمالي المصروفات
   double _suppliersBalance = 0.0;       // إجمالي الباقي للموردين
   double _customersBalance = 0.0;       // إجمالي الباقي على العملاء
@@ -65,8 +68,101 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   // 1. صافي المبيعات (إجمالي المبيعات - المرتجعات)
   double get _actualNetSales => _totalSales - _salesReturns;
 
-  // 2. المعادلة المطلوبة للأرباح والخسائر: (صافي المبيعات - تكلفة المبيعات - المصروفات)
+  // 2. صافي الربح / الخسارة
   double get _netProfit => _actualNetSales - _salesCost - _totalExpenses;
+
+  // دالة تصدير وحفظ التقرير كـ PDF وتنزيله على الجهاز أو مشاركته
+  Future<void> _exportToPdf() async {
+    final pdf = pw.Document();
+
+    // دعم الخط العربي
+    final font = await PdfGoogleFonts.cairoRegular();
+    final fontBold = await PdfGoogleFonts.cairoBold();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Directionality(
+            textDirection: pw.TextDirection.rtl,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Center(
+                  child: pw.Text(
+                    'التقرير المالي العام',
+                    style: pw.TextStyle(font: fontBold, fontSize: 24, color: PdfColors.teal900),
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Center(
+                  child: pw.Text(
+                    'تاريخ التقرير: ${DateTime.now().toLocal().toString().split(' ')[0]}',
+                    style: pw.TextStyle(font: font, fontSize: 12, color: PdfColors.grey700),
+                  ),
+                ),
+                pw.SizedBox(height: 20),
+
+                // صندوق صافي الربح أو الخسارة داخل الـ PDF
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: _netProfit >= 0 ? PdfColors.green800 : PdfColors.red800,
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text(
+                        _netProfit >= 0 ? 'صافي الربح' : 'صافي الخسارة',
+                        style: pw.TextStyle(font: fontBold, fontSize: 16, color: PdfColors.white),
+                      ),
+                      pw.SizedBox(height: 5),
+                      pw.Text(
+                        _netProfit.toStringAsFixed(2),
+                        style: pw.TextStyle(font: fontBold, fontSize: 22, color: PdfColors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 20),
+
+                pw.Text('تفاصيل الحركات المالية:', style: pw.TextStyle(font: fontBold, fontSize: 16)),
+                pw.SizedBox(height: 10),
+
+                // جدول البيانات المالية
+                pw.Table.fromTextArray(
+                  context: context,
+                  cellStyle: pw.TextStyle(font: font, fontSize: 11),
+                  headerStyle: pw.TextStyle(font: fontBold, fontSize: 12, color: PdfColors.white),
+                  headerDecoration: const pw.BoxDecoration(color: PdfColors.teal700),
+                  data: <List<String>>[
+                    ['المؤشر المالي', 'القيمة'],
+                    ['إجمالي المبيعات', _totalSales.toStringAsFixed(2)],
+                    ['إجمالي مردود المبيعات', _salesReturns.toStringAsFixed(2)],
+                    ['صافي المبيعات', _actualNetSales.toStringAsFixed(2)],
+                    ['تكلفة المبيعات', _salesCost.toStringAsFixed(2)],
+                    ['إجمالي المشتريات', _totalPurchases.toStringAsFixed(2)],
+                    ['إجمالي مردود المشتريات', _purchasesReturns.toStringAsFixed(2)],
+                    ['إجمالي الإيرادات', _totalRevenues.toStringAsFixed(2)],
+                    ['إجمالي المصروفات', _totalExpenses.toStringAsFixed(2)],
+                    ['الباقي على العملاء', _customersBalance.toStringAsFixed(2)],
+                    ['الباقي للموردين', _suppliersBalance.toStringAsFixed(2)],
+                    ['الصندوق الرئيسي', _mainVaultBalance.toStringAsFixed(2)],
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    // تفتح واجهة الحفظ/المشاركة ليتمكن المستخدم من تنزيل الـ PDF على جهازه
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'financial_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +171,13 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
         title: const Text('التقرير المالي العام'),
         centerTitle: true,
         actions: [
+          // زر تصدير التقرير PDF
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'تصدير كـ PDF',
+            onPressed: _exportToPdf,
+          ),
+          // زر تحديث البيانات
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'تحديث البيانات',
@@ -91,9 +194,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
                   children: [
-                    // كارت الأرباح والخسارة حسب رغبتك الدقيقة
                     _buildNetProfitCard(),
-
                     const SizedBox(height: 16),
                     const Align(
                       alignment: Alignment.centerRight,
@@ -103,8 +204,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-
-                    // شبكة المؤشرات المالية
                     GridView.count(
                       crossAxisCount: 2,
                       crossAxisSpacing: 10,
@@ -133,7 +232,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
-  // كارت يعرض المعادلة المخصصة تماماً كما طلبته
   Widget _buildNetProfitCard() {
     final isProfit = _netProfit >= 0;
     return Card(
@@ -169,7 +267,6 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               ),
             ),
             const Divider(color: Colors.white54, height: 24),
-            // تسلسل الخطوات حسب ما طلبته حرفياً:
             Column(
               children: [
                 _buildEquationRow('إجمالي المبيعات:', _totalSales),
