@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:file_selector/file_selector.dart'; // استبدال مكتبة اختيار الملفات
+import 'package:file_selector/file_selector.dart'; // مكتبة اختيار الملفات والمجلدات
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:omar_pos/db_helper.dart';
@@ -184,6 +184,47 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
     }
   }
 
+  /// زر جديد: استرجاع نسخة احتياطية من أي ملف خارجي في الجهاز (من جهاز آخر)
+  Future<void> _restoreFromFile() async {
+    try {
+      // السماح للمستخدم باختيار ملفات بصيغة db أو أي ملف
+      const XTypeGroup typeGroup = XTypeGroup(
+        label: 'Database files',
+        extensions: <String>['db'],
+      );
+      
+      final XFile? pickedFile = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+
+      if (pickedFile != null) {
+        // تأكيد الاستعادة قبل التنفيذ لأنها ستقوم بالكتابة فوق البيانات الحالية
+        bool? confirm = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('تأكيد الاستعادة'),
+            content: Text('هل أنت متأكد من استعادة البيانات من الملف:\n${pickedFile.name}؟\nسيتم استبدال البيانات الحالية بالكامل!'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('إلغاء')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('استبدال واستعادة', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+
+        if (confirm == true) {
+          await _performRestore(pickedFile.path);
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في اختيار الملف: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   /// تنفيذ استبدال قاعدة البيانات بالملف المختار
   Future<void> _performRestore(String selectedFilePath) async {
     setState(() => _isProcessing = true);
@@ -192,9 +233,13 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
       final dbPath = await getDatabasesPath();
       final currentDbPath = p.join(dbPath, 'omar_pos.db');
 
-      final db = await openDatabase(currentDbPath);
-      await db.close();
+      // إغلاق اتصال قاعدة البيانات الحالي إن وجد لمنع حدوث قفل للملف
+      try {
+        final db = await openDatabase(currentDbPath);
+        await db.close();
+      } catch (_) {}
 
+      // نسخ الملف المختار إلى مسار قاعدة بيانات التطبيق الأساسية
       await selectedFile.copy(currentDbPath);
 
       if (!mounted) return;
@@ -202,6 +247,7 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
         const SnackBar(
           content: Text('تمت استعادة النسخة الاحتياطية بنجاح! يُفضل إعادة تشغيل التطبيق.'),
           backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
         ),
       );
     } catch (e) {
@@ -250,9 +296,19 @@ class _BackupSettingsScreenState extends State<BackupSettingsScreen> {
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.cloud_download, color: Colors.green),
-                    title: const Text('استعادة نسخة احتياطية'),
-                    subtitle: const Text('اختيار ملف قاعدة البيانات والمرتجع لاسترجاع بياناته'),
+                    title: const Text('استعادة من مجلد النسخ'),
+                    subtitle: const Text('اختيار نسخة من المجلد الافتراضي أو المخصص للتطبيق'),
                     onTap: _restoreBackup,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // زر الاسترجاع من ملف خارجي (من جهاز آخر)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.folder_open, color: Colors.deepOrange),
+                    title: const Text('استرجاع من ملف خارجي'),
+                    subtitle: const Text('اختيار ملف قاعدة بيانات من الذاكرة أو من جهاز آخر (.db)'),
+                    onTap: _restoreFromFile,
                   ),
                 ),
               ],
