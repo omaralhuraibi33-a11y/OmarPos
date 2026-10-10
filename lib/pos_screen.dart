@@ -34,6 +34,7 @@ class _PosScreenState extends State<PosScreen> {
   bool _isInvoiceExpanded = false;
   bool _isProductsFullScreen = false;
   bool _isReturnMode = false;
+  bool _isCustomerBarExpanded = true; // متغير لطي أو إظهار شريط العميل والبحث في الوضعين
 
   List<Category> _categories = [];
   List<Product> _allProducts = [];
@@ -946,7 +947,7 @@ class _PosScreenState extends State<PosScreen> {
                 final bool isLandscape = orientation == Orientation.landscape;
 
                 if (isLandscape) {
-                  // الوضع الأفقي: تقسيم الشاشة يمين ويسار لاستغلال المساحة ورؤية الأصناف بشكل كامل وسلس
+                  // الوضع الأفقي: تقسيم الشاشة يمين ويسار مع إمكانية طي شريط العميل والبحث
                   return Row(
                     children: [
                       // قسم المنتجات والبحث (يسار)
@@ -954,45 +955,65 @@ class _PosScreenState extends State<PosScreen> {
                         flex: 6,
                         child: Column(
                           children: [
-                            Container(
-                              color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              child: Row(
-                                children: [
-                                  Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, size: 18, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
-                                  const SizedBox(width: 4),
-                                  Text('${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                  TextButton(
-                                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(40, 20)),
-                                    onPressed: _selectCustomerDialog,
-                                    child: const Text('تغيير', style: TextStyle(fontSize: 11)),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: SizedBox(
-                                      height: 36,
-                                      child: TextField(
-                                        controller: _searchController,
-                                        onChanged: _filterProducts,
-                                        decoration: InputDecoration(
-                                          hintText: 'بحث باسم الصنف أو الباركود...',
-                                          hintStyle: const TextStyle(fontSize: 11),
-                                          prefixIcon: const Icon(Icons.search, size: 16),
-                                          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                            if (_isCustomerBarExpanded)
+                              Container(
+                                color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, size: 18, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
+                                    const SizedBox(width: 4),
+                                    Text('${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    TextButton(
+                                      style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(40, 20)),
+                                      onPressed: _selectCustomerDialog,
+                                      child: const Text('تغيير', style: TextStyle(fontSize: 11)),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: SizedBox(
+                                        height: 36,
+                                        child: TextField(
+                                          controller: _searchController,
+                                          onChanged: _filterProducts,
+                                          decoration: InputDecoration(
+                                            hintText: 'بحث باسم الصنف أو الباركود...',
+                                            hintStyle: const TextStyle(fontSize: 11),
+                                            prefixIcon: const Icon(Icons.search, size: 16),
+                                            contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
+                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                          ),
                                         ),
                                       ),
                                     ),
+                                    IconButton(
+                                      icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, size: 20, color: Colors.indigo),
+                                      onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+                                      tooltip: 'طي شريط العميل والبحث',
+                                      onPressed: () => setState(() => _isCustomerBarExpanded = false),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              InkWell(
+                                onTap: () => setState(() => _isCustomerBarExpanded = true),
+                                child: Container(
+                                  height: 20,
+                                  width: double.infinity,
+                                  color: Colors.grey.shade300,
+                                  child: const Center(
+                                    child: Icon(Icons.keyboard_arrow_down, size: 16),
                                   ),
-                                  IconButton(
-                                    icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, size: 20, color: Colors.indigo),
-                                    onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
                             if (_isTouchMode)
                               Container(
                                 height: 38,
@@ -1050,27 +1071,45 @@ class _PosScreenState extends State<PosScreen> {
                     ],
                   );
                 } else {
-                  // الوضع الطولي: التصميم الأساسي (فوق وتحت مع السهم للطي)
+                  // الوضع الطولي: التصميم مع إمكانية طي شريط العميل وتغيير العميل والبحث
                   return Column(
                     children: [
-                      Container(
-                        color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        child: Row(
-                          children: [
-                            Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
-                            const SizedBox(width: 8),
-                            Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                            const Spacer(),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
-                              onPressed: _selectCustomerDialog,
-                              icon: const Icon(Icons.person_add, size: 18),
-                              label: const Text('تغيير العميل'),
+                      if (_isCustomerBarExpanded)
+                        Container(
+                          color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          child: Row(
+                            children: [
+                              Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
+                              const SizedBox(width: 8),
+                              Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                              const Spacer(),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                                onPressed: _selectCustomerDialog,
+                                icon: const Icon(Icons.person_add, size: 18),
+                                label: const Text('تغيير العميل'),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+                                tooltip: 'طي شريط العميل',
+                                onPressed: () => setState(() => _isCustomerBarExpanded = false),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        InkWell(
+                          onTap: () => setState(() => _isCustomerBarExpanded = true),
+                          child: Container(
+                            height: 20,
+                            width: double.infinity,
+                            color: Colors.grey.shade300,
+                            child: const Center(
+                              child: Icon(Icons.keyboard_arrow_down, size: 16),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
                       Expanded(
                         child: Column(
                           children: [
