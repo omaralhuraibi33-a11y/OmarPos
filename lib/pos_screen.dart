@@ -95,7 +95,7 @@ class _PosScreenState extends State<PosScreen> {
     List<CartItem>? customCart,
     String? customerName,
     double? customTotal,
-    double discountAmount = 0.0, // إضافة مبلغ الخصم للطباعة
+    double discountAmount = 0.0,
     bool isReturn = false,
   }) async {
     try {
@@ -299,8 +299,6 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                     SizedBox(height: 4 * fontScale),
                   ],
-                  
-                  // --- قسم الإجمالي، الخصم، وصافي الإجمالي في الفاتورة المطبوعة ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -324,8 +322,6 @@ class _PosScreenState extends State<PosScreen> {
                       Text(_formatNum(activeNetTotal), style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                     ],
                   ),
-                  // -------------------------------------------------------------
-
                   SizedBox(height: 4 * fontScale),
                   Align(
                     alignment: Alignment.centerRight,
@@ -642,9 +638,6 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // ==========================================
-  // نافذة إتمام الدفع مع الخصم والصافي والباقي
-  // ==========================================
   void _showPaymentDialog() {
     String selectedMethod = _isCashCustomer ? 'نقدي' : (_paymentMethods.isNotEmpty ? _paymentMethods.first : 'نقدي');
     final TextEditingController discountController = TextEditingController(text: '0');
@@ -672,7 +665,6 @@ class _PosScreenState extends State<PosScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // إجمالي الفاتورة
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -681,8 +673,6 @@ class _PosScreenState extends State<PosScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-
-                  // مربع الخصم
                   TextField(
                     controller: discountController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -693,7 +683,6 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                     onChanged: (val) {
                       setDlgState(() {
-                        // تحديث المبلغ المدفوع تلقائياً بناءً على الصافي الجديد إذا لزم الأمر
                         double newDiscount = double.tryParse(val) ?? 0.0;
                         double newNet = total - newDiscount;
                         if (newNet < 0) newNet = 0;
@@ -702,8 +691,6 @@ class _PosScreenState extends State<PosScreen> {
                     },
                   ),
                   const SizedBox(height: 10),
-
-                  // صافي الإجمالي بعد الخصم
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -722,7 +709,6 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-
                   Text('العميل الحالي: ${_selectedCustomer?.name ?? "عميل نقدي"}'),
                   if (_isCashCustomer)
                     const Padding(
@@ -730,8 +716,6 @@ class _PosScreenState extends State<PosScreen> {
                       child: Text('تنبيه: العميل النقدي لا يقبل سوى الدفع النقدي.', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
                   const SizedBox(height: 8),
-
-                  // طريقة الدفع
                   DropdownButtonFormField<String>(
                     value: availableMethods.contains(selectedMethod) ? selectedMethod : availableMethods.first,
                     decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'طريقة الدفع'),
@@ -742,8 +726,6 @@ class _PosScreenState extends State<PosScreen> {
                       }
                     },
                   ),
-
-                  // مربعات المبلغ المدفوع والباقي (إذا كان الدفع نقدياً)
                   if (selectedMethod == 'نقدي') ...[
                     const SizedBox(height: 12),
                     TextField(
@@ -801,7 +783,7 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _processCheckout(String paymentMethod, double finalAmount, double discountAmount) async {
     final cartSnapshot = List<CartItem>.from(_cart);
-    final totalSnapshot = finalAmount; // اعتماد صافي الإجمالي بعد الخصم
+    final totalSnapshot = finalAmount;
     final customerNameSnapshot = _selectedCustomer?.name ?? 'عميل نقدي';
     
     final now = DateTime.now().toString().split('.')[0];
@@ -1100,17 +1082,26 @@ class _PosScreenState extends State<PosScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    prod.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: itemFontSize, color: Colors.white),
+                  Expanded(
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          prod.name,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: itemFontSize, color: Colors.white),
+                        ),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4)),
-                    child: Text(_formatNum(prod.sellPrice), style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: itemFontSize - 1)),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      _formatNum(prod.sellPrice),
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: itemFontSize - 1),
+                    ),
                   ),
                 ],
               ),
@@ -1300,9 +1291,6 @@ class _PosScreenState extends State<PosScreen> {
   }
 }
 
-// ==========================================
-// صفحة سجل الفواتير والمرتجعات (شاشة كاملة)
-// ==========================================
 class InvoicesHistoryPage extends StatefulWidget {
   final List<Invoice> salesInvoices;
   final List<Invoice> returnInvoices;
@@ -1487,7 +1475,6 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
                 ),
               ),
               const SizedBox(height: 8),
-
               Container(
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF2A2A3D) : Colors.white,
@@ -1525,7 +1512,6 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
                 ),
               ),
               const SizedBox(height: 10),
-
               Expanded(
                 child: TabBarView(
                   children: [
@@ -1721,9 +1707,6 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
   }
 }
 
-// ==========================================
-// صفحة تفاصيل الفاتورة (شاشة كاملة مستقلة)
-// ==========================================
 class InvoiceDetailsPage extends StatelessWidget {
   final Invoice inv;
   final List<InvoiceItem> items;
@@ -1838,7 +1821,6 @@ class InvoiceDetailsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            
             const Text('قائمة الأصناف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 4),
             Expanded(
@@ -1879,7 +1861,6 @@ class InvoiceDetailsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
