@@ -381,7 +381,6 @@ class Product {
   String id;
   String name;
   String categoryId;
-  String colorHex; // تم إضافة حقل لون الصنف هنا
   double purchasePrice;
   double sellPrice;
   double quantity;
