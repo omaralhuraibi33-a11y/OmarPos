@@ -962,7 +962,7 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
                 Expanded(
-                  child: Row(
+                  child: Column(
                     children: [
                       if (!_isInvoiceExpanded)
                         Expanded(
@@ -1035,10 +1035,11 @@ class _PosScreenState extends State<PosScreen> {
                         InkWell(
                           onTap: () => setState(() => _isInvoiceExpanded = !_isInvoiceExpanded),
                           child: Container(
-                            width: 24,
+                            height: 24,
+                            width: double.infinity,
                             color: Colors.grey.shade300,
                             child: Center(
-                              child: Icon(_isInvoiceExpanded ? Icons.arrow_forward_ios : Icons.arrow_back_ios, size: 16),
+                              child: Icon(_isInvoiceExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, size: 16),
                             ),
                           ),
                         ),
@@ -1812,7 +1813,7 @@ class InvoiceDetailsPage extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.person, size: 16, color: Colors.grey),
+                      [icon: Icons.person, size: 16, color: Colors.grey],
                       const SizedBox(width: 4),
                       Text('العميل: ${inv.customerName}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
                     ],
