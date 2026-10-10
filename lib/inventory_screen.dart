@@ -12,7 +12,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
   List<Category> _categories = [];
   List<Product> _products = [];
   bool _isLoading = true;
-  bool _hasChanges = false; // لمتابعة ما إذا تم إضافة أو تعديل أي عنصر لتحديث الشاشة الرئيسية عند الرجوع
 
   @override
   void initState() {
@@ -39,7 +38,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
         builder: (context) => CategoryFormScreen(category: category),
       ),
     );
-    // إذا تم الحفظ أو التعديل، نقوم بتحديث البيانات
     if (result == true) {
       _loadData();
     }
@@ -63,7 +61,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ),
       ),
     );
-    // إذا تم الحفظ أو التعديل، نقوم بتحديث البيانات
     if (result == true) {
       _loadData();
     }
@@ -155,10 +152,20 @@ class _InventoryScreenState extends State<InventoryScreen> {
               itemBuilder: (ctx, index) {
                 final prod = _products[index];
                 final catName = _categories.firstWhere((c) => c.id == prod.categoryId, orElse: () => Category(id: '', name: 'بدون مجموعة')).name;
+                
+                // لون الصنف (إن وجد، وإلا يأخذ لون المجموعة)
+                Color prodColor = Colors.blue;
+                try {
+                  prodColor = Color(int.parse(prod.colorHex));
+                } catch (_) {
+                  final cat = _categories.firstWhere((c) => c.id == prod.categoryId, orElse: () => _categories.first);
+                  prodColor = Color(int.parse(cat.colorHex));
+                }
 
                 return Card(
                   margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   child: ListTile(
+                    leading: CircleAvatar(backgroundColor: prodColor),
                     title: Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text('المجموعة: $catName\nشراء: ${prod.purchasePrice} | بيع: ${prod.sellPrice}'),
                     trailing: Row(
@@ -228,7 +235,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   late String _selectedColorHex;
   late bool _isKitchenPrint;
   late bool _isActive;
-  bool _dataChanged = false; // لتتبع ما إذا تم حفظ أي شيء للرجوع لتحديث الجدول
+  bool _dataChanged = false;
 
   final List<Color> _colorOptions = [
     Colors.blue,
@@ -333,10 +340,8 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                     _dataChanged = true;
 
                     if (isEditing) {
-                      // إذا كان تعديل، نحفظ ونخرج من الشاشة مباشرة
                       if (mounted) Navigator.pop(context, true);
                     } else {
-                      // إذا كانت إضافة جديدة، نحفظ ونفرغ حقل الاسم ونبقي الشاشة لإضافة أخرى
                       _nameController.clear();
                       setState(() {
                         _isKitchenPrint = false;
@@ -380,8 +385,19 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late final TextEditingController _sellPriceController;
   late final TextEditingController _quantityController;
   late String _selectedCatId;
+  late String _selectedColorHex;
   late bool _isActive;
-  bool _dataChanged = false; // لتتبع التحديثات
+  bool _dataChanged = false;
+
+  final List<Color> _colorOptions = [
+    Colors.blue,
+    Colors.red,
+    Colors.green,
+    Colors.orange,
+    Colors.purple,
+    Colors.teal,
+    Colors.brown,
+  ];
 
   @override
   void initState() {
@@ -391,6 +407,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _sellPriceController = TextEditingController(text: widget.product?.sellPrice.toString() ?? '0.0');
     _quantityController = TextEditingController(text: widget.product?.quantity.toString() ?? '0.0');
     _selectedCatId = widget.product?.categoryId ?? (widget.categories.isNotEmpty ? widget.categories.first.id : '');
+    
+    // إذا كان الصنف لديه لون محفوظ، نأخذه، وإلا نأخذ لون المجموعة المختارة افتراضياً
+    if (widget.product?.colorHex != null && widget.product!.colorHex.isNotEmpty) {
+      _selectedColorHex = widget.product!.colorHex;
+    } else {
+      final initialCat = widget.categories.firstWhere((c) => c.id == _selectedCatId, orElse: () => widget.categories.first);
+      _selectedColorHex = initialCat.colorHex;
+    }
+
     _isActive = widget.product?.isActive ?? true;
   }
 
@@ -423,6 +448,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextField(
                 controller: _nameController,
@@ -442,8 +468,33 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   return DropdownMenuItem(value: cat.id, child: Text(cat.name));
                 }).toList(),
                 onChanged: (val) {
-                  if (val != null) setState(() => _selectedCatId = val);
+                  if (val != null) {
+                    setState(() {
+                      _selectedCatId = val;
+                      // عند تغيير المجموعة، يمكن تحديث لون الصنف تلقائياً ليطابق المجموعة الجديدة إذا لم يتم تخصيصه يدوياً
+                      final newCat = widget.categories.firstWhere((c) => c.id == val);
+                      _selectedColorHex = newCat.colorHex;
+                    });
+                  }
                 },
+              ),
+              const SizedBox(height: 16),
+              const Text('لون الصنف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                children: _colorOptions.map((color) {
+                  final colorHex = '0x${color.value.toRadixString(16).toUpperCase()}';
+                  final isSelected = _selectedColorHex == colorHex;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedColorHex = colorHex),
+                    child: CircleAvatar(
+                      backgroundColor: color,
+                      radius: 20,
+                      child: isSelected ? const Icon(Icons.check, color: Colors.white) : null,
+                    ),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -490,6 +541,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       id: isEditing ? widget.product!.id : DateTime.now().millisecondsSinceEpoch.toString(),
                       name: _nameController.text.trim(),
                       categoryId: _selectedCatId,
+                      colorHex: _selectedColorHex, // حفظ لون الصنف
                       purchasePrice: double.tryParse(_purchasePriceController.text.trim()) ?? 0.0,
                       sellPrice: double.tryParse(_sellPriceController.text.trim()) ?? 0.0,
                       quantity: double.tryParse(_quantityController.text.trim()) ?? 0.0,
@@ -500,10 +552,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     _dataChanged = true;
 
                     if (isEditing) {
-                      // إذا كان تعديل، نحفظ ونخرج من الشاشة مباشرة
                       if (mounted) Navigator.pop(context, true);
                     } else {
-                      // إذا كانت إضافة جديدة، نحفظ ونفرغ الحقول ونبقي الشاشة لإضافة صنف تالي
                       _nameController.clear();
                       _purchasePriceController.text = '0.0';
                       _sellPriceController.text = '0.0';
