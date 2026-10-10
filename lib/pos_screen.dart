@@ -941,118 +941,231 @@ class _PosScreenState extends State<PosScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Container(
-                  color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: Row(
+          : OrientationBuilder(
+              builder: (context, orientation) {
+                final bool isLandscape = orientation == Orientation.landscape;
+
+                if (isLandscape) {
+                  // الوضع الأفقي: تقسيم الشاشة يمين ويسار لاستغلال المساحة ورؤية الأصناف بشكل كامل وسلس
+                  return Row(
                     children: [
-                      Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
-                      const SizedBox(width: 8),
-                      Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      const Spacer(),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
-                        onPressed: _selectCustomerDialog,
-                        icon: const Icon(Icons.person_add, size: 18),
-                        label: const Text('تغيير العميل'),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    children: [
-                      if (!_isInvoiceExpanded)
-                        Expanded(
-                          flex: _isProductsFullScreen ? 10 : 3,
-                          child: Column(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(6.0),
-                                child: Row(
-                                  children: [
-                                    Expanded(
+                      // قسم المنتجات والبحث (يسار)
+                      Expanded(
+                        flex: 6,
+                        child: Column(
+                          children: [
+                            Container(
+                              color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, size: 18, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
+                                  const SizedBox(width: 4),
+                                  Text('${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  TextButton(
+                                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(40, 20)),
+                                    onPressed: _selectCustomerDialog,
+                                    child: const Text('تغيير', style: TextStyle(fontSize: 11)),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: SizedBox(
+                                      height: 36,
                                       child: TextField(
                                         controller: _searchController,
                                         onChanged: _filterProducts,
                                         decoration: InputDecoration(
                                           hintText: 'بحث باسم الصنف أو الباركود...',
-                                          prefixIcon: const Icon(Icons.search),
-                                          contentPadding: const EdgeInsets.all(8),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          hintStyle: const TextStyle(fontSize: 11),
+                                          prefixIcon: const Icon(Icons.search, size: 16),
+                                          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 8),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                                         ),
                                       ),
                                     ),
-                                    IconButton(
-                                      icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.indigo),
-                                      onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, size: 20, color: Colors.indigo),
+                                    onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
                               ),
-                              if (_isTouchMode)
-                                Container(
-                                  height: 48,
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                                  child: ListView(
-                                    scrollDirection: Axis.horizontal,
-                                    children: [
-                                      Padding(
+                            ),
+                            if (_isTouchMode)
+                              Container(
+                                height: 38,
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 4.0),
+                                      child: ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _selectedCategoryId == 'all' ? Colors.blue.shade900 : Colors.blue,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        ),
+                                        onPressed: () => _filterByCategory('all'),
+                                        child: const Text('الكل', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12)),
+                                      ),
+                                    ),
+                                    ..._categories.map((cat) {
+                                      Color catColor = Colors.teal;
+                                      try { catColor = Color(int.parse(cat.colorHex)); } catch (_) {}
+                                      final isSelected = _selectedCategoryId == cat.id;
+
+                                      return Padding(
                                         padding: const EdgeInsets.only(right: 4.0),
                                         child: ElevatedButton(
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: _selectedCategoryId == 'all' ? Colors.blue.shade900 : Colors.blue,
-                                            foregroundColor: Colors.white,
+                                            backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor,
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
                                           ),
-                                          onPressed: () => _filterByCategory('all'),
-                                          child: const Text('الكل', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                          onPressed: () => _filterByCategory(cat.id),
+                                          child: Text(cat.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                                         ),
-                                      ),
-                                      ..._categories.map((cat) {
-                                        Color catColor = Colors.teal;
-                                        try { catColor = Color(int.parse(cat.colorHex)); } catch (_) {}
-                                        final isSelected = _selectedCategoryId == cat.id;
-
-                                        return Padding(
-                                          padding: const EdgeInsets.only(right: 4.0),
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor),
-                                            onPressed: () => _filterByCategory(cat.id),
-                                            child: Text(cat.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                          ),
-                                        );
-                                      }),
-                                    ],
-                                  ),
+                                      );
+                                    }),
+                                  ],
                                 ),
-                              Expanded(child: _isTouchMode ? _buildTouchProductGrid() : _buildStandardProductList()),
+                              ),
+                            Expanded(child: _isTouchMode ? _buildTouchProductGrid() : _buildStandardProductList()),
+                          ],
+                        ),
+                      ),
+                      // قسم الفاتورة والأزرار (يمين)
+                      if (!_isProductsFullScreen)
+                        Expanded(
+                          flex: 4,
+                          child: Column(
+                            children: [
+                              Expanded(child: Container(color: Colors.grey.shade100, child: _buildInvoicePanel())),
+                              _buildBottomBar(),
                             ],
                           ),
                         ),
-                      if (!_isProductsFullScreen)
-                        InkWell(
-                          onTap: () => setState(() => _isInvoiceExpanded = !_isInvoiceExpanded),
-                          child: Container(
-                            height: 24,
-                            width: double.infinity,
-                            color: Colors.grey.shade300,
-                            child: Center(
-                              child: Icon(_isInvoiceExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, size: 16),
-                            ),
-                          ),
-                        ),
-                      if (!_isProductsFullScreen)
-                        Expanded(
-                          flex: _isInvoiceExpanded ? 1 : 2,
-                          child: Container(color: Colors.grey.shade100, child: _buildInvoicePanel()),
-                        ),
                     ],
-                  ),
-                ),
-                _buildBottomBar(),
-              ],
+                  );
+                } else {
+                  // الوضع الطولي: التصميم الأساسي (فوق وتحت مع السهم للطي)
+                  return Column(
+                    children: [
+                      Container(
+                        color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        child: Row(
+                          children: [
+                            Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
+                            const SizedBox(width: 8),
+                            Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            const Spacer(),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                              onPressed: _selectCustomerDialog,
+                              icon: const Icon(Icons.person_add, size: 18),
+                              label: const Text('تغيير العميل'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            if (!_isInvoiceExpanded)
+                              Expanded(
+                                flex: _isProductsFullScreen ? 10 : 3,
+                                child: Column(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(6.0),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _searchController,
+                                              onChanged: _filterProducts,
+                                              decoration: InputDecoration(
+                                                hintText: 'بحث باسم الصنف أو الباركود...',
+                                                prefixIcon: const Icon(Icons.search),
+                                                contentPadding: const EdgeInsets.all(8),
+                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                              ),
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.indigo),
+                                            onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (_isTouchMode)
+                                      Container(
+                                        height: 48,
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                        child: ListView(
+                                          scrollDirection: Axis.horizontal,
+                                          children: [
+                                            Padding(
+                                              padding: const EdgeInsets.only(right: 4.0),
+                                              child: ElevatedButton(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: _selectedCategoryId == 'all' ? Colors.blue.shade900 : Colors.blue,
+                                                  foregroundColor: Colors.white,
+                                                ),
+                                                onPressed: () => _filterByCategory('all'),
+                                                child: const Text('الكل', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                              ),
+                                            ),
+                                            ..._categories.map((cat) {
+                                              Color catColor = Colors.teal;
+                                              try { catColor = Color(int.parse(cat.colorHex)); } catch (_) {}
+                                              final isSelected = _selectedCategoryId == cat.id;
+
+                                              return Padding(
+                                                padding: const EdgeInsets.only(right: 4.0),
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(backgroundColor: isSelected ? catColor.withOpacity(0.8) : catColor),
+                                                  onPressed: () => _filterByCategory(cat.id),
+                                                  child: Text(cat.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                                ),
+                                              );
+                                            }),
+                                          ],
+                                        ),
+                                      ),
+                                    Expanded(child: _isTouchMode ? _buildTouchProductGrid() : _buildStandardProductList()),
+                                  ],
+                                ),
+                              ),
+                            if (!_isProductsFullScreen)
+                              InkWell(
+                                onTap: () => setState(() => _isInvoiceExpanded = !_isInvoiceExpanded),
+                                child: Container(
+                                  height: 24,
+                                  width: double.infinity,
+                                  color: Colors.grey.shade300,
+                                  child: Center(
+                                    child: Icon(_isInvoiceExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, size: 16),
+                                  ),
+                                ),
+                              ),
+                            if (!_isProductsFullScreen)
+                              Expanded(
+                                flex: _isInvoiceExpanded ? 1 : 2,
+                                child: Container(color: Colors.grey.shade100, child: _buildInvoicePanel()),
+                              ),
+                          ],
+                        ),
+                      ),
+                      _buildBottomBar(),
+                    ],
+                  );
+                }
+              },
             ),
     );
   }
