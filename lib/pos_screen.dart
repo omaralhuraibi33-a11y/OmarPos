@@ -1813,7 +1813,7 @@ class InvoiceDetailsPage extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      [icon: Icons.person, size: 16, color: Colors.grey],
+                      const Icon(Icons.person, size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text('العميل: ${inv.customerName}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
                     ],
