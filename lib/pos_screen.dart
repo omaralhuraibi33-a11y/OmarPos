@@ -34,7 +34,6 @@ class _PosScreenState extends State<PosScreen> {
   bool _isInvoiceExpanded = false;
   bool _isProductsFullScreen = false;
   bool _isReturnMode = false;
-  bool _isHeaderExpanded = true; // للتحكم برفع وتنزيل رأس الشاشة
 
   List<Category> _categories = [];
   List<Product> _allProducts = [];
@@ -96,7 +95,7 @@ class _PosScreenState extends State<PosScreen> {
     List<CartItem>? customCart,
     String? customerName,
     double? customTotal,
-    double discountAmount = 0.0,
+    double discountAmount = 0.0, // إضافة مبلغ الخصم للطباعة
     bool isReturn = false,
   }) async {
     try {
@@ -300,6 +299,8 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                     SizedBox(height: 4 * fontScale),
                   ],
+                  
+                  // --- قسم الإجمالي، الخصم، وصافي الإجمالي في الفاتورة المطبوعة ---
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -323,6 +324,8 @@ class _PosScreenState extends State<PosScreen> {
                       Text(_formatNum(activeNetTotal), style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                     ],
                   ),
+                  // -------------------------------------------------------------
+
                   SizedBox(height: 4 * fontScale),
                   Align(
                     alignment: Alignment.centerRight,
@@ -639,6 +642,9 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  // ==========================================
+  // نافذة إتمام الدفع مع الخصم والصافي والباقي
+  // ==========================================
   void _showPaymentDialog() {
     String selectedMethod = _isCashCustomer ? 'نقدي' : (_paymentMethods.isNotEmpty ? _paymentMethods.first : 'نقدي');
     final TextEditingController discountController = TextEditingController(text: '0');
@@ -666,6 +672,7 @@ class _PosScreenState extends State<PosScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // إجمالي الفاتورة
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -674,6 +681,8 @@ class _PosScreenState extends State<PosScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
+
+                  // مربع الخصم
                   TextField(
                     controller: discountController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -684,6 +693,7 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                     onChanged: (val) {
                       setDlgState(() {
+                        // تحديث المبلغ المدفوع تلقائياً بناءً على الصافي الجديد إذا لزم الأمر
                         double newDiscount = double.tryParse(val) ?? 0.0;
                         double newNet = total - newDiscount;
                         if (newNet < 0) newNet = 0;
@@ -692,6 +702,8 @@ class _PosScreenState extends State<PosScreen> {
                     },
                   ),
                   const SizedBox(height: 10),
+
+                  // صافي الإجمالي بعد الخصم
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -710,6 +722,7 @@ class _PosScreenState extends State<PosScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+
                   Text('العميل الحالي: ${_selectedCustomer?.name ?? "عميل نقدي"}'),
                   if (_isCashCustomer)
                     const Padding(
@@ -717,6 +730,8 @@ class _PosScreenState extends State<PosScreen> {
                       child: Text('تنبيه: العميل النقدي لا يقبل سوى الدفع النقدي.', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
                   const SizedBox(height: 8),
+
+                  // طريقة الدفع
                   DropdownButtonFormField<String>(
                     value: availableMethods.contains(selectedMethod) ? selectedMethod : availableMethods.first,
                     decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'طريقة الدفع'),
@@ -727,6 +742,8 @@ class _PosScreenState extends State<PosScreen> {
                       }
                     },
                   ),
+
+                  // مربعات المبلغ المدفوع والباقي (إذا كان الدفع نقدياً)
                   if (selectedMethod == 'نقدي') ...[
                     const SizedBox(height: 12),
                     TextField(
@@ -784,7 +801,7 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _processCheckout(String paymentMethod, double finalAmount, double discountAmount) async {
     final cartSnapshot = List<CartItem>.from(_cart);
-    final totalSnapshot = finalAmount;
+    final totalSnapshot = finalAmount; // اعتماد صافي الإجمالي بعد الخصم
     final customerNameSnapshot = _selectedCustomer?.name ?? 'عميل نقدي';
     
     final now = DateTime.now().toString().split('.')[0];
@@ -919,12 +936,6 @@ class _PosScreenState extends State<PosScreen> {
           ],
         ),
         actions: [
-          // زر طي/فرد الشريط العلوي لتوفير المساحة
-          IconButton(
-            tooltip: _isHeaderExpanded ? 'طي الشريط العلوي' : 'إظهار الشريط العلوي',
-            icon: Icon(_isHeaderExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
-            onPressed: () => setState(() => _isHeaderExpanded = !_isHeaderExpanded),
-          ),
           IconButton(
             tooltip: 'سجل الفواتير والمرتجعات',
             icon: const Icon(Icons.receipt_long, color: Colors.amberAccent),
@@ -950,41 +961,23 @@ class _PosScreenState extends State<PosScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // الشريط العلوي القابل للطي والتنزيل (العميل ومعلومات المبيعات)
-                AnimatedCrossFade(
-                  duration: const Duration(milliseconds: 250),
-                  crossFadeState: _isHeaderExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-                  firstChild: Container(
-                    color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: Row(
-                      children: [
-                        Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          height: 36,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                              textStyle: const TextStyle(fontSize: 12),
-                            ),
-                            onPressed: _selectCustomerDialog,
-                            icon: const Icon(Icons.person_add, size: 16),
-                            label: const Text('تغيير العميل'),
-                          ),
-                        ),
-                      ],
-                    ),
+                Container(
+                  color: _isReturnMode ? Colors.orange.shade50 : Colors.blue.shade50,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    children: [
+                      Icon(_isReturnMode ? Icons.assignment_return : Icons.account_circle, color: _isReturnMode ? Colors.orange.shade800 : Colors.blue),
+                      const SizedBox(width: 8),
+                      Text('العميل: ${_selectedCustomer?.name ?? "عميل نقدي"}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                        onPressed: _selectCustomerDialog,
+                        icon: const Icon(Icons.person_add, size: 18),
+                        label: const Text('تغيير العميل'),
+                      ),
+                    ],
                   ),
-                  secondChild: const SizedBox.shrink(),
                 ),
                 Expanded(
                   child: Row(
@@ -994,31 +987,29 @@ class _PosScreenState extends State<PosScreen> {
                           flex: _isProductsFullScreen ? 10 : 3,
                           child: Column(
                             children: [
-                              // مربع البحث يظهر فقط عندما لا يكون في وضع اللمس (أي نوع المبيعات عادية)
-                              if (!_isTouchMode)
-                                Padding(
-                                  padding: const EdgeInsets.all(6.0),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: _searchController,
-                                          onChanged: _filterProducts,
-                                          decoration: InputDecoration(
-                                            hintText: 'بحث باسم الصنف أو الباركود...',
-                                            prefixIcon: const Icon(Icons.search),
-                                            contentPadding: const EdgeInsets.all(8),
-                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                          ),
+                              Padding(
+                                padding: const EdgeInsets.all(6.0),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _searchController,
+                                        onChanged: _filterProducts,
+                                        decoration: InputDecoration(
+                                          hintText: 'بحث باسم الصنف أو الباركود...',
+                                          prefixIcon: const Icon(Icons.search),
+                                          contentPadding: const EdgeInsets.all(8),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                         ),
                                       ),
-                                      IconButton(
-                                        icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.indigo),
-                                        onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(_isProductsFullScreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.indigo),
+                                      onPressed: () => setState(() => _isProductsFullScreen = !_isProductsFullScreen),
+                                    ),
+                                  ],
                                 ),
+                              ),
                               if (_isTouchMode)
                                 Container(
                                   height: 48,
@@ -1096,6 +1087,7 @@ class _PosScreenState extends State<PosScreen> {
       itemBuilder: (ctx, index) {
         final prod = _filteredProducts[index];
         Color cardColor = _isReturnMode ? Colors.deepOrange.shade700 : Colors.blue.shade700;
+        final itemFontSize = _getItemFontSize();
 
         return InkWell(
           onTap: () => _addToCart(prod),
@@ -1104,38 +1096,21 @@ class _PosScreenState extends State<PosScreen> {
             color: cardColor,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             child: Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(6.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // اسم الصنف: يتكيف ويصغر/يكبر تلقائياً ليناسب مساحة الزر
-                  Expanded(
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          prod.name,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
+                  Text(
+                    prod.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: itemFontSize, color: Colors.white),
                   ),
-                  const SizedBox(height: 4),
-                  // سعر الصنف: نص صافي بدون حدود أو خلفيات، ويتكيف تلقائياً
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      _formatNum(prod.sellPrice),
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4)),
+                    child: Text(_formatNum(prod.sellPrice), style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: itemFontSize - 1)),
                   ),
                 ],
               ),
@@ -1863,6 +1838,7 @@ class InvoiceDetailsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
+            
             const Text('قائمة الأصناف:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(height: 4),
             Expanded(
@@ -1903,6 +1879,7 @@ class InvoiceDetailsPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
+
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
