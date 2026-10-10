@@ -496,6 +496,19 @@ class _PosScreenState extends State<PosScreen> {
       _selectedCustomer!.id == 'cash_default' ||
       _selectedCustomer!.name == 'عميل نقدي';
 
+  // دالة لجلب لون الصنف بناءً على مجموعته
+  Color _getProductCategoryColor(Product prod) {
+    if (_isReturnMode) return Colors.deepOrange.shade700;
+
+    final catIndex = _categories.indexWhere((c) => c.id == prod.categoryId);
+    if (catIndex >= 0) {
+      try {
+        return Color(int.parse(_categories[catIndex].colorHex));
+      } catch (_) {}
+    }
+    return Colors.blue.shade700;
+  }
+
   void _filterProducts(String query) {
     setState(() {
       _filteredProducts = _allProducts.where((p) {
@@ -1221,7 +1234,8 @@ class _PosScreenState extends State<PosScreen> {
       itemCount: _filteredProducts.length,
       itemBuilder: (ctx, index) {
         final prod = _filteredProducts[index];
-        Color cardColor = _isReturnMode ? Colors.deepOrange.shade700 : Colors.blue.shade700;
+        // استخدام دالة جلب لون المجموعة للصنف لتلون الكروت مثل مجموعاتها
+        Color cardColor = _getProductCategoryColor(prod);
         final itemFontSize = _getItemFontSize();
 
         return InkWell(
