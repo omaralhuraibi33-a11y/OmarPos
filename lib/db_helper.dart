@@ -391,7 +391,6 @@ class Product {
     required this.id,
     required this.name,
     required this.categoryId,
-    this.colorHex = '0xFF2196F3',
     this.purchasePrice = 0.0,
     this.sellPrice = 0.0,
     this.quantity = 0.0,
@@ -403,7 +402,6 @@ class Product {
       'id': id,
       'name': name,
       'categoryId': categoryId,
-      'colorHex': colorHex,
       'purchasePrice': purchasePrice,
       'sellPrice': sellPrice,
       'quantity': quantity,
@@ -416,7 +414,6 @@ class Product {
       id: map['id'],
       name: map['name'],
       categoryId: map['categoryId'] ?? '',
-      colorHex: map['colorHex'] ?? '0xFF2196F3',
       purchasePrice: (map['purchasePrice'] as num).toDouble(),
       sellPrice: (map['sellPrice'] as num).toDouble(),
       quantity: (map['quantity'] as num).toDouble(),
@@ -456,7 +453,7 @@ class DBHelper {
 
     return await openDatabase(
       pathName,
-      version: 14, // تم رفع إصدار قاعدة البيانات لتحديث الجداول
+      version: 13,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE users(
@@ -636,7 +633,6 @@ class DBHelper {
             id TEXT PRIMARY KEY,
             name TEXT,
             categoryId TEXT,
-            colorHex TEXT,
             purchasePrice REAL,
             sellPrice REAL,
             quantity REAL,
@@ -750,10 +746,128 @@ class DBHelper {
         });
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 14) {
+        if (oldVersion < 8) {
+          await db.execute('ALTER TABLE invoices ADD COLUMN shiftId INTEGER DEFAULT 1');
+          await db.execute('ALTER TABLE invoices ADD COLUMN isClosed INTEGER DEFAULT 0');
+          await db.execute('ALTER TABLE vouchers ADD COLUMN shiftId INTEGER DEFAULT 1');
+          await db.execute('ALTER TABLE vouchers ADD COLUMN isClosed INTEGER DEFAULT 0');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS shifts(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              startTime TEXT,
+              endTime TEXT,
+              userId TEXT,
+              userName TEXT,
+              totalSales REAL,
+              totalExpenses REAL,
+              transferredToMainVault REAL,
+              status TEXT
+            )
+          ''');
+        }
+        if (oldVersion < 9) {
           try {
-            await db.execute('ALTER TABLE products ADD COLUMN colorHex TEXT DEFAULT "0xFF2196F3"');
+            await db.execute('ALTER TABLE supplier_transactions ADD COLUMN notes TEXT');
           } catch (_) {}
+        }
+        if (oldVersion < 10) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS invoice_items(
+              id TEXT PRIMARY KEY,
+              invoiceId TEXT,
+              productId TEXT,
+              productName TEXT,
+              quantity REAL,
+              price REAL,
+              total REAL,
+              notes TEXT
+            )
+          ''');
+        }
+        if (oldVersion < 11) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS return_invoices(
+              id TEXT PRIMARY KEY,
+              invoiceType TEXT,
+              paymentType TEXT,
+              totalAmount REAL,
+              date TEXT,
+              customerId TEXT,
+              customerName TEXT,
+              notes TEXT,
+              shiftId INTEGER DEFAULT 1,
+              isClosed INTEGER DEFAULT 0
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS return_invoice_items(
+              id TEXT PRIMARY KEY,
+              invoiceId TEXT,
+              productId TEXT,
+              productName TEXT,
+              quantity REAL,
+              price REAL,
+              total REAL,
+              notes TEXT
+            )
+          ''');
+        }
+        if (oldVersion < 12) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS purchase_return_invoices(
+              id TEXT PRIMARY KEY,
+              invoiceType TEXT,
+              paymentType TEXT,
+              totalAmount REAL,
+              date TEXT,
+              supplierId TEXT,
+              supplierName TEXT,
+              notes TEXT,
+              shiftId INTEGER DEFAULT 1,
+              isClosed INTEGER DEFAULT 0
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS purchase_return_invoice_items(
+              id TEXT PRIMARY KEY,
+              invoiceId TEXT,
+              productId TEXT,
+              productName TEXT,
+              quantity REAL,
+              price REAL,
+              total REAL,
+              notes TEXT
+            )
+          ''');
+        }
+        if (oldVersion < 13) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS purchase_invoices(
+              id TEXT PRIMARY KEY,
+              invoiceType TEXT,
+              paymentType TEXT,
+              totalAmount REAL,
+              date TEXT,
+              supplierId TEXT,
+              supplierName TEXT,
+              notes TEXT,
+              shiftId INTEGER DEFAULT 1,
+              isClosed INTEGER DEFAULT 0
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS purchase_invoice_items(
+              id TEXT PRIMARY KEY,
+              invoiceId TEXT,
+              productId TEXT,
+              productName TEXT,
+              quantity REAL,
+              price REAL,
+              total REAL,
+              notes TEXT
+            )
+          ''');
         }
       },
     );
@@ -1225,16 +1339,21 @@ class DBHelper {
     }
   }
 
+  // ==================== دوال تعديل وحذف السندات المضافة حديثاً ====================
   static Future<void> updateVoucher(Voucher newVoucher) async {
     final db = await database;
+    // 1. جلب السند القديم لمعرفة تأثيره السابق على الأرصدة
     final oldVoucherMaps = await db.query('vouchers', where: 'id = ?', whereArgs: [newVoucher.id]);
     if (oldVoucherMaps.isNotEmpty) {
       final oldVoucher = Voucher.fromMap(oldVoucherMaps.first);
       
+      // التراجع عن تأثير السند القديم في أرصدة العملاء أو الموردين
       if (oldVoucher.targetType == 'customer' && oldVoucher.targetId != null) {
         if (oldVoucher.voucherType == 'receipt') {
+          // كان سند قبض (قلل دين العميل)، بالتراجع نزيد دينه مؤقتاً بعكس العملية
           await addCustomerTransaction(customerId: oldVoucher.targetId!, type: 'إلغاء/تعديل سند قبض', credit: 0.0, debit: oldVoucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'تعديل السند');
         } else if (oldVoucher.voucherType == 'payment') {
+          // كان سند صرف (زاد دين العميل)، بالتراجع نقلل دينه
           await addCustomerTransaction(customerId: oldVoucher.targetId!, type: 'إلغاء/تعديل سند صرف', credit: oldVoucher.amount, debit: 0.0, date: DateTime.now().toString().split('.')[0], notes: 'تعديل السند');
         }
       } else if (oldVoucher.targetType == 'supplier' && oldVoucher.targetId != null) {
@@ -1246,8 +1365,10 @@ class DBHelper {
       }
     }
 
+    // 2. تحديث السند بالبيانات الجديدة
     await db.update('vouchers', newVoucher.toMap(), where: 'id = ?', whereArgs: [newVoucher.id]);
 
+    // 3. تطبيق التأثير الجديد للسند بعد التعديل
     if (newVoucher.targetType == 'customer' && newVoucher.targetId != null) {
       if (newVoucher.voucherType == 'receipt') {
         await addCustomerTransaction(customerId: newVoucher.targetId!, type: 'سند قبض', credit: newVoucher.amount, debit: 0.0, date: newVoucher.date, notes: newVoucher.notes);
@@ -1269,6 +1390,7 @@ class DBHelper {
     if (voucherMaps.isNotEmpty) {
       final voucher = Voucher.fromMap(voucherMaps.first);
 
+      // التراجع عن تأثير السند المحذوف على أرصدة العملاء أو الموردين
       if (voucher.targetType == 'customer' && voucher.targetId != null) {
         if (voucher.voucherType == 'receipt') {
           await addCustomerTransaction(customerId: voucher.targetId!, type: 'حذف سند قبض', credit: 0.0, debit: voucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
@@ -1283,6 +1405,7 @@ class DBHelper {
         }
       }
 
+      // حذف السند من الجدول
       await db.delete('vouchers', where: 'id = ?', whereArgs: [id]);
     }
   }
@@ -1600,6 +1723,7 @@ class DBHelper {
     }
   }
 
+  // ==================== دوال التقرير المالي ====================
   static Future<double> getTotalSales() async {
     final db = await database;
     final result = await db.rawQuery(
