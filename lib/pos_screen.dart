@@ -90,6 +90,207 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
+  // دالة طباعة فاتورة المطبخ (مخصصة للمطبخ عند توفر طابعة مفعلة usage == 'مطبخ')
+  Future<void> _printKitchenReceiptDirect({
+    required String invoiceId,
+    required List<CartItem> cartItems,
+    required String customerName,
+  }) async {
+    try {
+      final savedPrintersJson = await DBHelper.getSetting('printers_list');
+      if (savedPrintersJson == null || savedPrintersJson.isEmpty) return;
+
+      final List<dynamic> decoded = jsonDecode(savedPrintersJson);
+      List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      
+      // التحقق من وجود طابعة مطبخ مفعلة على الأقل
+      final kitchenPrinters = printers.where((p) {
+        final usage = p['usage'] ?? 'زبون';
+        final bool isAutoPrint = p['autoPrint'] ?? true;
+        return isAutoPrint && (usage == 'مطبخ' || usage == 'المطبخ');
+      }).toList();
+
+      if (kitchenPrinters.isEmpty) return; // لا توجد طابعة مطبخ مفعلة، فلا تطبع شيئاً للمطبخ
+
+      final ScreenshotController screenshotController = ScreenshotController();
+      final profile = await CapabilityProfile.load();
+
+      for (var printer in kitchenPrinters) {
+        final printerName = printer['name'] ?? 'طابعة المطبخ';
+        final String paperSizeStr = printer['paperSize'] ?? '80';
+        final paperSizeVal = paperSizeStr == '57' ? PaperSize.mm58 : PaperSize.mm80;
+        final double receiptWidth = paperSizeStr == '57' ? 384.0 : 576.0;
+        final int targetImageWidth = paperSizeStr == '57' ? 384 : 576;
+        
+        String fontSizeSetting = printer['fontSize'] ?? 'normal';
+        double fontScale = 1.0;
+        switch (fontSizeSetting) {
+          case 'medium': fontScale = 1.25; break;
+          case 'large': fontScale = 1.5; break;
+          case 'huge': fontScale = 2.0; break;
+          case 'normal': default: fontScale = 1.0; break;
+        }
+
+        final now = DateTime.now();
+        final formattedDateTime = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}  ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+        // تصميم فاتورة المطبخ (بدون أسعار، بخط عريض وواضح للتحضير)
+        final kitchenWidget = Directionality(
+          textDirection: TextDirection.rtl,
+          child: Material(
+            color: Colors.white,
+            child: Container(
+              width: receiptWidth,
+              padding: EdgeInsets.all(12.0 * fontScale),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text('*** طلب مطبخ / تحضير ***', style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  SizedBox(height: 6 * fontScale),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('رقم الفاتورة: $invoiceId', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('الوقت: $formattedDateTime', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    ],
+                  ),
+                  SizedBox(height: 4 * fontScale),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('العميل: $customerName', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ),
+                  Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
+                  Container(
+                    decoration: BoxDecoration(border: Border.all(color: Colors.black, width: 1.5 * fontScale)),
+                    child: Column(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.black, width: 1.0 * fontScale))),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 3, child: Padding(padding: EdgeInsets.all(5.0 * fontScale), child: Text('الصنف المطلوب', textAlign: TextAlign.right, style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)))),
+                              Container(width: 1.5 * fontScale, height: 26.0 * fontScale, color: Colors.black),
+                              Expanded(flex: 1, child: Padding(padding: EdgeInsets.all(5.0 * fontScale), child: Text('الكمية', textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)))),
+                            ],
+                          ),
+                        ),
+                        ...cartItems.map((item) {
+                          return Container(
+                            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.black38, width: 0.5 * fontScale))),
+                            child: Padding(
+                              padding: EdgeInsets.all(6.0 * fontScale),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          item.product.name,
+                                          textAlign: TextAlign.right,
+                                          style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black),
+                                        ),
+                                      ),
+                                      Container(width: 1.5 * fontScale, color: Colors.black38),
+                                      Expanded(
+                                        flex: 1,
+                                        child: Text(
+                                          _formatNum(item.quantity),
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (item.preparationNotes.isNotEmpty) ...[
+                                    SizedBox(height: 4 * fontScale),
+                                    Container(
+                                      padding: EdgeInsets.all(4 * fontScale),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade200,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'ملاحظات: ${item.preparationNotes}',
+                                        style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                  Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
+                  SizedBox(height: 6 * fontScale),
+                  Text('إجمالي عدد الأصناف: ${_formatNum(cartItems.fold(0.0, (sum, i) => sum + i.quantity))}', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  SizedBox(height: 10 * fontScale),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        final pngBytes = await screenshotController.captureFromWidget(kitchenWidget, delay: const Duration(milliseconds: 50));
+        final img.Image? rawImage = img.decodeImage(pngBytes);
+        if (rawImage == null) continue;
+
+        final img.Image decodedImage = img.copyResize(rawImage, width: targetImageWidth);
+        for (int y = 0; y < decodedImage.height; y++) {
+          for (int x = 0; x < decodedImage.width; x++) {
+            final pixel = decodedImage.getPixel(x, y);
+            final luminance = img.getLuminance(pixel);
+            if (luminance > 160) {
+              decodedImage.setPixelRgba(x, y, 255, 255, 255, 255);
+            } else {
+              decodedImage.setPixelRgba(x, y, 0, 0, 0, 255);
+            }
+          }
+        }
+
+        final generator = Generator(paperSizeVal, profile);
+        List<int> bytes = [];
+        bytes += generator.image(decodedImage);
+        bytes += generator.feed(2);
+        bytes += generator.cut();
+
+        if (printer['connection'] == 'واي فاي') {
+          final String ip = (printer['ip'] ?? '').trim();
+          if (ip.isNotEmpty) {
+            try {
+              final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
+              socket.add(bytes);
+              await socket.flush();
+              await socket.close();
+            } catch (e) {
+              debugPrint('فشل طباعة المطبخ عبر الواي فاي: $e');
+            }
+          }
+        } else if (printer['connection'] == 'بلوتوث') {
+          final String mac = (printer['macAddress'] ?? '').trim();
+          if (mac.isNotEmpty) {
+            try {
+              bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+              if (connected) {
+                await PrintBluetoothThermal.writeBytes(bytes);
+                await PrintBluetoothThermal.disconnect;
+              }
+            } catch (e) {
+              debugPrint('فشل طباعة المطبخ عبر البلوتوث: $e');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('خطأ في طباعة فاتورة المطبخ: $e');
+    }
+  }
+
   Future<void> _printReceiptDirect({
     required String invoiceId,
     required String paymentMethod,
@@ -133,6 +334,15 @@ class _PosScreenState extends State<PosScreen> {
       final activeDiscount = discountAmount;
       final activeNetTotal = (activeSubTotal - activeDiscount) < 0 ? 0.0 : (activeSubTotal - activeDiscount);
       final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
+
+      // طباعة فاتورة المطبخ أولاً إذا لم تكن مرتجعاً
+      if (!isReturn) {
+        await _printKitchenReceiptDirect(
+          invoiceId: invoiceId,
+          cartItems: activeCart,
+          customerName: activeCustomer,
+        );
+      }
 
       final ScreenshotController screenshotController = ScreenshotController();
       final profile = await CapabilityProfile.load();
@@ -406,7 +616,7 @@ class _PosScreenState extends State<PosScreen> {
         } else if (printedSuccessfully) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('تم الحفظ وطباعة الفاتورة بحجم الخط ومقاس الطابعة بنجاح!'),
+              content: Text('تم الحفظ وطباعة الفاتورة ومطبخ بنجاح!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -496,7 +706,6 @@ class _PosScreenState extends State<PosScreen> {
       _selectedCustomer!.id == 'cash_default' ||
       _selectedCustomer!.name == 'عميل نقدي';
 
-  // دالة لجلب لون الصنف بناءً على مجموعته
   Color _getProductCategoryColor(Product prod) {
     if (_isReturnMode) return Colors.deepOrange.shade700;
 
@@ -1234,7 +1443,6 @@ class _PosScreenState extends State<PosScreen> {
       itemCount: _filteredProducts.length,
       itemBuilder: (ctx, index) {
         final prod = _filteredProducts[index];
-        // استخدام دالة جلب لون المجموعة للصنف لتلون الكروت مثل مجموعاتها
         Color cardColor = _getProductCategoryColor(prod);
         final itemFontSize = _getItemFontSize();
 
