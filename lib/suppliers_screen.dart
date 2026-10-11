@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'db_helper.dart';
 
 class SuppliersScreen extends StatefulWidget {
@@ -262,9 +265,67 @@ class SupplierStatementScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'تصدير PDF',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('جاري تصدير كشف حساب المورد إلى PDF...')),
+            onPressed: () async {
+              final statementTransactions = await DBHelper.getSupplierStatement(supplier.id);
+              await Printing.layoutPdf(
+                onLayout: (PdfPageFormat format) async {
+                  final pdf = pw.Document();
+                  pdf.addPage(
+                    pw.Page(
+                      pageFormat: format,
+                      build: (pw.Context context) {
+                        return pw.Directionality(
+                          textDirection: pw.TextDirection.rtl,
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('كشف حساب المورد: ${supplier.name}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                              pw.SizedBox(height: 6),
+                              pw.Text('المبلغ المستحق له: ${supplier.balance.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 14)),
+                              pw.SizedBox(height: 10),
+                              pw.Divider(),
+                              pw.Row(
+                                children: [
+                                  pw.Expanded(flex: 2, child: pw.Text('التاريخ / الحركة', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                                  pw.Expanded(child: pw.Text('له (دائن)', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                                  pw.Expanded(child: pw.Text('عليه/مسدد (مدين)', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                                  pw.Expanded(child: pw.Text('الرصيد', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
+                                ],
+                              ),
+                              pw.Divider(),
+                              ...statementTransactions.map((item) {
+                                final credit = (item['credit'] as num?)?.toDouble() ?? 0.0;
+                                final debit = (item['debit'] as num?)?.toDouble() ?? 0.0;
+                                final runningBalance = (item['runningBalance'] as num?)?.toDouble() ?? 0.0;
+                                return pw.Padding(
+                                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                                  child: pw.Row(
+                                    children: [
+                                      pw.Expanded(
+                                        flex: 2,
+                                        child: pw.Column(
+                                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                          children: [
+                                            pw.Text(item['type'] ?? '', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                                            pw.Text(item['date'] ?? '', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                                          ],
+                                        ),
+                                      ),
+                                      pw.Expanded(child: pw.Text(credit > 0 ? credit.toStringAsFixed(2) : '-', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
+                                      pw.Expanded(child: pw.Text(debit > 0 ? debit.toStringAsFixed(2) : '-', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
+                                      pw.Expanded(child: pw.Text(runningBalance.toStringAsFixed(2), textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                  return pdf.save();
+                },
               );
             },
           ),
