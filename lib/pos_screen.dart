@@ -1624,18 +1624,7 @@ class _PosScreenState extends State<PosScreen> {
       color: Colors.white,
       child: Row(
         children: [
-          Expanded(
-            child: SizedBox(
-              height: btnHeight,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade700),
-                icon: const Icon(Icons.cleaning_services, color: Colors.white, size: 20),
-                label: Text('تعليق', style: TextStyle(color: Colors.white, fontSize: btnFontSize, fontWeight: FontWeight.bold)),
-                onPressed: _clearInvoice,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
+          // تمت إزالة زر "تعليق" بناءً على طلبك
           Expanded(
             child: SizedBox(
               height: btnHeight,
@@ -2114,6 +2103,11 @@ class InvoiceDetailsPage extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
 
+    // حساب مجموع أسعار الأصناف قبل الخصم لمعرفة قيمة الخصم المطبق بدقة
+    double itemsTotalSum = items.fold(0.0, (sum, item) => sum + item.total);
+    double discountValue = itemsTotalSum - inv.totalAmount;
+    if (discountValue < 0) discountValue = 0.0;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('$formattedId تفاصيل'),
@@ -2134,7 +2128,7 @@ class InvoiceDetailsPage extends StatelessWidget {
                 paymentMethod: inv.paymentType,
                 customCart: cartItems,
                 customerName: inv.customerName,
-                customTotal: inv.totalAmount,
+                customTotal: itemsTotalSum,
                 isReturn: isReturn,
               );
             },
@@ -2242,17 +2236,37 @@ class InvoiceDetailsPage extends StatelessWidget {
                 color: isReturn ? Colors.orange.shade900.withOpacity(0.2) : Colors.blue.shade900.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
                 children: [
-                  Text('الإجمالي العام:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
-                  Text(
-                    _formatNum(inv.totalAmount),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('إجمالي الأصناف:', style: TextStyle(fontSize: 13, color: textColor)),
+                      Text(_formatNum(itemsTotalSum), style: TextStyle(fontSize: 13, color: textColor)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('الخصم المطبق:', style: TextStyle(fontSize: 13, color: Colors.redAccent)),
+                      Text(_formatNum(discountValue), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                    ],
+                  ),
+                  const Divider(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('الإجمالي العام (الصافي):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                      Text(
+                        _formatNum(inv.totalAmount),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: isReturn ? Colors.orangeAccent : Colors.greenAccent,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
