@@ -141,7 +141,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
             pw.Text('تفاصيل المؤشرات والحركات المالية:', style: pw.TextStyle(font: arabicBoldFont, fontSize: 14, color: PdfColors.teal900)),
             pw.SizedBox(height: 8),
 
-            // 3. جدول البيانات المالية بتصميم أنيق
+            // 3. جدول البيانات المالية (المؤشر المالي أولاً ثم القيمة من اليمين لليسار)
             pw.Table.fromTextArray(
               headers: ['المؤشر المالي', 'القيمة'],
               data: <List<String>>[
