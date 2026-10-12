@@ -249,7 +249,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   }
 }
 
-/// شاشة كاملة لعرض كشف حساب المورد مع زر تصدير PDF
+/// شاشة كاملة لعرض كشف حساب المورد مع زر تصدير PDF بتصميم أنيق ومبسط
 class SupplierStatementScreen extends StatelessWidget {
   final Supplier supplier;
 
@@ -267,66 +267,119 @@ class SupplierStatementScreen extends StatelessWidget {
             tooltip: 'تصدير PDF',
             onPressed: () async {
               final statementTransactions = await DBHelper.getSupplierStatement(supplier.id);
-              await Printing.layoutPdf(
-                onLayout: (PdfPageFormat format) async {
-                  final pdf = pw.Document();
-                  pdf.addPage(
-                    pw.Page(
-                      pageFormat: format,
-                      build: (pw.Context context) {
-                        return pw.Directionality(
-                          textDirection: pw.TextDirection.rtl,
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('كشف حساب المورد: ${supplier.name}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                              pw.SizedBox(height: 6),
-                              pw.Text('المبلغ المستحق له: ${supplier.balance.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 14)),
-                              pw.SizedBox(height: 10),
-                              pw.Divider(),
-                              pw.Row(
-                                children: [
-                                  pw.Expanded(flex: 2, child: pw.Text('التاريخ / الحركة', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
-                                  pw.Expanded(child: pw.Text('له (دائن)', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
-                                  pw.Expanded(child: pw.Text('عليه/مسدد (مدين)', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
-                                  pw.Expanded(child: pw.Text('الرصيد', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11))),
-                                ],
-                              ),
-                              pw.Divider(),
-                              ...statementTransactions.map((item) {
-                                final credit = (item['credit'] as num?)?.toDouble() ?? 0.0;
-                                final debit = (item['debit'] as num?)?.toDouble() ?? 0.0;
-                                final runningBalance = (item['runningBalance'] as num?)?.toDouble() ?? 0.0;
-                                return pw.Padding(
-                                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                                  child: pw.Row(
-                                    children: [
-                                      pw.Expanded(
-                                        flex: 2,
-                                        child: pw.Column(
-                                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                                          children: [
-                                            pw.Text(item['type'] ?? '', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                                            pw.Text(item['date'] ?? '', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-                                          ],
-                                        ),
-                                      ),
-                                      pw.Expanded(child: pw.Text(credit > 0 ? credit.toStringAsFixed(2) : '-', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
-                                      pw.Expanded(child: pw.Text(debit > 0 ? debit.toStringAsFixed(2) : '-', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: 10))),
-                                      pw.Expanded(child: pw.Text(runningBalance.toStringAsFixed(2), textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10))),
-                                    ],
+              final pdf = pw.Document();
+              final arabicFont = await PdfGoogleFonts.cairoRegular();
+              final arabicBoldFont = await PdfGoogleFonts.cairoBold();
+
+              // حساب إجمالي الدائن والمدين للمورد
+              double totalCredit = 0;
+              double totalDebit = 0;
+              for (var item in statementTransactions) {
+                totalCredit += (item['credit'] as num?)?.toDouble() ?? 0.0;
+                totalDebit += (item['debit'] as num?)?.toDouble() ?? 0.0;
+              }
+
+              pdf.addPage(
+                pw.MultiPage(
+                  pageFormat: PdfPageFormat.a4,
+                  textDirection: pw.TextDirection.rtl,
+                  build: (pw.Context context) {
+                    return [
+                      // 1. ترويسة بسيطة لكشف المورد
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(12),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.blueGrey50,
+                          borderRadius: pw.BorderRadius.circular(8),
+                        ),
+                        child: pw.Row(
+                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                          children: [
+                            pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Text('كشف حساب مورد', style: pw.TextStyle(font: arabicBoldFont, fontSize: 16, color: PdfColors.blue900)),
+                                pw.SizedBox(height: 4),
+                                pw.Text('المورد: ${supplier.name}', style: pw.TextStyle(font: arabicFont, fontSize: 12)),
+                                if (supplier.phone.isNotEmpty)
+                                  pw.Text('الهاتف: ${supplier.phone}', style: pw.TextStyle(font: arabicFont, fontSize: 10, color: PdfColors.grey700)),
+                              ],
+                            ),
+                            pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.end,
+                              children: [
+                                pw.Text('التاريخ: ${DateTime.now().toString().split(' ')[0]}', style: pw.TextStyle(font: arabicFont, fontSize: 10)),
+                                pw.SizedBox(height: 6),
+                                pw.Container(
+                                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: pw.BoxDecoration(
+                                    color: supplier.balance > 0 ? PdfColors.red100 : PdfColors.green100,
+                                    borderRadius: pw.BorderRadius.circular(4),
                                   ),
-                                );
-                              }),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                  return pdf.save();
-                },
+                                  child: pw.Text(
+                                    'المبلغ المستحق له: ${supplier.balance.toStringAsFixed(2)}',
+                                    style: pw.TextStyle(font: arabicBoldFont, fontSize: 11, color: supplier.balance > 0 ? PdfColors.red900 : PdfColors.green900),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      pw.SizedBox(height: 15),
+
+                      // 2. جدول الحركات المالي للمورد
+                      pw.Table.fromTextArray(
+                        headers: ['التاريخ / الحركة', 'نوع الحركة', 'له (دائن)', 'عليه/مسدد (مدين)', 'الرصيد'],
+                        data: statementTransactions.map((item) {
+                          final credit = (item['credit'] as num?)?.toDouble() ?? 0.0;
+                          final debit = (item['debit'] as num?)?.toDouble() ?? 0.0;
+                          final runningBalance = (item['runningBalance'] as num?)?.toDouble() ?? 0.0;
+                          return [
+                            item['date'] ?? '',
+                            item['type'] ?? '',
+                            credit > 0 ? credit.toStringAsFixed(2) : '-',
+                            debit > 0 ? debit.toStringAsFixed(2) : '-',
+                            runningBalance.toStringAsFixed(2),
+                          ];
+                        }).toList(),
+                        headerStyle: pw.TextStyle(font: arabicBoldFont, color: PdfColors.white, fontSize: 10),
+                        headerDecoration: const pw.BoxDecoration(color: PdfColors.blue800),
+                        cellStyle: pw.TextStyle(font: arabicFont, fontSize: 9),
+                        cellAlignment: pw.Alignment.center,
+                        columnWidths: {
+                          0: const pw.FlexColumnWidth(2.5),
+                          1: const pw.FlexColumnWidth(2),
+                          2: const pw.FlexColumnWidth(1.5),
+                          3: const pw.FlexColumnWidth(1.5),
+                          4: const pw.FlexColumnWidth(1.5),
+                        },
+                      ),
+                      pw.SizedBox(height: 15),
+
+                      // 3. ملخص الإجماليات والتوقيعات
+                      pw.Divider(),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('إجمالي الدائن (له): ${totalCredit.toStringAsFixed(2)}', style: pw.TextStyle(font: arabicBoldFont, fontSize: 10, color: PdfColors.red800)),
+                          pw.Text('إجمالي المدين (عليه): ${totalDebit.toStringAsFixed(2)}', style: pw.TextStyle(font: arabicBoldFont, fontSize: 10, color: PdfColors.green800)),
+                        ],
+                      ),
+                      pw.SizedBox(height: 30),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text('توقيع المحاسب: .....................', style: pw.TextStyle(font: arabicFont, fontSize: 10)),
+                          pw.Text('توقيع المورد: .....................', style: pw.TextStyle(font: arabicFont, fontSize: 10)),
+                        ],
+                      )
+                    ];
+                  },
+                ),
               );
+
+              await Printing.sharePdf(bytes: await pdf.save(), filename: 'كشف_حساب_مورد_${supplier.name}.pdf');
             },
           ),
         ],
