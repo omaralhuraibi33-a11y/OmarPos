@@ -5,9 +5,7 @@ import 'screens/printer_settings_screen.dart';
 import 'screens/prep_notes_screen.dart';
 import 'screens/appearance_settings_screen.dart';
 import 'screens/store_data_screen.dart';
-// تم حذف استيراد invoice_settings_screen لعدم الحاجة إليها
 import 'screens/backup_settings_screen.dart';
-// تم حذف استيراد payment_methods_screen لعدم الحاجة إليها
 import 'screens/wipe_data_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -25,8 +23,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('إعدادات النظام'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
+        centerTitle: true,
+        // تم حذف الألوان الثابتة هنا لكي تأخذ لونها تلقائياً من ثيم النظام المتوافق مع باقي الشاشات
       ),
       body: ListView(
         padding: const EdgeInsets.all(12),
@@ -76,7 +74,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute(builder: (_) => const StoreDataScreen()),
             ),
           ),
-          // تم حذف زر إعدادات الفاتورة من هنا نهائياً
           _buildMainButton(
             title: '5. النسخ الاحتياطي والاستعادة',
             subtitle: 'نسخ قواطع البيانات محلياً أو سحابياً واسترجاعها',
@@ -87,7 +84,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               MaterialPageRoute(builder: (_) => const BackupSettingsScreen()),
             ),
           ),
-          // تم حذف زر طرق الدفع المتاحة بالكامل من هنا
           _buildMainButton(
             title: '6. مسح البيانات والتصفير',
             subtitle: 'تصفير المبيعات أو تهيئة النظام بالكامل (منطقة خطرة)',
