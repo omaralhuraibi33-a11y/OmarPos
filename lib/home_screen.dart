@@ -221,8 +221,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   return Card(
                     elevation: hasAccess ? 2 : 1,
-                    // جعل لون خلفية الكارت ملوناً بدرجة خفيفة جداً من لون الثيم تماماً مثل شاشة إعدادات النظام
-                    color: hasAccess ? primaryColor.withOpacity(0.08) : Colors.grey.shade200,
+                    // استخدام لون الكارد الافتراضي للنظام ليتطابق تماماً مع شاشة إعدادات النظام في الوضعين الفاتح والداكن
+                    color: hasAccess ? Theme.of(context).cardColor : Colors.grey.shade200,
                     child: InkWell(
                       onTap: () => navigateToScreen(item),
                       child: Column(
