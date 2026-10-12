@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../db_helper.dart';
 
-
 class StoreDataScreen extends StatefulWidget {
   const StoreDataScreen({Key? key}) : super(key: key);
 
@@ -91,8 +90,8 @@ class _StoreDataScreenState extends State<StoreDataScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('بيانات المتجر'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
+        centerTitle: true,
+        // تم إزالة الألوان الثابتة لتعتمد على ثيم النظام تلقائياً
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -106,7 +105,7 @@ class _StoreDataScreenState extends State<StoreDataScreen> {
                         onTap: _pickStoreImage,
                         child: CircleAvatar(
                           radius: 50,
-                          backgroundColor: Colors.indigoAccent,
+                          backgroundColor: Theme.of(context).primaryColor,
                           backgroundImage: (_storeImagePath != null && File(_storeImagePath!).existsSync())
                               ? FileImage(File(_storeImagePath!))
                               : null,
@@ -172,7 +171,8 @@ class _StoreDataScreenState extends State<StoreDataScreen> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: Colors.indigo,
+                    // تم إزالة اللون الثابت هنا واستبداله بلون النظام الافتراضي
+                    backgroundColor: Theme.of(context).primaryColor,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: _saveStoreData,
