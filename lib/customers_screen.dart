@@ -341,9 +341,8 @@ class CustomerStatementScreen extends StatelessWidget {
             icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'تصدير PDF',
             onPressed: () async {
-              // جلب الحركات واسم المؤسسة/المحل من قاعدة البيانات
+              // جلب الحركات من قاعدة البيانات
               final statementTransactions = await DBHelper.getCustomerStatement(customer.id);
-              
               
               final pdf = pw.Document();
               final arabicFont = await PdfGoogleFonts.cairoRegular();
@@ -363,7 +362,7 @@ class CustomerStatementScreen extends StatelessWidget {
                   textDirection: pw.TextDirection.rtl,
                   build: (pw.Context context) {
                     return [
-                      // 1. ترويسة الكشف متضمنة اسم المحل/المؤسسة من جدول الإعدادات
+                      // 1. ترويسة الكشف
                       pw.Container(
                         padding: const pw.EdgeInsets.all(12),
                         decoration: pw.BoxDecoration(
@@ -376,7 +375,6 @@ class CustomerStatementScreen extends StatelessWidget {
                             pw.Column(
                               crossAxisAlignment: pw.CrossAxisAlignment.start,
                               children: [
-                                
                                 pw.Text('كشف حساب عميل', style: pw.TextStyle(font: arabicBoldFont, fontSize: 14, color: PdfColors.grey800)),
                                 pw.SizedBox(height: 4),
                                 pw.Text('العميل: ${customer.name}', style: pw.TextStyle(font: arabicFont, fontSize: 12)),
@@ -407,9 +405,9 @@ class CustomerStatementScreen extends StatelessWidget {
                       ),
                       pw.SizedBox(height: 15),
 
-                      // 2. جدول الحركات المالي
+                      // 2. جدول الحركات المالي (مرتب من اليمين: التاريخ، نوع الحركة، له، عليه، الرصيد)
                       pw.Table.fromTextArray(
-                        headers: ['التاريخ / الحركة', 'نوع الحركة', 'له (دائن)', 'عليه (مدين)', 'الرصيد'],
+                        headers: ['التاريخ', 'نوع الحركة', 'له (دائن)', 'عليه (مدين)', 'الرصيد'],
                         data: statementTransactions.map((item) {
                           final credit = (item['credit'] as num?)?.toDouble() ?? 0.0;
                           final debit = (item['debit'] as num?)?.toDouble() ?? 0.0;
