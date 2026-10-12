@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omar_pos/db_helper.dart';
 
-
 class AppearanceSettingsScreen extends StatefulWidget {
   final bool isDarkMode;
   final ValueChanged<bool> onThemeChanged;
@@ -70,17 +69,23 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     }
   }
 
-  // حفظ الإعدادات في قاعدة البيانات مع استخدام toARGB32 لتفادي تحذيرات الإصدارات الحديثة
+  // حفظ الإعدادات وتطبيقها فوراً على التطبيق عند الضغط على حفظ فقط
   Future<void> _saveSettings() async {
     await DBHelper.saveSetting('theme_color', _selectedPrimaryColor.toARGB32().toString());
     await DBHelper.saveSetting('main_button_size', _mainButtonSize);
     await DBHelper.saveSetting('pos_item_size', _posItemSize);
     await DBHelper.saveSetting('is_dark_mode', _currentIsDarkMode.toString());
 
+    // إرسال القيم المحدثة للشاشة الرئيسية لتتغير الألوان والوضع فوراً بدون خروج ودخول
+    if (widget.onColorChanged != null) {
+      widget.onColorChanged!(_selectedPrimaryColor);
+    }
+    widget.onThemeChanged(_currentIsDarkMode);
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('تم حفظ إعدادات المظهر بنجاح'),
+          content: Text('تم حفظ وتطبيق إعدادات المظهر بنجاح'),
           backgroundColor: Colors.green,
         ),
       );
@@ -89,6 +94,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // داخل هذه الشاشة، نستخدم اللون المؤقت لكي يرى المستخدم معاينة اللون الذي يضغطه
     final primaryThemeColor = _selectedPrimaryColor;
 
     return Scaffold(
@@ -117,7 +123,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     setState(() {
                       _currentIsDarkMode = false;
                     });
-                    widget.onThemeChanged(false);
+                    // ملاحظة: هنا لا نغير الثيم العام للتطبيق، فقط نغير الاختيار محلياً حتى يتم الضغط على حفظ
                   },
                   icon: const Icon(Icons.wb_sunny, color: Colors.white),
                   label: const Text('وضع فاتح', style: TextStyle(color: Colors.white)),
@@ -134,7 +140,6 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     setState(() {
                       _currentIsDarkMode = true;
                     });
-                    widget.onThemeChanged(true);
                   },
                   icon: const Icon(Icons.nightlight_round, color: Colors.white),
                   label: const Text('وضع داكن', style: TextStyle(color: Colors.white)),
@@ -160,9 +165,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                   setState(() {
                     _selectedPrimaryColor = color;
                   });
-                  if (widget.onColorChanged != null) {
-                    widget.onColorChanged!(color);
-                  }
+                  // ملاحظة: تم إزالة التحديث الفوري الخارجي هنا، سيتغير اللون فقط داخل هذه الشاشة كمعاينة
                 },
                 child: Container(
                   width: 44,
@@ -223,7 +226,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
 
           const SizedBox(height: 30),
 
-          // زر حفظ الإعدادات
+          // زر حفظ الإعدادات (عند الضغط عليه يتم تطبيق الألوان والوضع فوراً على التطبيق)
           SizedBox(
             width: double.infinity,
             height: 48,
