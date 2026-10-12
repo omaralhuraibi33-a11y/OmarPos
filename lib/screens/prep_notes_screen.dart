@@ -92,8 +92,8 @@ class _PrepNotesScreenState extends State<PrepNotesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('إدارة ملاحظات التحضير'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
+        centerTitle: true,
+        // تم إزالة الألوان الثابتة لتعتمد على ثيم النظام
         actions: [
           // زر حفظ علوي سريع
           IconButton(
@@ -104,7 +104,8 @@ class _PrepNotesScreenState extends State<PrepNotesScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.indigo,
+        // استخدام لون الثيم التلقائي للزر العائم
+        backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         onPressed: () => _showAddEditDialog(),
         child: const Icon(Icons.add),
@@ -146,7 +147,8 @@ class _PrepNotesScreenState extends State<PrepNotesScreen> {
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Colors.indigo,
+                        // استخدام لون الثيم التلقائي للزر
+                        backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
                       ),
                       onPressed: _savePrepNotes,
