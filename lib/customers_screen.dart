@@ -343,7 +343,7 @@ class CustomerStatementScreen extends StatelessWidget {
             onPressed: () async {
               // جلب الحركات واسم المؤسسة/المحل من قاعدة البيانات
               final statementTransactions = await DBHelper.getCustomerStatement(customer.id);
-              final shopName = await DBHelper.getSetting('shop_name', defaultValue: 'نظام المبيعات') ?? 'نظام المبيعات';
+              
               
               final pdf = pw.Document();
               final arabicFont = await PdfGoogleFonts.cairoRegular();
@@ -376,8 +376,7 @@ class CustomerStatementScreen extends StatelessWidget {
                             pw.Column(
                               crossAxisAlignment: pw.CrossAxisAlignment.start,
                               children: [
-                                pw.Text(shopName, style: pw.TextStyle(font: arabicBoldFont, fontSize: 16, color: PdfColors.blue900)),
-                                pw.SizedBox(height: 4),
+                                
                                 pw.Text('كشف حساب عميل', style: pw.TextStyle(font: arabicBoldFont, fontSize: 14, color: PdfColors.grey800)),
                                 pw.SizedBox(height: 4),
                                 pw.Text('العميل: ${customer.name}', style: pw.TextStyle(font: arabicFont, fontSize: 12)),
