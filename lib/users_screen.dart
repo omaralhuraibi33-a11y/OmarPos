@@ -104,7 +104,7 @@ class _UsersScreenState extends State<UsersScreen> {
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+                  // تم إزالة اللون الثابت هنا ليعتمد على زر النظام الافتراضي
                   onPressed: () async {
                     if (nameController.text.trim().isEmpty) return;
 
@@ -161,7 +161,11 @@ class _UsersScreenState extends State<UsersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('إدارة المستخدمين والصلاحيات'), backgroundColor: Colors.deepOrange, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: const Text('إدارة المستخدمين والصلاحيات'),
+        centerTitle: true,
+        // تم إزالة الألوان الثابتة لتأخذ لونها تلقائياً من ثيم النظام
+      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView.builder(
@@ -172,7 +176,7 @@ class _UsersScreenState extends State<UsersScreen> {
                 return Card(
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: user.isAdmin ? Colors.deepOrange : Colors.indigo,
+                      backgroundColor: user.isAdmin ? Theme.of(context).primaryColor : Colors.indigo,
                       foregroundColor: Colors.white,
                       child: Icon(user.isAdmin ? Icons.admin_panel_settings : Icons.person),
                     ),
@@ -191,8 +195,7 @@ class _UsersScreenState extends State<UsersScreen> {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.deepOrange,
-        foregroundColor: Colors.white,
+        // تم إزالة الألوان الثابتة هنا أيضاً لكي يتبع لون الثيم العام
         onPressed: () => _showUserDialog(),
         child: const Icon(Icons.add),
       ),
