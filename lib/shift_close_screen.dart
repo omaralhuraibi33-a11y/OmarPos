@@ -138,17 +138,16 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء', style: TextStyle(color: Colors.white)),
+            child: const Text('إلغاء'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
               await _processShiftClosure(actualCash);
             },
-            child: const Text('تأكيد وإغلاق الوردية', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text('تأكيد وإغلاق الوردية', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -199,7 +198,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
             style: TextStyle(
               fontSize: isBold ? 16 : 14,
               fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              color: color ?? Colors.black,
+              color: color,
             ),
           ),
         ],
@@ -211,10 +210,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.blue.shade800,
         title: Text(
           _summary != null ? 'إغلاق الوردية (رقم: ${_summary!.shiftNumber})' : 'إغلاق الصندوق / الوردية',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
@@ -230,16 +228,16 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
+                          color: Theme.of(context).primaryColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue.shade200),
+                          border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('رقم الوردية الحالية:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                             Chip(
-                              backgroundColor: Colors.blue.shade800,
+                              backgroundColor: Theme.of(context).primaryColor,
                               label: Text(
                                 '# ${_summary!.shiftNumber}',
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
@@ -259,8 +257,8 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('تفاصيل المبيعات (الوردية الحالية)',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                              Text('تفاصيل المبيعات (الوردية الحالية)',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
                               const Divider(),
                               _buildItemRow('عدد فواتير المبيعات:', '${_summary!.salesCount} فاتورة'),
                               _buildItemRow('المبيعات نقداً (كاش):', '${_summary!.cashSales.toStringAsFixed(2)}'),
@@ -327,9 +325,8 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                         onChanged: _updateDifference,
                         decoration: InputDecoration(
                           labelText: 'إجمالي النقدية الفعلية بالدرج',
-                          prefixIcon: const Icon(Icons.point_of_sale, color: Colors.blue),
+                          prefixIcon: Icon(Icons.point_of_sale, color: Theme.of(context).primaryColor),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          fillColor: Colors.white,
                           filled: true,
                         ),
                       ),
@@ -355,14 +352,15 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.red.shade800,
+                            foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          icon: const Icon(Icons.lock, color: Colors.white),
+                          icon: const Icon(Icons.lock),
                           label: const Text(
                             'تأكيد إغلاق الوردية وتوريد المبالغ للصندوق',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           onPressed: _confirmCloseShift,
                         ),
