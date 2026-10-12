@@ -76,7 +76,11 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     await DBHelper.saveSetting('pos_item_size', _posItemSize);
     await DBHelper.saveSetting('is_dark_mode', _currentIsDarkMode.toString());
 
-    // إرسال القيم المحدثة للشاشة الرئيسية لتتغير الألوان والوضع فوراً بدون خروج ودخول
+    // التحديث الفوري المباشر لمتغيرات الـ Notifiers الموجودة في main.dart لتتغير الألوان والأوضاع لحظياً
+    primaryColorNotifier.value = _selectedPrimaryColor;
+    themeModeNotifier.value = _currentIsDarkMode ? ThemeMode.dark : ThemeMode.light;
+
+    // إرسال القيم المحدثة عبر الـ Callbacks أيضاً
     if (widget.onColorChanged != null) {
       widget.onColorChanged!(_selectedPrimaryColor);
     }
@@ -123,7 +127,6 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                     setState(() {
                       _currentIsDarkMode = false;
                     });
-                    // ملاحظة: هنا لا نغير الثيم العام للتطبيق، فقط نغير الاختيار محلياً حتى يتم الضغط على حفظ
                   },
                   icon: const Icon(Icons.wb_sunny, color: Colors.white),
                   label: const Text('وضع فاتح', style: TextStyle(color: Colors.white)),
@@ -165,7 +168,6 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
                   setState(() {
                     _selectedPrimaryColor = color;
                   });
-                  // ملاحظة: تم إزالة التحديث الفوري الخارجي هنا، سيتغير اللون فقط داخل هذه الشاشة كمعاينة
                 },
                 child: Container(
                   width: 44,
@@ -226,7 +228,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
 
           const SizedBox(height: 30),
 
-          // زر حفظ الإعدادات (عند الضغط عليه يتم تطبيق الألوان والوضع فوراً على التطبيق)
+          // زر حفظ الإعدادات (عند الضغط عليه يتم تطبيق الألوان والوضع فوراً على التطبيق بالكامل)
           SizedBox(
             width: double.infinity,
             height: 48,
