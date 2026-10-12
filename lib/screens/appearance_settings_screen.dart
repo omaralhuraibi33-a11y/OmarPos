@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'db_helper.dart';
+import 'package:omar_pos/db_helper.dart'; // المسار الصحيح لقواعد البيانات
 import 'package:omar_pos/main.dart'; // سطر الاستيراد اللازم للتعرف على الـ Notifiers المعرفة في main.dart
 
 class AppearanceSettingsScreen extends StatefulWidget {
