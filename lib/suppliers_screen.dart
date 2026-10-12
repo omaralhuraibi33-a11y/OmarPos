@@ -328,9 +328,9 @@ class SupplierStatementScreen extends StatelessWidget {
                       ),
                       pw.SizedBox(height: 15),
 
-                      // 2. جدول الحركات المالي للمورد
+                      // 2. جدول الحركات المالي للمورد (مرتب من اليمين: التاريخ، نوع الحركة، له، عليه، الرصيد)
                       pw.Table.fromTextArray(
-                        headers: ['التاريخ / الحركة', 'نوع الحركة', 'له (دائن)', 'عليه/مسدد (مدين)', 'الرصيد'],
+                        headers: ['التاريخ', 'نوع الحركة', 'له (دائن)', 'عليه/مسدد (مدين)', 'الرصيد'],
                         data: statementTransactions.map((item) {
                           final credit = (item['credit'] as num?)?.toDouble() ?? 0.0;
                           final debit = (item['debit'] as num?)?.toDouble() ?? 0.0;
