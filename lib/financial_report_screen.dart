@@ -71,93 +71,117 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
   // 2. صافي الربح / الخسارة
   double get _netProfit => _actualNetSales - _salesCost - _totalExpenses;
 
-  // دالة تصدير وحفظ التقرير كـ PDF وتنزيله على الجهاز أو مشاركته
+  // دالة تصدير وحفظ التقرير كـ PDF بتصميم احترافي ومنظم
   Future<void> _exportToPdf() async {
     final pdf = pw.Document();
 
-    // دعم الخط العربي
-    final font = await PdfGoogleFonts.cairoRegular();
-    final fontBold = await PdfGoogleFonts.cairoBold();
+    // دعم الخط العربي Cairo
+    final arabicFont = await PdfGoogleFonts.cairoRegular();
+    final arabicBoldFont = await PdfGoogleFonts.cairoBold();
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
+        textDirection: pw.TextDirection.rtl,
         build: (pw.Context context) {
-          return pw.Directionality(
-            textDirection: pw.TextDirection.rtl,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Center(
-                  child: pw.Text(
-                    'التقرير المالي العام',
-                    style: pw.TextStyle(font: fontBold, fontSize: 24, color: PdfColors.teal900),
-                  ),
-                ),
-                pw.SizedBox(height: 10),
-                pw.Center(
-                  child: pw.Text(
-                    'تاريخ التقرير: ${DateTime.now().toLocal().toString().split(' ')[0]}',
-                    style: pw.TextStyle(font: font, fontSize: 12, color: PdfColors.grey700),
-                  ),
-                ),
-                pw.SizedBox(height: 20),
-
-                // صندوق صافي الربح أو الخسارة داخل الـ PDF
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    color: _netProfit >= 0 ? PdfColors.green800 : PdfColors.red800,
-                    borderRadius: pw.BorderRadius.circular(8),
-                  ),
-                  child: pw.Column(
+          return [
+            // 1. ترويسة التقرير
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.teal50,
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(
-                        _netProfit >= 0 ? 'صافي الربح' : 'صافي الخسارة',
-                        style: pw.TextStyle(font: fontBold, fontSize: 16, color: PdfColors.white),
-                      ),
-                      pw.SizedBox(height: 5),
-                      pw.Text(
-                        _netProfit.toStringAsFixed(2),
-                        style: pw.TextStyle(font: fontBold, fontSize: 22, color: PdfColors.white),
-                      ),
+                      pw.Text('التقرير المالي العام', style: pw.TextStyle(font: arabicBoldFont, fontSize: 18, color: PdfColors.teal900)),
+                      pw.SizedBox(height: 4),
+                      pw.Text('ملخص الحركات والمؤشرات المالية للنظام', style: pw.TextStyle(font: arabicFont, fontSize: 11, color: PdfColors.grey700)),
                     ],
                   ),
-                ),
-                pw.SizedBox(height: 20),
-
-                pw.Text('تفاصيل الحركات المالية:', style: pw.TextStyle(font: fontBold, fontSize: 16)),
-                pw.SizedBox(height: 10),
-
-                // جدول البيانات المالية
-                pw.Table.fromTextArray(
-                  context: context,
-                  cellStyle: pw.TextStyle(font: font, fontSize: 11),
-                  headerStyle: pw.TextStyle(font: fontBold, fontSize: 12, color: PdfColors.white),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.teal700),
-                  data: <List<String>>[
-                    ['المؤشر المالي', 'القيمة'],
-                    ['إجمالي المبيعات', _totalSales.toStringAsFixed(2)],
-                    ['إجمالي مردود المبيعات', _salesReturns.toStringAsFixed(2)],
-                    ['صافي المبيعات', _actualNetSales.toStringAsFixed(2)],
-                    ['تكلفة المبيعات', _salesCost.toStringAsFixed(2)],
-                    ['إجمالي المشتريات', _totalPurchases.toStringAsFixed(2)],
-                    ['إجمالي مردود المشتريات', _purchasesReturns.toStringAsFixed(2)],
-                    ['إجمالي الإيرادات', _totalRevenues.toStringAsFixed(2)],
-                    ['إجمالي المصروفات', _totalExpenses.toStringAsFixed(2)],
-                    ['الباقي على العملاء', _customersBalance.toStringAsFixed(2)],
-                    ['الباقي للموردين', _suppliersBalance.toStringAsFixed(2)],
-                    ['الصندوق الرئيسي', _mainVaultBalance.toStringAsFixed(2)],
-                  ],
-                ),
-              ],
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('تاريخ التقرير: ${DateTime.now().toLocal().toString().split(' ')[0]}', style: pw.TextStyle(font: arabicFont, fontSize: 10)),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          );
+            pw.SizedBox(height: 15),
+
+            // 2. صندوق صافي الربح / الخسارة الرئيسي
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(14),
+              decoration: pw.BoxDecoration(
+                color: _netProfit >= 0 ? PdfColors.green800 : PdfColors.red800,
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Column(
+                children: [
+                  pw.Text(
+                    _netProfit >= 0 ? 'صافي الربح' : 'صافي الخسارة',
+                    style: pw.TextStyle(font: arabicBoldFont, fontSize: 14, color: PdfColors.white),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    _netProfit.toStringAsFixed(2),
+                    style: pw.TextStyle(font: arabicBoldFont, fontSize: 22, color: PdfColors.white),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 15),
+
+            pw.Text('تفاصيل المؤشرات والحركات المالية:', style: pw.TextStyle(font: arabicBoldFont, fontSize: 14, color: PdfColors.teal900)),
+            pw.SizedBox(height: 8),
+
+            // 3. جدول البيانات المالية بتصميم أنيق
+            pw.Table.fromTextArray(
+              headers: ['المؤشر المالي', 'القيمة'],
+              data: <List<String>>[
+                ['إجمالي المبيعات', _totalSales.toStringAsFixed(2)],
+                ['إجمالي مردود المبيعات', _salesReturns.toStringAsFixed(2)],
+                ['صافي المبيعات', _actualNetSales.toStringAsFixed(2)],
+                ['تكلفة المبيعات', _salesCost.toStringAsFixed(2)],
+                ['إجمالي المشتريات', _totalPurchases.toStringAsFixed(2)],
+                ['إجمالي مردود المشتريات', _purchasesReturns.toStringAsFixed(2)],
+                ['إجمالي الإيرادات', _totalRevenues.toStringAsFixed(2)],
+                ['إجمالي المصروفات', _totalExpenses.toStringAsFixed(2)],
+                ['الباقي على العملاء', _customersBalance.toStringAsFixed(2)],
+                ['الباقي للموردين', _suppliersBalance.toStringAsFixed(2)],
+                ['الصندوق الرئيسي', _mainVaultBalance.toStringAsFixed(2)],
+              ],
+              headerStyle: pw.TextStyle(font: arabicBoldFont, color: PdfColors.white, fontSize: 10),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.teal700),
+              cellStyle: pw.TextStyle(font: arabicFont, fontSize: 10),
+              cellAlignment: pw.Alignment.center,
+              columnWidths: {
+                0: const pw.FlexColumnWidth(3),
+                1: const pw.FlexColumnWidth(2),
+              },
+            ),
+            pw.SizedBox(height: 30),
+
+            // 4. توقيعات المسؤولين
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('توقيع المحاسب: .....................', style: pw.TextStyle(font: arabicFont, fontSize: 10)),
+                pw.Text('توقيع المدير العام: .....................', style: pw.TextStyle(font: arabicFont, fontSize: 10)),
+              ],
+            )
+          ];
         },
       ),
     );
 
-    // تفتح واجهة الحفظ/المشاركة ليتمكن المستخدم من تنزيل الـ PDF على جهازه
+    // مشاركة أو فتح نافذة حفظ ملف الـ PDF
     await Printing.sharePdf(
       bytes: await pdf.save(),
       filename: 'financial_report_${DateTime.now().millisecondsSinceEpoch}.pdf',
