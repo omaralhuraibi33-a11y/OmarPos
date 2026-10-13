@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
+import 'package:screenshot/screenshot.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
@@ -46,9 +45,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   ShiftSummary? _summary;
   final TextEditingController _actualCashController = TextEditingController();
   double _cashDifference = 0.0;
-  
-  // مفتاح لتحويل تصميم التقرير إلى صورة
-  final GlobalKey _printReceiptKey = GlobalKey();
 
   @override
   void initState() {
@@ -121,80 +117,194 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     });
   }
 
-  // ==================== دالة تحويل تصميم الـ Widget إلى صورة وبايتات حرارية ====================
-  Future<List<int>> _captureAndConvertReceiptToBytes(double actualCash) async {
-    try {
-      // 1. التقاط الـ Widget كصورة عبر الـ GlobalKey
-      RenderRepaintBoundary boundary = _printReceiptKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 2.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
-
-      // 2. معالجة الصورة باستخدام حزمة image
-      img.Image? decodedImage = img.decodeImage(pngBytes);
-      if (decodedImage == null) return [];
-
-      // ضبط عرض الصورة ليتناسب مع طابعات 80 مم (مع تقليص الـ Width ليكون 384 أو 576 بكسل لتجنب القطع)
-      img.Image resizedImage = img.copyResize(decodedImage, width: 576);
-
-      // 3. توليد أوامر الطباعة كصورة رأسية (Raster Image) باستخدام esc_pos_utils_plus
-      final profile = await CapabilityProfile.load();
-      final generator = Generator(PaperSize.mm80, profile);
-      List<int> bytes = [];
-
-      bytes += generator.image(resizedImage);
-      bytes += generator.feed(2);
-      bytes += generator.cut();
-
-      return bytes;
-    } catch (e) {
-      debugPrint('خطأ في التقاط وتحويل صورة التقرير: $e');
-      return [];
-    }
+  String _formatNum(double number) {
+    return number % 1 == 0 ? number.toInt().toString() : number.toStringAsFixed(2);
   }
 
-  // ==================== دالة طباعة التقرير (بلوتوث أو واي فاي) ====================
-  Future<void> _printShiftReport(double actualCash) async {
+  Future<void> _printShiftReportDirect(double actualCash) async {
     if (_summary == null) return;
-
-    // انتظر قليلاً لضمان اكتمال بناء عنصر المعاينة المخفي على الشاشة
-    await Future.delayed(const Duration(milliseconds: 200));
-    List<int> bytes = await _captureAndConvertReceiptToBytes(actualCash);
-    if (bytes.isEmpty) return;
 
     try {
       final savedPrinters = await DBHelper.getSavedPrinters();
+      if (savedPrinters.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('خطأ طباعة: لا توجد أي طابعة مسجلة في الإعدادات!'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
 
-      if (savedPrinters.isNotEmpty) {
-        final printer = savedPrinters.first;
-        String type = printer['type'] ?? printer['connectionType'] ?? 'bluetooth';
-        
-        // الطباعة عبر الشبكة / واي فاي (Wi-Fi / LAN)
-        if (type.toLowerCase().contains('wifi') || type.toLowerCase().contains('network') || printer['ipAddress'] != null) {
-          String ipAddress = printer['ipAddress'] ?? printer['host'] ?? '';
-          int port = printer['port'] ?? 9100;
-          if (ipAddress.isNotEmpty) {
-            Socket socket = await Socket.connect(ipAddress, port, timeout: const Duration(seconds: 5));
-            socket.add(bytes);
-            await socket.flush();
-            await socket.close();
-            return;
+      final storeName = await DBHelper.getSetting('store_name') ?? 'مذاق سبأ';
+      final ScreenshotController screenshotController = ScreenshotController();
+      final profile = await CapabilityProfile.load();
+
+      for (var printer in savedPrinters) {
+        final usage = printer['usage'] ?? 'زبون';
+        final bool isAutoPrint = printer['autoPrint'] ?? true;
+        if (!isAutoPrint) continue;
+        if (usage != 'زبون' && usage != 'تقرير') continue;
+
+        final String paperSizeStr = printer['paperSize'] ?? '80';
+        final paperSizeVal = paperSizeStr == '57' ? PaperSize.mm58 : PaperSize.mm80;
+        final double receiptWidth = paperSizeStr == '57' ? 384.0 : 576.0;
+        final int targetImageWidth = paperSizeStr == '57' ? 384 : 576;
+
+        String fontSizeSetting = printer['fontSize'] ?? 'normal';
+        double fontScale = 1.0;
+        switch (fontSizeSetting) {
+          case 'medium': fontScale = 1.25; break;
+          case 'large': fontScale = 1.5; break;
+          case 'huge': fontScale = 2.0; break;
+          case 'normal': default: fontScale = 1.0; break;
+        }
+
+        final now = DateTime.now();
+        final formattedDateTime = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}  ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+        final shiftReportWidget = Directionality(
+          textDirection: TextDirection.rtl,
+          child: Material(
+            color: Colors.white,
+            child: Container(
+              width: receiptWidth,
+              padding: EdgeInsets.all(12.0 * fontScale),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(storeName, style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  SizedBox(height: 4 * fontScale),
+                  Text('*** تقرير إغلاق الوردية والصندوق ***', style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  SizedBox(height: 6 * fontScale),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('رقم الوردية: #${_summary!.shiftNumber}', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('التاريخ: $formattedDateTime', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
+                    ],
+                  ),
+                  Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
+                  
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('--- تفاصيل المبيعات ---', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ),
+                  SizedBox(height: 2 * fontScale),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('عدد الفواتير:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text('${_summary!.salesCount}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ]),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('مبيعات كاش:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_summary!.cashSales), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                  ]),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('مبيعات آجل:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_summary!.creditSales), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                  ]),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('إجمالي المبيعات:', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(_formatNum(_summary!.totalSales), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ]),
+                  Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('--- تفاصيل المرتجعات ---', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ),
+                  SizedBox(height: 2 * fontScale),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('عدد المرتجعات:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text('${_summary!.returnsCount}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ]),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('مرتجعات كاش:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_summary!.cashReturns), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                  ]),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('مرتجعات آجل:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_summary!.creditReturns), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                  ]),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('إجمالي المرتجعات:', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(_formatNum(_summary!.totalReturns), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ]),
+                  Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
+
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('النقدية المتوقعة:', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_summary!.netCashInDrawer), style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                  ]),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('النقدية الفعلية:', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(_formatNum(actualCash), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ]),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('الفارق (عجز/فائض):', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(_formatNum(_cashDifference), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  ]),
+                  Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
+                  SizedBox(height: 4 * fontScale),
+                  Text('تم إغلاق الوردية والصندوق بنجاح', textAlign: TextAlign.center, style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  SizedBox(height: 10 * fontScale),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        final pngBytes = await screenshotController.captureFromWidget(shiftReportWidget, delay: const Duration(milliseconds: 50));
+        final img.Image? rawImage = img.decodeImage(pngBytes);
+        if (rawImage == null) continue;
+
+        final img.Image decodedImage = img.copyResize(rawImage, width: targetImageWidth);
+        for (int y = 0; y < decodedImage.height; y++) {
+          for (int x = 0; x < decodedImage.width; x++) {
+            final pixel = decodedImage.getPixel(x, y);
+            final luminance = img.getLuminance(pixel);
+            if (luminance > 160) {
+              decodedImage.setPixelRgba(x, y, 255, 255, 255, 255);
+            } else {
+              decodedImage.setPixelRgba(x, y, 0, 0, 0, 255);
+            }
+          }
+        }
+
+        final generator = Generator(paperSizeVal, profile);
+        List<int> bytes = [];
+        bytes += generator.image(decodedImage);
+        bytes += generator.feed(2);
+        bytes += generator.cut();
+
+        final String connectionType = (printer['connection'] ?? 'بلوتوث').toString();
+
+        if (connectionType == 'واي فاي') {
+          final String ip = (printer['ip'] ?? printer['ipAddress'] ?? '').toString().trim();
+          if (ip.isNotEmpty) {
+            try {
+              final socket = await PrintBluetoothThermal.writeBytes(bytes);
+            } catch (e) {
+              debugPrint('فشل طباعة تقرير الإغلاق عبر الواي فاي: $e');
+            }
+          }
+        } else if (connectionType == 'بلوتوث') {
+          final String mac = (printer['macAddress'] ?? printer['address'] ?? '').toString().trim();
+          if (mac.isNotEmpty) {
+            try {
+              bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
+              if (connected) {
+                await PrintBluetoothThermal.writeBytes(bytes);
+                await PrintBluetoothThermal.disconnect;
+              }
+            } catch (e) {
+              debugPrint('فشل طباعة تقرير الإغلاق عبر البلوتوث: $e');
+            }
           }
         }
       }
-
-      // الطباعة الافتراضية عبر البلوتوث (Bluetooth Thermal)
-      bool isConnected = await PrintBluetoothThermal.connectionStatus;
-      if (!isConnected && savedPrinters.isNotEmpty) {
-        String? macAddress = savedPrinters.first['macAddress'] ?? savedPrinters.first['address'];
-        if (macAddress != null) {
-          await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
-        }
-      }
-      await PrintBluetoothThermal.writeBytes(bytes);
-
     } catch (e) {
-      debugPrint('خطأ في إرسال الطباعة: $e');
+      debugPrint('خطأ استثنائي في طباعة تقرير الإغلاق: $e');
     }
   }
 
@@ -208,7 +318,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد إغلاق الوردية رقم (${_summary!.shiftNumber})'),
         content: Text(
-          'سيتم طباعة تقرير الإغلاق كصورة، إغلاق الوردية الحالية، وترحيل المبيعات والمرتجعات النقدية إلى الصندوق، وبدء وردية جديدة برقم جديد وتصفير العدادات.\n\n'
+          'سيتم طباعة تقرير الإغلاق، إغلاق الوردية الحالية، وترحيل المبيعات والمرتجعات النقدية إلى الصندوق، وبدء وردية جديدة برقم جديد وتصفير العدادات.\n\n'
           'النقدية المتوقعة بالدرج: ${_summary!.netCashInDrawer.toStringAsFixed(2)}\n'
           'النقدية الفعلية: ${actualCash.toStringAsFixed(2)}\n'
           'الفارق: ${_cashDifference.toStringAsFixed(2)}',
@@ -234,10 +344,8 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Future<void> _processShiftClosureWithPrint(double actualCash) async {
     setState(() => _isLoading = true);
 
-    // 1. طباعة التقرير المصور
-    await _printShiftReport(actualCash);
+    await _printShiftReportDirect(actualCash);
 
-    // 2. إغلاق الوردية وحفظها في قاعدة البيانات
     await DBHelper.closeShift(
       shiftNumber: _summary!.shiftNumber,
       expectedCash: _summary!.netCashInDrawer,
@@ -282,227 +390,155 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         ),
         centerTitle: true,
       ),
-      body: Stack(
-        children: [
-          // 1. الواجهة الأصلية التي يراها المستخدم
-          _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _summary == null
-                  ? const Center(child: Text('حدث خطأ أثناء احتساب بيانات الوردية'))
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('رقم الوردية الحالية:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                Chip(
-                                  backgroundColor: Theme.of(context).primaryColor,
-                                  label: Text(
-                                    '# ${_summary!.shiftNumber}',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          Card(
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('تفاصيل المبيعات (الوردية الحالية)',
-                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
-                                  const Divider(),
-                                  _buildItemRow('عدد فواتير المبيعات:', '${_summary!.salesCount} فاتورة'),
-                                  _buildItemRow('المبيعات نقداً (كاش):', '${_summary!.cashSales.toStringAsFixed(2)}'),
-                                  _buildItemRow('المبيعات الآجلة:', '${_summary!.creditSales.toStringAsFixed(2)}', color: Colors.orange.shade800),
-                                  const Divider(),
-                                  _buildItemRow('إجمالي المبيعات:', '${_summary!.totalSales.toStringAsFixed(2)}', isBold: true),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-
-                          Card(
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('تفاصيل مرتجعات المبيعات (الوردية الحالية)',
-                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
-                                  const Divider(),
-                                  _buildItemRow('عدد فواتير المرتجعات:', '${_summary!.returnsCount} فاتورة'),
-                                  _buildItemRow('المرتجعات نقداً (كاش):', '${_summary!.cashReturns.toStringAsFixed(2)}', color: Colors.red),
-                                  _buildItemRow('المرتجعات الآجلة:', '${_summary!.creditReturns.toStringAsFixed(2)}', color: Colors.orange.shade800),
-                                  const Divider(),
-                                  _buildItemRow('إجمالي المرتجعات:', '${_summary!.totalReturns.toStringAsFixed(2)}', isBold: true, color: Colors.red),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-
-                          Card(
-                            color: Colors.green.shade50,
-                            elevation: 3,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('النقدية المتوقعة بالصندوق عند الإغلاق (مبيعات - مرتجعات كاش)',
-                                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
-                                  const Divider(),
-                                  _buildItemRow(
-                                    'الصافي القابل للترحيل للصندوق:',
-                                    '${_summary!.netCashInDrawer.toStringAsFixed(2)}',
-                                    isBold: true,
-                                    color: Colors.green.shade900,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 15),
-
-                          TextField(
-                            controller: _actualCashController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            onChanged: _updateDifference,
-                            decoration: InputDecoration(
-                              labelText: 'إجمالي النقدية الفعلية بالدرج',
-                              prefixIcon: Icon(Icons.point_of_sale, color: Theme.of(context).primaryColor),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                              filled: true,
-                            ),
-                          ),
-                          if (_cashDifference != 0) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              _cashDifference > 0
-                                  ? 'فائض بمقدار: +${_cashDifference.toStringAsFixed(2)}'
-                                  : 'عجز بمقدار: ${_cashDifference.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                color: _cashDifference > 0 ? Colors.green.shade800 : Colors.red.shade800,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _summary == null
+              ? const Center(child: Text('حدث خطأ أثناء احتساب بيانات الوردية'))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('رقم الوردية الحالية:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            Chip(
+                              backgroundColor: Theme.of(context).primaryColor,
+                              label: Text(
+                                '# ${_summary!.shiftNumber}',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
-                          const SizedBox(height: 25),
+                      Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('تفاصيل المبيعات (الوردية الحالية)',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
+                              const Divider(),
+                              _buildItemRow('عدد فواتير المبيعات:', '${_summary!.salesCount} فاتورة'),
+                              _buildItemRow('المبيعات نقداً (كاش):', '${_summary!.cashSales.toStringAsFixed(2)}'),
+                              _buildItemRow('المبيعات الآجلة:', '${_summary!.creditSales.toStringAsFixed(2)}', color: Colors.orange.shade800),
+                              const Divider(),
+                              _buildItemRow('إجمالي المبيعات:', '${_summary!.totalSales.toStringAsFixed(2)}', isBold: true),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
 
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red.shade800,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
+                      Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('تفاصيل مرتجعات المبيعات (الوردية الحالية)',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
+                              const Divider(),
+                              _buildItemRow('عدد فواتير المرتجعات:', '${_summary!.returnsCount} فاتورة'),
+                              _buildItemRow('المرتجعات نقداً (كاش):', '${_summary!.cashReturns.toStringAsFixed(2)}', color: Colors.red),
+                              _buildItemRow('المرتجعات الآجلة:', '${_summary!.creditReturns.toStringAsFixed(2)}', color: Colors.orange.shade800),
+                              const Divider(),
+                              _buildItemRow('إجمالي المرتجعات:', '${_summary!.totalReturns.toStringAsFixed(2)}', isBold: true, color: Colors.red),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      Card(
+                        color: Colors.green.shade50,
+                        elevation: 3,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('النقدية المتوقعة بالصندوق عند الإغلاق (مبيعات - مرتجعات كاش)',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
+                              const Divider(),
+                              _buildItemRow(
+                                'الصافي القابل للترحيل للصندوق:',
+                                '${_summary!.netCashInDrawer.toStringAsFixed(2)}',
+                                isBold: true,
+                                color: Colors.green.shade900,
                               ),
-                              icon: const Icon(Icons.print_outlined),
-                              label: const Text(
-                                'طباعة وتأكيد إغلاق الوردية والصندوق',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: _confirmCloseShift,
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+
+                      TextField(
+                        controller: _actualCashController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: _updateDifference,
+                        decoration: InputDecoration(
+                          labelText: 'إجمالي النقدية الفعلية بالدرج',
+                          prefixIcon: Icon(Icons.point_of_sale, color: Theme.of(context).primaryColor),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          filled: true,
+                        ),
+                      ),
+                      if (_cashDifference != 0) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _cashDifference > 0
+                              ? 'فائض بمقدار: +${_cashDifference.toStringAsFixed(2)}'
+                              : 'عجز بمقدار: ${_cashDifference.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: _cashDifference > 0 ? Colors.green.shade800 : Colors.red.shade800,
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 25),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade800,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          const SizedBox(height: 20),
-                        ],
+                          icon: const Icon(Icons.print_outlined),
+                          label: const Text(
+                            'طباعة وتأكيد إغلاق الوردية والصندوق',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: _confirmCloseShift,
+                        ),
                       ),
-                    ),
-
-          // 2. تصميم قالب التقرير المخفي (الذي يتم التقاطه كصورة للطباعة)
-          if (_summary != null)
-            Positioned(
-              left: -1000,
-              top: -1000,
-              child: RepaintBoundary(
-                key: _printReceiptKey,
-                child: Container(
-                  width: 384, // عرض قياسي لطابعات 80 مم
-                  color: Colors.white,
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'تقرير إغلاق الوردية',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black, fontFamily: 'monospace'),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'رقم الوردية: #${_summary!.shiftNumber}',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black, fontFamily: 'monospace'),
-                      ),
-                      Text(
-                        'التاريخ: ${DateTime.now().toString().split('.')[0]}',
-                        style: const TextStyle(fontSize: 12, color: Colors.black, fontFamily: 'monospace'),
-                      ),
-                      const Divider(color: Colors.black, thickness: 1),
-                      
-                      // مبيعات
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: Text('[ تفاصيل المبيعات ]', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
-                      ),
-                      _buildItemRow('عدد الفواتير:', '${_summary!.salesCount}'),
-                      _buildItemRow('مبيعات كاش:', '${_summary!.cashSales.toStringAsFixed(2)}'),
-                      _buildItemRow('مبيعات آجل:', '${_summary!.creditSales.toStringAsFixed(2)}'),
-                      _buildItemRow('إجمالي المبيعات:', '${_summary!.totalSales.toStringAsFixed(2)}', isBold: true),
-                      const Divider(color: Colors.black, thickness: 1),
-
-                      // مرتجعات
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: Text('[ تفاصيل المرتجعات ]', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
-                      ),
-                      _buildItemRow('عدد المرتجعات:', '${_summary!.returnsCount}'),
-                      _buildItemRow('مرتجعات كاش:', '${_summary!.cashReturns.toStringAsFixed(2)}'),
-                      _buildItemRow('مرتجعات آجل:', '${_summary!.creditReturns.toStringAsFixed(2)}'),
-                      _buildItemRow('إجمالي المرتجعات:', '${_summary!.totalReturns.toStringAsFixed(2)}', isBold: true),
-                      const Divider(color: Colors.black, thickness: 1),
-
-                      // الأرصدة
-                      _buildItemRow('النقدية المتوقعة:', '${_summary!.netCashInDrawer.toStringAsFixed(2)}'),
-                      _buildItemRow('النقدية الفعلية:', double.parse(_actualCashController.text).toStringAsFixed(2), isBold: true),
-                      _buildItemRow('الفارق:', _cashDifference.toStringAsFixed(2), isBold: true),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'تم الإغلاق بنجاح',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
-                      ),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
