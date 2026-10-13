@@ -9,15 +9,20 @@ import 'db_helper.dart';
 
 class ShiftSummary {
   final int shiftNumber;
+  
+  // تفاصيل المبيعات
   final int salesCount;
   final double cashSales;
   final double creditSales;
   final double totalSales;
+  
+  // تفاصيل المرتجعات
   final int returnsCount;
   final double cashReturns;
   final double creditReturns;
   final double totalReturns;
-  final double netCashInDrawer;
+  
+  final double netCashInDrawer; // النقدية المتوقعة بالصندوق (المبيعات والمرتجعات النقدية للوردية الحالية فقط)
 
   ShiftSummary({
     required this.shiftNumber,
@@ -55,11 +60,14 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Future<void> _calculateShiftSummary() async {
     setState(() => _isLoading = true);
 
+    // 1. جلب معرف الوردية المفتوحة حالياً
     final int currentShiftId = await DBHelper.getCurrentShiftId();
 
+    // 2. جلب الفواتير غير المغلقة الخاصة بهذه الوردية فقط عبر الـ shiftId
     final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
     final invoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId).toList();
 
+    // جلب مرتجعات المبيعات غير المغلقة الخاصة بهذه الوردية
     final allReturnInvoices = await DBHelper.getUnclosedReturnInvoices();
     final returnInvoices = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId).toList();
 
@@ -89,6 +97,8 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
     double totalSales = cashSales + creditSales;
     double totalReturns = cashReturns + creditReturns;
+    
+    // صافي النقد المفروض توفره في الدرج للوردية الحالية فقط
     double netCashInDrawer = cashSales - cashReturns;
 
     setState(() {
@@ -121,35 +131,40 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     return number % 1 == 0 ? number.toInt().toString() : number.toStringAsFixed(2);
   }
 
+  // ==================== دالة طباعة تقرير إغلاق الصندوق كصورة (نفس أسلوب شاشة المبيعات) ====================
   Future<void> _printShiftReportDirect(double actualCash) async {
     if (_summary == null) return;
 
     try {
-      final savedPrinters = await DBHelper.getSavedPrinters();
-      if (savedPrinters.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('خطأ طباعة: لا توجد أي طابعة مسجلة في الإعدادات!'), backgroundColor: Colors.red),
-          );
-        }
-        return;
+      final savedPrintersJson = await DBHelper.getSetting('printers_list');
+      if (savedPrintersJson == null || savedPrintersJson.isEmpty) {
+        return; // لا توجد طابعات مسجلة، تخطي الطباعة بصمت
+      }
+
+      final List<dynamic> decoded = jsonDecode(savedPrintersJson);
+      List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      
+      // البحث أولاً عن طابعة مخصصة للتقارير أو للزبائن ومفعلة للطباعة التلقائية
+      final reportPrinters = printers.where((p) {
+        final usage = p['usage'] ?? 'زبون';
+        final bool isAutoPrint = p['autoPrint'] ?? true;
+        return isAutoPrint && (usage == 'تقرير' || usage == 'زبون');
+      }).toList();
+
+      if (reportPrinters.isEmpty) {
+        return; // إذا لم توجد طابعة تقارير مناسبة، لا تطبع شيئاً
       }
 
       final storeName = await DBHelper.getSetting('store_name') ?? 'مذاق سبأ';
       final ScreenshotController screenshotController = ScreenshotController();
       final profile = await CapabilityProfile.load();
 
-      for (var printer in savedPrinters) {
-        final usage = printer['usage'] ?? 'زبون';
-        final bool isAutoPrint = printer['autoPrint'] ?? true;
-        if (!isAutoPrint) continue;
-        if (usage != 'زبون' && usage != 'تقرير') continue;
-
+      for (var printer in reportPrinters) {
         final String paperSizeStr = printer['paperSize'] ?? '80';
         final paperSizeVal = paperSizeStr == '57' ? PaperSize.mm58 : PaperSize.mm80;
         final double receiptWidth = paperSizeStr == '57' ? 384.0 : 576.0;
         final int targetImageWidth = paperSizeStr == '57' ? 384 : 576;
-
+        
         String fontSizeSetting = printer['fontSize'] ?? 'normal';
         double fontScale = 1.0;
         switch (fontSizeSetting) {
@@ -162,37 +177,39 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         final now = DateTime.now();
         final formattedDateTime = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}  ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
-        final shiftReportWidget = Directionality(
+        // تصميم قالب تقرير الإغلاق كـ Widget ليتم التقاطه كصورة
+        final reportWidget = Directionality(
           textDirection: TextDirection.rtl,
           child: Material(
             color: Colors.white,
             child: Container(
               width: receiptWidth,
-              padding: EdgeInsets.all(12.0 * fontScale),
+              padding: EdgeInsets.all(10.0 * fontScale),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(storeName, style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   SizedBox(height: 4 * fontScale),
-                  Text('*** تقرير إغلاق الوردية والصندوق ***', style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text('*** تقرير إغلاق الوردية والصندوق ***', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   SizedBox(height: 6 * fontScale),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('رقم الوردية: #${_summary!.shiftNumber}', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('رقم الوردية: #${_summary!.shiftNumber}', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                       Text('التاريخ: $formattedDateTime', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                     ],
                   ),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   
+                  // قسم المبيعات
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Text('--- تفاصيل المبيعات ---', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    child: Text('--- تفاصيل المبيعات ---', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ),
                   SizedBox(height: 2 * fontScale),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('عدد الفواتير:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text('عدد فواتير المبيعات:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                     Text('${_summary!.salesCount}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -209,13 +226,14 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   ]),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
 
+                  // قسم المرتجعات
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Text('--- تفاصيل المرتجعات ---', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    child: Text('--- تفاصيل المرتجعات ---', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ),
                   SizedBox(height: 2 * fontScale),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('عدد المرتجعات:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text('عدد فواتير المرتجعات:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                     Text('${_summary!.returnsCount}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -232,21 +250,22 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   ]),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
 
+                  // قسم النتائج والأرصدة
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('النقدية المتوقعة:', style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
-                    Text(_formatNum(_summary!.netCashInDrawer), style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
+                    Text('النقدية المتوقعة:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_summary!.netCashInDrawer), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('النقدية الفعلية:', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
-                    Text(_formatNum(actualCash), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('النقدية الفعلية:', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(_formatNum(actualCash), style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('الفارق (عجز/فائض):', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
-                    Text(_formatNum(_cashDifference), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('الفارق (عجز/فائض):', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(_formatNum(_cashDifference), style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ]),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   SizedBox(height: 4 * fontScale),
-                  Text('تم إغلاق الوردية والصندوق بنجاح', textAlign: TextAlign.center, style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text('تم إغلاق الوردية والصندوق بنجاح', textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   SizedBox(height: 10 * fontScale),
                 ],
               ),
@@ -254,7 +273,8 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
           ),
         );
 
-        final pngBytes = await screenshotController.captureFromWidget(shiftReportWidget, delay: const Duration(milliseconds: 50));
+        // التقاط الـ Widget كصورة وتحويلها بالأبيض والأسود تماماً مثل المبيعات
+        final pngBytes = await screenshotController.captureFromWidget(reportWidget, delay: const Duration(milliseconds: 50));
         final img.Image? rawImage = img.decodeImage(pngBytes);
         if (rawImage == null) continue;
 
@@ -283,7 +303,10 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
           final String ip = (printer['ip'] ?? printer['ipAddress'] ?? '').toString().trim();
           if (ip.isNotEmpty) {
             try {
-              final socket = await PrintBluetoothThermal.writeBytes(bytes);
+              final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
+              socket.add(bytes);
+              await socket.flush();
+              await socket.close();
             } catch (e) {
               debugPrint('فشل طباعة تقرير الإغلاق عبر الواي فاي: $e');
             }
@@ -304,7 +327,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         }
       }
     } catch (e) {
-      debugPrint('خطأ استثنائي في طباعة تقرير الإغلاق: $e');
+      debugPrint('خطأ استثنائي في طباعة تقرير إغلاق الوردية: $e');
     }
   }
 
@@ -318,7 +341,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد إغلاق الوردية رقم (${_summary!.shiftNumber})'),
         content: Text(
-          'سيتم طباعة تقرير الإغلاق، إغلاق الوردية الحالية، وترحيل المبيعات والمرتجعات النقدية إلى الصندوق، وبدء وردية جديدة برقم جديد وتصفير العدادات.\n\n'
+          'سيتم إغلاق الوردية الحالية، طباعة التقرير (إن وجدت طابعة مفعلة)، ترحيل المبيعات والمرتجعات النقدية إلى الصندوق، وبدء وردية جديدة برقم جديد وتصفير العدادات.\n\n'
           'النقدية المتوقعة بالدرج: ${_summary!.netCashInDrawer.toStringAsFixed(2)}\n'
           'النقدية الفعلية: ${actualCash.toStringAsFixed(2)}\n'
           'الفارق: ${_cashDifference.toStringAsFixed(2)}',
@@ -332,20 +355,22 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
-              await _processShiftClosureWithPrint(actualCash);
+              await _processShiftClosure(actualCash);
             },
-            child: const Text('طباعة وإغلاق الوردية', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('تأكيد وإغلاق الوردية', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _processShiftClosureWithPrint(double actualCash) async {
+  Future<void> _processShiftClosure(double actualCash) async {
     setState(() => _isLoading = true);
 
+    // 1. محاولة طباعة التقرير كصورة (إذا توفرت طابعة تقارير/زبائن مفعلة في النظام)
     await _printShiftReportDirect(actualCash);
 
+    // 2. إغلاق الوردية الحالية وتغيير حالة الفواتير إلى مغلقة وتوريد المبالغ للصندوق
     await DBHelper.closeShift(
       shiftNumber: _summary!.shiftNumber,
       expectedCash: _summary!.netCashInDrawer,
@@ -359,22 +384,36 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تمت طباعة التقرير وإغلاق الوردية رقم (${_summary!.shiftNumber}) بنجاح!'),
+          content: Text('تم إغلاق الوردية رقم (${_summary!.shiftNumber}) بنجاح وتصفير مبيعاتها للصندوق!'),
           backgroundColor: Colors.green.shade700,
         ),
       );
+      // تحديث الشاشة لجلب الوردية الجديدة (التي تبدأ بصفر مبيعات)
       _calculateShiftSummary();
     }
   }
 
   Widget _buildItemRow(String title, String value, {bool isBold = false, Color? color}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(fontSize: isBold ? 14 : 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-          Text(value, style: TextStyle(fontSize: isBold ? 14 : 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isBold ? 15 : 14,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: isBold ? 16 : 14,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: color,
+            ),
+          ),
         ],
       ),
     );
@@ -398,6 +437,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
+                      // كارت رقم الوردية
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                         decoration: BoxDecoration(
@@ -421,6 +461,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       ),
                       const SizedBox(height: 12),
 
+                      // تفاصيل المبيعات
                       Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -443,6 +484,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       ),
                       const SizedBox(height: 10),
 
+                      // تفاصيل المرتجعات
                       Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -465,6 +507,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       ),
                       const SizedBox(height: 10),
 
+                      // صافي النقدية المتوقعة للترحيل للصندوق
                       Card(
                         color: Colors.green.shade50,
                         elevation: 3,
@@ -527,9 +570,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          icon: const Icon(Icons.print_outlined),
+                          icon: const Icon(Icons.lock),
                           label: const Text(
-                            'طباعة وتأكيد إغلاق الوردية والصندوق',
+                            'تأكيد إغلاق الوردية وتوريد المبالغ للصندوق',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           onPressed: _confirmCloseShift,
