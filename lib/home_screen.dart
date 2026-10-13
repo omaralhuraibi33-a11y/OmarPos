@@ -220,9 +220,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   bool hasAccess = widget.currentUser.isAdmin || (widget.currentUser.permissions[item['title']] ?? false);
 
                   return Card(
-                    elevation: hasAccess ? 2 : 1,
-                    // استخدام لون الكارد الافتراضي للنظام ليتطابق تماماً مع شاشة إعدادات النظام في الوضعين الفاتح والداكن
-                    color: hasAccess ? Theme.of(context).cardColor : Colors.grey.shade200,
+                    elevation: 2,
+                    // تم ترك الـ Card بدون لون مخصص ليعتمد على الثيم الافتراضي تماماً مثل إعدادات النظام، بحيث يظهر بشكل مريح وواضح في الوضعين الفاتح والداكن
+                    color: hasAccess ? null : Colors.grey.shade200,
                     child: InkWell(
                       onTap: () => navigateToScreen(item),
                       child: Column(
