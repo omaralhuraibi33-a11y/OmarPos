@@ -218,7 +218,7 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
                   children: [
-                    _buildNetProfitCard(),
+                    _buildNetProfitCard(context),
                     const SizedBox(height: 16),
                     const Align(
                       alignment: Alignment.centerRight,
@@ -256,12 +256,18 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
     );
   }
 
-  Widget _buildNetProfitCard() {
+  Widget _buildNetProfitCard(BuildContext context) {
     final isProfit = _netProfit >= 0;
+    // لون الثيم الرئيسي لخلفية المربع
+    final primaryColor = Theme.of(context).primaryColor;
+    
+    // لون الحالة (أخضر للربح، أحمر للخسارة للعنوان والأيقونة فقط)
+    final statusColor = isProfit ? Colors.greenAccent.shade400 : Colors.redAccent.shade100;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: isProfit ? Colors.green.shade800 : Colors.red.shade800,
+      color: primaryColor,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -271,13 +277,17 @@ class _FinancialReportScreenState extends State<FinancialReportScreen> {
               children: [
                 Icon(
                   isProfit ? Icons.trending_up : Icons.trending_down,
-                  color: Colors.white,
+                  color: statusColor,
                   size: 28,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   isProfit ? 'صافي الربح' : 'صافي الخسارة',
-                  style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 18, 
+                    color: statusColor, 
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
