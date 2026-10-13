@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:image/image.dart' as img;
 import 'db_helper.dart';
 
 class ShiftSummary {
@@ -16,7 +21,7 @@ class ShiftSummary {
   final double creditReturns;
   final double totalReturns;
   
-  final double netCashInDrawer; // النقدية المتوقعة بالصندوق (المبيعات والمرتجعات النقدية للوردية الحالية فقط)
+  final double netCashInDrawer; // النقدية المتوقعة بالصندوق
 
   ShiftSummary({
     required this.shiftNumber,
@@ -54,14 +59,11 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Future<void> _calculateShiftSummary() async {
     setState(() => _isLoading = true);
 
-    // 1. جلب معرف الوردية المفتوحة حالياً (ليبدا العد الصحيح من 1 للوردية الحالية)
     final int currentShiftId = await DBHelper.getCurrentShiftId();
 
-    // 2. جلب الفواتير غير المغلقة الخاصة بهذه الوردية فقط عبر الـ shiftId
     final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
     final invoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId).toList();
 
-    // جلب مرتجعات المبيعات غير المغلقة الخاصة بهذه الوردية
     final allReturnInvoices = await DBHelper.getUnclosedReturnInvoices();
     final returnInvoices = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId).toList();
 
@@ -91,8 +93,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
     double totalSales = cashSales + creditSales;
     double totalReturns = cashReturns + creditReturns;
-    
-    // صافي النقد المفروض توفره في الدرج للوردية الحالية فقط
     double netCashInDrawer = cashSales - cashReturns;
 
     setState(() {
@@ -121,6 +121,69 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     });
   }
 
+  // ==================== دالة إرسال تقرير الإغلاق للطباعة عبر البلوتوث ====================
+  Future<void> _printShiftReport(double actualCash) async {
+    if (_summary == null) return;
+
+    try {
+      // 1. التحقق من حالة الاتصال بالبلوتوث
+      bool isConnected = await PrintBluetoothThermal.connectionStatus;
+      if (!isConnected) {
+        // في حال عدم وجود اتصال مباشر، جلب الطابعة المسجلة وإعادة الاتصال بها
+        final printers = await DBHelper.getSavedPrinters();
+        if (printers.isNotEmpty && printers.first['macAddress'] != null) {
+          String macAddress = printers.first['macAddress'];
+          await PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
+        }
+      }
+
+      // 2. تجهيز البروفايل والأوامر الحرارية عبر esc_pos_utils_plus
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(PaperSize.mm80, profile);
+      List<int> bytes = [];
+
+      bytes += generator.setGlobalCodeTable('CP1256'); // للغة العربية
+      bytes += generator.text('تقرير إغلاق الوردية',
+          styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2, width: PosTextSize.size2));
+      bytes += generator.feed(1);
+
+      bytes += generator.text('رقم الوردية: #${_summary!.shiftNumber}', styles: const PosStyles(align: PosAlign.right, bold: true));
+      bytes += generator.text('التاريخ: ${DateTime.now().toString().split('.')[0]}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+
+      // تفاصيل المبيعات
+      bytes += generator.text('[ تفاصيل المبيعات ]', styles: const PosStyles(align: PosAlign.right, bold: true));
+      bytes += generator.text('عدد الفواتير: ${_summary!.salesCount}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('مبيعات كاش: ${_summary!.cashSales.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('مبيعات آجل: ${_summary!.creditSales.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('إجمالي المبيعات: ${_summary!.totalSales.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right, bold: true));
+      bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+
+      // تفاصيل المرتجعات
+      bytes += generator.text('[ تفاصيل المرتجعات ]', styles: const PosStyles(align: PosAlign.right, bold: true));
+      bytes += generator.text('عدد المرتجعات: ${_summary!.returnsCount}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('مرتجعات كاش: ${_summary!.cashReturns.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('مرتجعات آجل: ${_summary!.creditReturns.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('إجمالي المرتجعات: ${_summary!.totalReturns.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right, bold: true));
+      bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
+
+      // الأرصدة والنقدية
+      bytes += generator.text('النقدية المتوقعة: ${_summary!.netCashInDrawer.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right));
+      bytes += generator.text('النقدية الفعلية: ${actualCash.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right, bold: true));
+      bytes += generator.text('الفارق: ${_cashDifference.toStringAsFixed(2)}', styles: const PosStyles(align: PosAlign.right, bold: true));
+      bytes += generator.feed(1);
+      bytes += generator.text('تم الإغلاق بنجاح', styles: const PosStyles(align: PosAlign.center, bold: true));
+      
+      bytes += generator.feed(2);
+      bytes += generator.cut(); // قص الورقة
+
+      // 3. إرسال البايتات إلى طابعة البلوتوث
+      await PrintBluetoothThermal.writeBytes(bytes);
+    } catch (e) {
+      debugPrint('خطأ في الطباعة: $e');
+    }
+  }
+
   Future<void> _confirmCloseShift() async {
     if (_summary == null) return;
 
@@ -131,7 +194,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       builder: (ctx) => AlertDialog(
         title: Text('تأكيد إغلاق الوردية رقم (${_summary!.shiftNumber})'),
         content: Text(
-          'سيتم إغلاق الوردية الحالية، ترحيل المبيعات والمرتجعات النقدية إلى الصندوق، وبدء وردية جديدة برقم جديد وتصفير العدادات.\n\n'
+          'سيتم طباعة تقرير الإغلاق، إغلاق الوردية الحالية، وترحيل المبيعات والمرتجعات النقدية إلى الصندوق، وبدء وردية جديدة برقم جديد وتصفير العدادات.\n\n'
           'النقدية المتوقعة بالدرج: ${_summary!.netCashInDrawer.toStringAsFixed(2)}\n'
           'النقدية الفعلية: ${actualCash.toStringAsFixed(2)}\n'
           'الفارق: ${_cashDifference.toStringAsFixed(2)}',
@@ -145,19 +208,22 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
-              await _processShiftClosure(actualCash);
+              await _processShiftClosureWithPrint(actualCash);
             },
-            child: const Text('تأكيد وإغلاق الوردية', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('طباعة وإغلاق الوردية', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _processShiftClosure(double actualCash) async {
+  Future<void> _processShiftClosureWithPrint(double actualCash) async {
     setState(() => _isLoading = true);
 
-    // إغلاق الوردية الحالية وتغيير حالة الفواتير إلى مغلقة (isClosed = 1) لترسخ للصندوق
+    // 1. إرسال أمر الطباعة للبلوتوث أولاً
+    await _printShiftReport(actualCash);
+
+    // 2. إغلاق الوردية وتسجيل البيانات في الداتابيز
     await DBHelper.closeShift(
       shiftNumber: _summary!.shiftNumber,
       expectedCash: _summary!.netCashInDrawer,
@@ -171,11 +237,10 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تم إغلاق الوردية رقم (${_summary!.shiftNumber}) بنجاح وتصفير مبيعاتها للصندوق!'),
+          content: Text('تمت طباعة التقرير وإغلاق الوردية رقم (${_summary!.shiftNumber}) بنجاح!'),
           backgroundColor: Colors.green.shade700,
         ),
       );
-      // تحديث الشاشة لجلب الوردية الجديدة (التي تبدأ بصفر مبيعات)
       _calculateShiftSummary();
     }
   }
@@ -346,6 +411,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
                       const SizedBox(height: 25),
 
+                      // زر إغلاق الوردية مع الطباعة عبر البلوتوث
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -357,9 +423,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          icon: const Icon(Icons.lock),
+                          icon: const Icon(Icons.print_outlined),
                           label: const Text(
-                            'تأكيد إغلاق الوردية وتوريد المبالغ للصندوق',
+                            'طباعة وتأكيد إغلاق الوردية والصندوق',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           onPressed: _confirmCloseShift,
