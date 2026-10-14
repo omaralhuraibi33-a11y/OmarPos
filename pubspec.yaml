@@ -32,3 +32,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  
+# إعداد أيقونة التطبيق على Android
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/launcher_icon.png"
+  min_sdk_android: 21
