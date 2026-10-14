@@ -54,6 +54,9 @@ jobs:
 
     - name: Get Dependencies
       run: flutter pub get
+    
+    - name: Generate Launcher Icons
+      run: dart run flutter_launcher_icons
 
     - name: Build Release APK
       run: flutter build apk --release --no-tree-shake-icons --android-skip-build-dependency-validation
