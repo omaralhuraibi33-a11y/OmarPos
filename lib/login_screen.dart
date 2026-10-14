@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'db_helper.dart'; // قم بالتعديل لـ '../db_helper.dart' إذا كان الملف داخل مجلد screens
+import 'db_helper.dart'; 
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -75,52 +75,52 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // عرض شعار التطبيق بشكل احترافي ومستدير
-                      Container(
-                        width: 110,
-                        height: 110,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: primaryColor.withOpacity(0.2),
-                              blurRadius: 15,
-                              offset: const Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(12),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(50),
-                          child: Image.asset(
-                            'assets/icon/launcher_icon.png',
-                            fit: BoxFit.cover,
+                      // اسم التطبيق بتصميم احترافي، خط عريض، وظل جذاب
+                      ShaderMask(
+                        shaderCallback: (bounds) => LinearGradient(
+                          colors: [primaryColor, primaryColor.withOpacity(0.7)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ).createShader(bounds),
+                        child: const Text(
+                          'Omar soft',
+                          style: TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black26,
+                                offset: Offset(0, 4),
+                                blurRadius: 8,
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 12),
                       
-                      // عنوان ترحيبي
+                      // عنوان ترحيبي فرعي
                       const Text(
                         'مرحباً بك ',
                         style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
                           color: Colors.black87,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       const Text(
                         'الرجاء اختيار المستخدم وإدخال رمز الدخول',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 13,
                           color: Colors.grey,
                         ),
                       ),
                       const SizedBox(height: 32),
 
-                      // بطاقة تحتوي على الحقول لتنظيم الواجهة
+                      // بطاقة تحتوي على الحقول
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
