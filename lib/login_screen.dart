@@ -42,61 +42,158 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('رمز الدخول (PIN) غير صحيح!')),
+        const SnackBar(
+          content: Text('رمز الدخول (PIN) غير صحيح!'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // جلب اللون الأساسي الديناميكي المحدد في المظهر
     final primaryColor = Theme.of(context).primaryColor;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('تسجيل الدخول'),
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  DropdownButtonFormField<AppUser>(
-                    value: selectedUser,
-                    decoration: const InputDecoration(
-                      labelText: 'اختر المستخدم',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: loginUsers.map((u) {
-                      return DropdownMenuItem(value: u, child: Text(u.name));
-                    }).toList(),
-                    onChanged: (val) => setState(() => selectedUser = val),
+          : Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    primaryColor.withOpacity(0.08),
+                    Colors.white,
+                  ],
+                ),
+              ),
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // عرض شعار التطبيق بشكل احترافي ومستدير
+                      Container(
+                        width: 110,
+                        height: 110,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryColor.withOpacity(0.2),
+                              blurRadius: 15,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(50),
+                          child: Image.asset(
+                            'assets/icon/launcher_icon.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      
+                      // عنوان ترحيبي
+                      const Text(
+                        'مرحباً بك مجدداً',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'الرجاء اختيار المستخدم وإدخال رمز الدخول',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // بطاقة تحتوي على الحقول لتنظيم الواجهة
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            DropdownButtonFormField<AppUser>(
+                              value: selectedUser,
+                              decoration: InputDecoration(
+                                labelText: 'اختر المستخدم',
+                                prefixIcon: Icon(Icons.person_outline, color: primaryColor),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
+                              ),
+                              items: loginUsers.map((u) {
+                                return DropdownMenuItem(value: u, child: Text(u.name));
+                              }).toList(),
+                              onChanged: (val) => setState(() => selectedUser = val),
+                            ),
+                            const SizedBox(height: 20),
+                            TextField(
+                              controller: pinController,
+                              keyboardType: TextInputType.number,
+                              obscureText: true,
+                              decoration: InputDecoration(
+                                labelText: 'رمز الدخول (PIN)',
+                                prefixIcon: Icon(Icons.lock_outline, color: primaryColor),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryColor,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size.fromHeight(50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 2,
+                              ),
+                              onPressed: _login,
+                              child: const Text(
+                                'تسجيل الدخول',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: pinController,
-                    keyboardType: TextInputType.number,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'رمز الدخول (PIN)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(50),
-                    ),
-                    onPressed: _login,
-                    child: const Text('دخول', style: TextStyle(fontSize: 18)),
-                  ),
-                ],
+                ),
               ),
             ),
     );
