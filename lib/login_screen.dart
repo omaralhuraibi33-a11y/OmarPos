@@ -126,7 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 20),
 
                         const Text(
-                          'مرحباً بك مجدداً',
+                          'مرحباً بك ',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
