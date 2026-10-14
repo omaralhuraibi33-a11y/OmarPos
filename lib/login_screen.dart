@@ -75,36 +75,102 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // --- عرض صورتك الأصلية تماماً هنا ---
+                      // --- رسم الشعار الأصلي (CS Omar_soft) كودياً بالكامل ---
                       Container(
                         width: 130,
                         height: 130,
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(28),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Colors.black.withOpacity(0.08),
                               blurRadius: 15,
                               offset: const Offset(0, 6),
                             ),
                           ],
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(24),
-                          child: Image.asset(
-                            'assets/icon/launcher_icon.png',
-                            fit: BoxFit.cover,
-                          ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // الجزء المتداخل لرمز CS
+                            SizedBox(
+                              height: 60,
+                              width: 75,
+                              child: Stack(
+                                children: [
+                                  // حرف C الداكن الكبير
+                                  Positioned(
+                                    left: 2,
+                                    top: 0,
+                                    child: Text(
+                                      'C',
+                                      style: TextStyle(
+                                        fontSize: 52,
+                                        fontWeight: FontWeight.w900,
+                                        color: const Color(0xFF1B2129),
+                                        height: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  // حرف S الأزرق المتداخل المتدرج
+                                  Positioned(
+                                    right: 2,
+                                    bottom: 2,
+                                    child: ShaderMask(
+                                      shaderCallback: (bounds) => const LinearGradient(
+                                        colors: [Color(0xFF00A3FF), Color(0xFF0052FF)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ).createShader(bounds),
+                                      child: const Text(
+                                        'S',
+                                        style: TextStyle(
+                                          fontSize: 45,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.white,
+                                          height: 1,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            // نص Omar_soft
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Text(
+                                  'Omar',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF1B2129),
+                                  ),
+                                ),
+                                Text(
+                                  '_soft',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0052FF),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      // ----------------------------------
+                      // ----------------------------------------------------
 
                       const SizedBox(height: 24),
 
                       // عنوان ترحيبي
                       const Text(
-                        'مرحباً بك ',
+                        'مرحباً بك',
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
