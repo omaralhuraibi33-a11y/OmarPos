@@ -75,38 +75,104 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // اسم التطبيق بتصميم احترافي، خط عريض، وظل جذاب
-                      ShaderMask(
-                        shaderCallback: (bounds) => LinearGradient(
-                          colors: [primaryColor, primaryColor.withOpacity(0.7)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ).createShader(bounds),
-                        child: const Text(
-                          'Omar soft',
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5,
-                            color: Colors.white,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black26,
-                                offset: Offset(0, 4),
-                                blurRadius: 8,
+                      // --- الشعار المصمم كودياً بحرفي OS المتداخلين ---
+                      Container(
+                        width: 120,
+                        height: 120,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // تداخل حرفي O و S
+                            SizedBox(
+                              height: 55,
+                              width: 65,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                               -   // حرف الـ O الداكن بالخلف
+                                  Positioned(
+                                    left: 4,
+                                    child: Text(
+                                      'O',
+                                      style: TextStyle(
+                                        fontSize: 44,
+                                        fontWeight: FontWeight.w900,
+                                        color: const Color(0xFF1E232A),
+                                        height: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  // حرف الـ S الأزرق المتداخل بالأمام
+                                  Positioned(
+                                    right: 4,
+                                    child: ShaderMask(
+                                      shaderCallback: (bounds) => const LinearGradient(
+                                        colors: [Color(0xFF00A2FF), Color(0xFF0052FF)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ).createShader(bounds),
+                                      child: const Text(
+                                        'S',
+                                        style: TextStyle(
+                                          fontSize: 42,
+                                          fontWeight: FontWeight.w900,
+                                          color: Colors.white,
+                                          height: 1,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(height: 2),
+                            // نص Omar_soft السفلي
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Text(
+                                  'Omar',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E232A),
+                                  ),
+                                ),
+                                Text(
+                                  '_soft',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0052FF),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      
-                      // عنوان ترحيبي فرعي
+                      // ---------------------------------------------
+
+                      const SizedBox(height: 24),
+
+                      // عنوان ترحيبي
                       const Text(
                         'مرحباً بك ',
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
                           color: Colors.black87,
                         ),
                       ),
@@ -118,7 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Colors.grey,
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 28),
 
                       // بطاقة تحتوي على الحقول
                       Container(
