@@ -45,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // تحديد عدد الأعمدة بناءً على الإعداد المحفوظ
   int _getCrossAxisCount() {
     switch (_mainButtonSizeSetting) {
       case 'صغير':
@@ -58,7 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // تحديد حجم الأيقونة
   double _getIconSize() {
     switch (_mainButtonSizeSetting) {
       case 'صغير':
@@ -71,7 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // تحديد حجم الخط
   double _getFontSize() {
     switch (_mainButtonSizeSetting) {
       case 'صغير':
@@ -84,7 +81,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // تحديد نسبة أبعاد الكارت
   double _getChildAspectRatio() {
     switch (_mainButtonSizeSetting) {
       case 'صغير':
@@ -97,7 +93,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// دالة عرض إجمالي المبالغ في الصندوق
   void _showCashBoxDialog(BuildContext context) async {
     double balance = await DBHelper.getMainVaultBalance();
 
@@ -135,12 +130,101 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// نافذة تغيير كلمة المرور للمستخدم الحالي
+  void _showChangePinDialog(BuildContext context) {
+    final oldPinController = TextEditingController();
+    final newPinController = TextEditingController();
+    final confirmPinController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('تغيير رمز الدخول (PIN)', textAlign: TextAlign.center),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: oldPinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'رمز الدخول الحالي',
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: newPinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'رمز الدخول الجديد',
+                prefixIcon: Icon(Icons.lock_reset),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmPinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'تأكيد الرمز الجديد',
+                prefixIcon: Icon(Icons.check_circle_outline),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (oldPinController.text != widget.currentUser.pin) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('رمز الدخول الحالي غير صحيح!'), backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              if (newPinController.text.isEmpty || newPinController.text != confirmPinController.text) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('الرمز الجديد غير متطابق!'), backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              // تحديث الرمز في قاعدة البيانات
+              final updatedUser = AppUser(
+                id: widget.currentUser.id,
+                name: widget.currentUser.name,
+                pin: newPinController.text,
+                isAdmin: widget.currentUser.isAdmin,
+                permissions: widget.currentUser.permissions,
+              );
+
+              await DBHelper.updateUser(updatedUser);
+              
+              if (!mounted) return;
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم تغيير رمز الدخول بنجاح!'), backgroundColor: Colors.green),
+              );
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // جلب لون الثيم الديناميكي بدلاً من الألوان الثابتة
     final primaryColor = Theme.of(context).primaryColor;
 
-    final List<Map<String, dynamic>> modules = [
+    final List<Map<String, dynamic>> allModules = [
       {'title': 'نقطة البيع', 'icon': Icons.point_of_sale, 'color': Colors.blue, 'page': const PosScreen()},
       {'title': 'المشتريات', 'icon': Icons.shopping_cart, 'color': Colors.orange, 'page': const PurchasesScreen()},
       {'title': 'المخزن', 'icon': Icons.inventory_2, 'color': Colors.teal, 'page': const InventoryScreen()},
@@ -155,20 +239,13 @@ class _HomeScreenState extends State<HomeScreen> {
       {'title': 'الصندوق', 'icon': Icons.savings, 'color': Colors.brown, 'isCashBox': true},
     ];
 
-    void navigateToScreen(Map<String, dynamic> item) async {
+    // إظهار الأزرار المسموح بها فقط للمستخدم
+    final visibleModules = allModules.where((item) {
       String title = item['title'];
-      bool hasPermission = widget.currentUser.isAdmin || (widget.currentUser.permissions[title] ?? false);
+      return widget.currentUser.isAdmin || (widget.currentUser.permissions[title] ?? false);
+    }).toList();
 
-      if (!hasPermission) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('عفواً، لا تملك صلاحية الوصول لقسم: $title'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
+    void navigateToScreen(Map<String, dynamic> item) async {
       if (item['isCashBox'] == true) {
         _showCashBoxDialog(context);
         return;
@@ -181,7 +258,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-      // إعادة تحميل الإعدادات عند العودة من الشاشات الأخرى (كإعدادات النظام)
       _loadSettings();
     }
 
@@ -192,65 +268,95 @@ class _HomeScreenState extends State<HomeScreen> {
           backgroundColor: primaryColor,
           foregroundColor: Colors.white,
           title: Text('الصفحة الرئيسية (${widget.currentUser.name})'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                );
-              },
-            )
-          ],
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : GridView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: modules.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: _getCrossAxisCount(),
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 14,
-                  childAspectRatio: _getChildAspectRatio(),
+        // --- القائمة الجانبية السريعة ---
+        drawer: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              UserAccountsDrawerHeader(
+                decoration: BoxDecoration(color: primaryColor),
+                accountName: Text(
+                  widget.currentUser.name,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                itemBuilder: (context, index) {
-                  final item = modules[index];
-                  bool hasAccess = widget.currentUser.isAdmin || (widget.currentUser.permissions[item['title']] ?? false);
-
-                  return Card(
-                    elevation: 2,
-                    // تم ترك الـ Card بدون لون مخصص ليعتمد على الثيم الافتراضي تماماً مثل إعدادات النظام، بحيث يظهر بشكل مريح وواضح في الوضعين الفاتح والداكن
-                    color: hasAccess ? null : Colors.grey.shade200,
-                    child: InkWell(
-                      onTap: () => navigateToScreen(item),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            item['icon'],
-                            size: _getIconSize(),
-                            color: hasAccess ? item['color'] : Colors.grey,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            item['title'],
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: _getFontSize(),
-                              color: hasAccess ? null : Colors.grey,
-                            ),
-                          ),
-                          if (!hasAccess)
-                            const Icon(Icons.lock, size: 16, color: Colors.grey),
-                        ],
-                      ),
-                    ),
+                accountEmail: Text(widget.currentUser.isAdmin ? 'مدير النظام' : 'مستخدم عادي'),
+                currentAccountPicture: CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person, size: 40, color: primaryColor),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.lock_reset, color: Colors.blue),
+                title: const Text('تغيير رمز الدخول (PIN)'),
+                onTap: () {
+                  Navigator.pop(context); // إغلاق القائمة الجانبية
+                  _showChangePinDialog(context);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text('تسجيل الخروج'),
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginScreen()),
                   );
                 },
               ),
+            ],
+          ),
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : visibleModules.isEmpty
+                ? const Center(
+                    child: Text(
+                      'لا توجد صلاحيات متاحة لهذا الحساب',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: visibleModules.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: _getCrossAxisCount(),
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                      childAspectRatio: _getChildAspectRatio(),
+                    ),
+                    itemBuilder: (context, index) {
+                      final item = visibleModules[index];
+
+                      return Card(
+                        elevation: 2,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => navigateToScreen(item),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                item['icon'],
+                                size: _getIconSize(),
+                                color: item['color'],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                item['title'],
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: _getFontSize(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
       ),
     );
   }
