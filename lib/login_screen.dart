@@ -103,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       
                       // عنوان ترحيبي
                       const Text(
-                        'مرحباً بك مجدداً',
+                        'مرحباً بك ',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
