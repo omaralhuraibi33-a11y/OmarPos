@@ -75,7 +75,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // --- الشعار المصمم كودياً بحرفي OS المتداخلين ---
                       Container(
                         width: 120,
                         height: 120,
@@ -94,14 +93,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // تداخل حرفي O و S
                             SizedBox(
                               height: 55,
                               width: 65,
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
-                               -   // حرف الـ O الداكن بالخلف
                                   Positioned(
                                     left: 4,
                                     child: Text(
@@ -114,7 +111,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                   ),
-                                  // حرف الـ S الأزرق المتداخل بالأمام
                                   Positioned(
                                     right: 4,
                                     child: ShaderMask(
@@ -138,7 +134,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            // نص Omar_soft السفلي
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: const [
@@ -163,13 +158,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                       ),
-                      // ---------------------------------------------
-
                       const SizedBox(height: 24),
-
-                      // عنوان ترحيبي
                       const Text(
-                        'مرحباً بك ',
+                        'مرحباً بك مجدداً',
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -185,8 +176,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 28),
-
-                      // بطاقة تحتوي على الحقول
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
