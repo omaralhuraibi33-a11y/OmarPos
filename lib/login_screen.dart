@@ -75,11 +75,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // --- الشعار بالترتيب والتنسيق الصحيح ---
+                      // --- جلب وعرض الصورة الأصلية من النظام مباشرة ---
                       Container(
-                        width: 140,
-                        height: 140,
-                        padding: const EdgeInsets.all(12),
+                        width: 130,
+                        height: 130,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(28),
@@ -91,84 +90,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // 1. رمز CS المتداخل
-                            SizedBox(
-                              height: 65,
-                              width: 80,
-                              child: Stack(
-                                children: [
-                                  // حرف C الأسود في الخلف
-                                  Positioned(
-                                    left: 2,
-                                    top: 0,
-                                    child: Text(
-                                      'C',
-                                      style: TextStyle(
-                                        fontSize: 58,
-                                        fontWeight: FontWeight.w900,
-                                        color: const Color(0xFF1A1D21),
-                                        height: 1,
-                                      ),
-                                    ),
-                                  ),
-                                  // حرف S الأزرق المتدرج في الأمام والمتداخل
-                                  Positioned(
-                                    right: 2,
-                                    bottom: 0,
-                                    child: ShaderMask(
-                                      shaderCallback: (bounds) => const LinearGradient(
-                                        colors: [Color(0xFF007BFF), Color(0xFF0056D6)],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ).createShader(bounds),
-                                      child: const Text(
-                                        'S',
-                                        style: TextStyle(
-                                          fontSize: 54,
-                                          fontWeight: FontWeight.w900,
-                                          color: Colors.white,
-                                          height: 1,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            // 2. النص السفلي بتحديد الاتجاه اليسار لليمين LTR لضمان كتابة Omar_soft صحيحة
-                            Directionality(
-                              textDirection: TextDirection.ltr,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Text(
-                                    'Omar',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w900,
-                                      color: Color(0xFF1A1D21),
-                                    ),
-                                  ),
-                                  Text(
-                                    '_soft',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w900,
-                                      color: Color(0xFF007BFF),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(28),
+                          child: Image.asset(
+                            'assets/icon/launcher_icon.png',
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
-                      // ------------------------------------
+                      // ---------------------------------------------
 
                       const SizedBox(height: 24),
 
