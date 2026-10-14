@@ -1202,6 +1202,17 @@ class DBHelper {
     await db.insert('users', user.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  // --- الدالة المضافة لتحديث بيانات المستخدم ---
+  static Future<void> updateUser(AppUser user) async {
+    final db = await database;
+    await db.update(
+      'users',
+      user.toMap(),
+      where: 'id = ?',
+      whereArgs: [user.id],
+    );
+  }
+
   static Future<void> deleteUser(String id) async {
     final db = await database;
     await db.delete('users', where: 'id = ?', whereArgs: [id]);
@@ -1341,18 +1352,14 @@ class DBHelper {
   // ==================== دوال تعديل وحذف السندات المضافة حديثاً ====================
   static Future<void> updateVoucher(Voucher newVoucher) async {
     final db = await database;
-    // 1. جلب السند القديم لمعرفة تأثيره السابق على الأرصدة
     final oldVoucherMaps = await db.query('vouchers', where: 'id = ?', whereArgs: [newVoucher.id]);
     if (oldVoucherMaps.isNotEmpty) {
       final oldVoucher = Voucher.fromMap(oldVoucherMaps.first);
       
-      // التراجع عن تأثير السند القديم في أرصدة العملاء أو الموردين
       if (oldVoucher.targetType == 'customer' && oldVoucher.targetId != null) {
         if (oldVoucher.voucherType == 'receipt') {
-          // كان سند قبض (قلل دين العميل)، بالتراجع نزيد دينه مؤقتاً بعكس العملية
           await addCustomerTransaction(customerId: oldVoucher.targetId!, type: 'إلغاء/تعديل سند قبض', credit: 0.0, debit: oldVoucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'تعديل السند');
         } else if (oldVoucher.voucherType == 'payment') {
-          // كان سند صرف (زاد دين العميل)، بالتراجع نقلل دينه
           await addCustomerTransaction(customerId: oldVoucher.targetId!, type: 'إلغاء/تعديل سند صرف', credit: oldVoucher.amount, debit: 0.0, date: DateTime.now().toString().split('.')[0], notes: 'تعديل السند');
         }
       } else if (oldVoucher.targetType == 'supplier' && oldVoucher.targetId != null) {
@@ -1364,10 +1371,8 @@ class DBHelper {
       }
     }
 
-    // 2. تحديث السند بالبيانات الجديدة
     await db.update('vouchers', newVoucher.toMap(), where: 'id = ?', whereArgs: [newVoucher.id]);
 
-    // 3. تطبيق التأثير الجديد للسند بعد التعديل
     if (newVoucher.targetType == 'customer' && newVoucher.targetId != null) {
       if (newVoucher.voucherType == 'receipt') {
         await addCustomerTransaction(customerId: newVoucher.targetId!, type: 'سند قبض', credit: newVoucher.amount, debit: 0.0, date: newVoucher.date, notes: newVoucher.notes);
@@ -1389,7 +1394,6 @@ class DBHelper {
     if (voucherMaps.isNotEmpty) {
       final voucher = Voucher.fromMap(voucherMaps.first);
 
-      // التراجع عن تأثير السند المحذوف على أرصدة العملاء أو الموردين
       if (voucher.targetType == 'customer' && voucher.targetId != null) {
         if (voucher.voucherType == 'receipt') {
           await addCustomerTransaction(customerId: voucher.targetId!, type: 'حذف سند قبض', credit: 0.0, debit: voucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
@@ -1404,7 +1408,6 @@ class DBHelper {
         }
       }
 
-      // حذف السند من الجدول
       await db.delete('vouchers', where: 'id = ?', whereArgs: [id]);
     }
   }
