@@ -225,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final primaryColor = Theme.of(context).primaryColor;
 
     final List<Map<String, dynamic>> allModules = [
-      {'title': 'نقطة البيع', 'icon': Icons.point_of_sale, 'color': Colors.blue, 'page': const PosScreen()},
+      {'title': 'نقطة البيع', 'icon': Icons.point_of_sale, 'color': Colors.blue, 'page': PosScreen(currentUser: widget.currentUser)},
       {'title': 'المشتريات', 'icon': Icons.shopping_cart, 'color': Colors.orange, 'page': const PurchasesScreen()},
       {'title': 'المخزن', 'icon': Icons.inventory_2, 'color': Colors.teal, 'page': const InventoryScreen()},
       {'title': 'العملاء', 'icon': Icons.people, 'color': Colors.purple, 'page': const CustomersScreen()},
