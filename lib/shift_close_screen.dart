@@ -386,7 +386,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('تأكيد إغلاق الوردية (${_currentSummary!.userName})'),
+        title: Text('تأكيد إغلاق الوردية رقم (${_currentSummary!.shiftNumber}) - (${_currentSummary!.userName})'),
         content: Text(
           'سيتم إغلاق الفواتير والمهام الخاصة بهذا المستخدم فقط، وترحيل مبالغه للصندوق.\n\n'
           'المبلغ الفعلي: ${actualCash.toStringAsFixed(2)}',
@@ -438,7 +438,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم إغلاق وردية وفواتير (${_currentSummary!.userName}) بنجاح!'), backgroundColor: Colors.green.shade700),
+        SnackBar(content: Text('تم إغلاق الوردية رقم (${_currentSummary!.shiftNumber}) وفواتير (${_currentSummary!.userName}) بنجاح!'), backgroundColor: Colors.green.shade700),
       );
       _loadShiftSummaries();
     }
@@ -472,6 +472,28 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
+                      // كارت عرض رقم الوردية الحالية
+                      Card(
+                        color: Colors.blue.shade50,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.confirmation_number, color: Colors.blueAccent),
+                              const SizedBox(width: 8),
+                              Text(
+                                'رقم الوردية الحالية: #${_currentSummary?.shiftNumber ?? 1}',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
                       if (widget.currentUser.isAdmin) ...[
                         Container(
                           padding: const EdgeInsets.all(8),
@@ -526,7 +548,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                       ),
                       const SizedBox(height: 10),
 
-                      // كارت تفاصيل المرتجعات (الذي كان غير ظاهر على الشاشة وتم إضافته الآن)
+                      // كارت تفاصيل المرتجعات
                       Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
