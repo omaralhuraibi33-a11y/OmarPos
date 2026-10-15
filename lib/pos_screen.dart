@@ -24,7 +24,10 @@ class CartItem {
 }
 
 class PosScreen extends StatefulWidget {
-  const PosScreen({super.key});
+  final AppUser currentUser; // استقبال المستخدم الحالي
+
+  const PosScreen({super.key, required this.currentUser});
+
   @override
   State<PosScreen> createState() => _PosScreenState();
 }
@@ -34,7 +37,7 @@ class _PosScreenState extends State<PosScreen> {
   bool _isInvoiceExpanded = false;
   bool _isProductsFullScreen = false;
   bool _isReturnMode = false;
-  bool _isCustomerBarExpanded = true; // متغير لطي أو إظهار شريط العميل والبحث في الوضعين
+  bool _isCustomerBarExpanded = true;
 
   List<Category> _categories = [];
   List<Product> _allProducts = [];
@@ -90,7 +93,6 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // دالة طباعة فاتورة المطبخ (مخصصة للمطبخ عند توفر طابعة مفعلة usage == 'مطبخ')
   Future<void> _printKitchenReceiptDirect({
     required String invoiceId,
     required List<CartItem> cartItems,
@@ -103,20 +105,18 @@ class _PosScreenState extends State<PosScreen> {
       final List<dynamic> decoded = jsonDecode(savedPrintersJson);
       List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
       
-      // التحقق من وجود طابعة مطبخ مفعلة على الأقل
       final kitchenPrinters = printers.where((p) {
         final usage = p['usage'] ?? 'زبون';
         final bool isAutoPrint = p['autoPrint'] ?? true;
         return isAutoPrint && (usage == 'مطبخ' || usage == 'المطبخ');
       }).toList();
 
-      if (kitchenPrinters.isEmpty) return; // لا توجد طابعة مطبخ مفعلة، فلا تطبع شيئاً للمطبخ
+      if (kitchenPrinters.isEmpty) return;
 
       final ScreenshotController screenshotController = ScreenshotController();
       final profile = await CapabilityProfile.load();
 
       for (var printer in kitchenPrinters) {
-        final printerName = printer['name'] ?? 'طابعة المطبخ';
         final String paperSizeStr = printer['paperSize'] ?? '80';
         final paperSizeVal = paperSizeStr == '57' ? PaperSize.mm58 : PaperSize.mm80;
         final double receiptWidth = paperSizeStr == '57' ? 384.0 : 576.0;
@@ -134,7 +134,6 @@ class _PosScreenState extends State<PosScreen> {
         final now = DateTime.now();
         final formattedDateTime = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}  ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
-        // تصميم فاتورة المطبخ (بدون أسعار، بخط عريض وواضح للتحضير)
         final kitchenWidget = Directionality(
           textDirection: TextDirection.rtl,
           child: Material(
@@ -187,20 +186,12 @@ class _PosScreenState extends State<PosScreen> {
                                     children: [
                                       Expanded(
                                         flex: 3,
-                                        child: Text(
-                                          item.product.name,
-                                          textAlign: TextAlign.right,
-                                          style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black),
-                                        ),
+                                        child: Text(item.product.name, textAlign: TextAlign.right, style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                                       ),
                                       Container(width: 1.5 * fontScale, color: Colors.black38),
                                       Expanded(
                                         flex: 1,
-                                        child: Text(
-                                          _formatNum(item.quantity),
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black),
-                                        ),
+                                        child: Text(_formatNum(item.quantity), textAlign: TextAlign.center, style: TextStyle(fontSize: 14 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                                       ),
                                     ],
                                   ),
@@ -208,14 +199,8 @@ class _PosScreenState extends State<PosScreen> {
                                     SizedBox(height: 4 * fontScale),
                                     Container(
                                       padding: EdgeInsets.all(4 * fontScale),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade200,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        'ملاحظات: ${item.preparationNotes}',
-                                        style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black),
-                                      ),
+                                      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+                                      child: Text('ملاحظات: ${item.preparationNotes}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                                     ),
                                   ],
                                 ],
@@ -228,7 +213,13 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   SizedBox(height: 6 * fontScale),
-                  Text('إجمالي عدد الأصناف: ${_formatNum(cartItems.fold(0.0, (sum, i) => sum + i.quantity))}', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('إجمالي عدد الأصناف: ${_formatNum(cartItems.fold(0.0, (sum, i) => sum + i.quantity))}', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('المستخدم: ${widget.currentUser.name}', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    ],
+                  ),
                   SizedBox(height: 10 * fontScale),
                 ],
               ),
@@ -335,7 +326,6 @@ class _PosScreenState extends State<PosScreen> {
       final activeNetTotal = (activeSubTotal - activeDiscount) < 0 ? 0.0 : (activeSubTotal - activeDiscount);
       final activeCustomer = customerName ?? (_selectedCustomer?.name ?? 'عميل نقدي');
 
-      // طباعة فاتورة المطبخ أولاً إذا لم تكن مرتجعاً
       if (!isReturn) {
         await _printKitchenReceiptDirect(
           invoiceId: invoiceId,
@@ -416,10 +406,7 @@ class _PosScreenState extends State<PosScreen> {
                         Container(
                           width: 50 * fontScale,
                           height: 50 * fontScale,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            image: DecorationImage(image: FileImage(File(storeImagePath)), fit: BoxFit.cover),
-                          ),
+                          decoration: BoxDecoration(shape: BoxShape.circle, image: DecorationImage(image: FileImage(File(storeImagePath)), fit: BoxFit.cover)),
                         )
                       else
                         Container(
@@ -533,13 +520,18 @@ class _PosScreenState extends State<PosScreen> {
                       Text(_formatNum(activeNetTotal), style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                     ],
                   ),
-                  SizedBox(height: 4 * fontScale),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text('طبع في: $formattedDateTime', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black54)),
-                  ),
+                  SizedBox(height: 6 * fontScale),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   SizedBox(height: 4 * fontScale),
+                  // ===== اسم المستخدم في أسفل الفاتورة المطبوعة =====
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('المستخدم: ${widget.currentUser.name}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('الطابع: $formattedDateTime', style: TextStyle(fontSize: 9 * fontScale, color: Colors.black54)),
+                    ],
+                  ),
+                  SizedBox(height: 6 * fontScale),
                   Text(invoiceFooter, textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, color: Colors.black)),
                   SizedBox(height: 10 * fontScale),
                 ],
@@ -656,6 +648,7 @@ class _PosScreenState extends State<PosScreen> {
           salesInvoices: salesInvoices,
           returnInvoices: returnInvoices,
           onPrintDirect: _printReceiptDirect,
+          currentUser: widget.currentUser,
         ),
       ),
     );
@@ -1014,6 +1007,9 @@ class _PosScreenState extends State<PosScreen> {
     final customerId = _selectedCustomer?.id ?? 'cash_default';
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     
+    // إضافة اسم المستخدم ضمن الملاحظات أو الحقل المتاح لحفظه في تفاصيل الفاتورة
+    final invoiceNotes = 'المستخدم: ${widget.currentUser.name}';
+    
     if (_isReturnMode) {
       final returnInvoices = await DBHelper.getAllReturnInvoices();
       int maxReturnId = 0;
@@ -1032,6 +1028,7 @@ class _PosScreenState extends State<PosScreen> {
         date: now,
         customerId: customerId,
         customerName: customerNameSnapshot,
+        notes: invoiceNotes,
         shiftId: shiftId,
         isClosed: false,
       );
@@ -1082,6 +1079,7 @@ class _PosScreenState extends State<PosScreen> {
         date: now,
         customerId: customerId,
         customerName: customerNameSnapshot,
+        notes: invoiceNotes,
         shiftId: shiftId,
         isClosed: false,
       );
@@ -1095,7 +1093,7 @@ class _PosScreenState extends State<PosScreen> {
           productId: item.product.id,
           productName: item.product.name,
           quantity: item.quantity,
-          price: item.unitPrice,
+          price: item.price,
           total: item.total,
           notes: item.preparationNotes,
         );
@@ -1138,6 +1136,13 @@ class _PosScreenState extends State<PosScreen> {
               )
             else
               const Text('مرتجع مبيعات', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Spacer(),
+            // عرض اسم المستخدم في شريط العنوان العلوي
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(6)),
+              child: Text('المستخدم: ${widget.currentUser.name}', style: const TextStyle(fontSize: 12)),
+            ),
           ],
         ),
         actions: [
@@ -1169,10 +1174,8 @@ class _PosScreenState extends State<PosScreen> {
                 final bool isLandscape = orientation == Orientation.landscape;
 
                 if (isLandscape) {
-                  // الوضع الأفقي: تقسيم الشاشة يمين ويسار مع إمكانية طي شريط العميل والبحث
                   return Row(
                     children: [
-                      // قسم المنتجات والبحث (يسار)
                       Expanded(
                         flex: 6,
                         child: Column(
@@ -1231,9 +1234,7 @@ class _PosScreenState extends State<PosScreen> {
                                   height: 20,
                                   width: double.infinity,
                                   color: Colors.grey.shade300,
-                                  child: const Center(
-                                    child: Icon(Icons.keyboard_arrow_down, size: 16),
-                                  ),
+                                  child: const Center(child: Icon(Icons.keyboard_arrow_down, size: 16)),
                                 ),
                               ),
                             if (_isTouchMode)
@@ -1279,7 +1280,6 @@ class _PosScreenState extends State<PosScreen> {
                           ],
                         ),
                       ),
-                      // قسم الفاتورة والأزرار (يمين)
                       if (!_isProductsFullScreen)
                         Expanded(
                           flex: 4,
@@ -1293,7 +1293,6 @@ class _PosScreenState extends State<PosScreen> {
                     ],
                   );
                 } else {
-                  // الوضع الطولي: التصميم مع إمكانية طي شريط العميل وتغيير العميل والبحث
                   return Column(
                     children: [
                       if (_isCustomerBarExpanded)
@@ -1327,9 +1326,7 @@ class _PosScreenState extends State<PosScreen> {
                             height: 20,
                             width: double.infinity,
                             color: Colors.grey.shade300,
-                            child: const Center(
-                              child: Icon(Icons.keyboard_arrow_down, size: 16),
-                            ),
+                            child: const Center(child: Icon(Icons.keyboard_arrow_down, size: 16)),
                           ),
                         ),
                       Expanded(
@@ -1624,7 +1621,6 @@ class _PosScreenState extends State<PosScreen> {
       color: Colors.white,
       child: Row(
         children: [
-          // تمت إزالة زر "تعليق" بناءً على طلبك
           Expanded(
             child: SizedBox(
               height: btnHeight,
@@ -1658,6 +1654,7 @@ class _PosScreenState extends State<PosScreen> {
 class InvoicesHistoryPage extends StatefulWidget {
   final List<Invoice> salesInvoices;
   final List<Invoice> returnInvoices;
+  final AppUser currentUser;
   final Function({
     required String invoiceId,
     required String paymentMethod,
@@ -1671,6 +1668,7 @@ class InvoicesHistoryPage extends StatefulWidget {
     super.key,
     required this.salesInvoices,
     required this.returnInvoices,
+    required this.currentUser,
     required this.onPrintDirect,
   });
 
@@ -1797,10 +1795,7 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
                         Text('الفترة: ', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 13)),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade800,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
+                          decoration: BoxDecoration(color: Colors.blue.shade800, borderRadius: BorderRadius.circular(6)),
                           child: Text(_getDateFilterLabel(), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                       ],
@@ -1845,10 +1840,7 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: TabBar(
-                  indicator: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: Colors.blue.shade800,
-                  ),
+                  indicator: BoxDecoration(borderRadius: BorderRadius.circular(10), color: Colors.blue.shade800),
                   labelColor: Colors.white,
                   unselectedLabelColor: textColor,
                   tabs: const [
@@ -2041,9 +2033,9 @@ class _InvoicesHistoryPageState extends State<InvoicesHistoryPage> {
                       const SizedBox(width: 4),
                       Text(inv.date, style: const TextStyle(color: Colors.white54, fontSize: 11)),
                       const SizedBox(width: 10),
-                      const Icon(Icons.payment, color: Colors.white54, size: 13),
+                      const Icon(Icons.person, color: Colors.white54, size: 13),
                       const SizedBox(width: 4),
-                      Text(inv.paymentType == 'cash' || inv.paymentType == 'نقدي' ? 'نقداً' : 'آجل', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                      Text(inv.notes.isNotEmpty ? inv.notes : 'المستخدم: غير متوفر', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                     ],
                   ),
                 ],
@@ -2103,7 +2095,6 @@ class InvoiceDetailsPage extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
 
-    // حساب مجموع أسعار الأصناف قبل الخصم لمعرفة قيمة الخصم المطبق بدقة
     double itemsTotalSum = items.fold(0.0, (sum, item) => sum + item.total);
     double discountValue = itemsTotalSum - inv.totalAmount;
     if (discountValue < 0) discountValue = 0.0;
@@ -2184,6 +2175,14 @@ class InvoiceDetailsPage extends StatelessWidget {
                       const Icon(Icons.person, size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text('العميل: ${inv.customerName}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.badge, size: 16, color: Colors.indigoAccent),
+                      const SizedBox(width: 4),
+                      Text(inv.notes.isNotEmpty ? inv.notes : 'المستخدم: غير متوفر', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigoAccent)),
                     ],
                   ),
                 ],
