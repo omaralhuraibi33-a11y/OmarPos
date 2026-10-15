@@ -24,7 +24,7 @@ class CartItem {
 }
 
 class PosScreen extends StatefulWidget {
-  final AppUser currentUser; // استقبال المستخدم الحالي
+  final AppUser currentUser;
 
   const PosScreen({super.key, required this.currentUser});
 
@@ -523,7 +523,6 @@ class _PosScreenState extends State<PosScreen> {
                   SizedBox(height: 6 * fontScale),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   SizedBox(height: 4 * fontScale),
-                  // ===== اسم المستخدم في أسفل الفاتورة المطبوعة =====
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1007,7 +1006,6 @@ class _PosScreenState extends State<PosScreen> {
     final customerId = _selectedCustomer?.id ?? 'cash_default';
     final isCredit = paymentMethod == 'آجل' || paymentMethod == 'أجل';
     
-    // إضافة اسم المستخدم ضمن الملاحظات أو الحقل المتاح لحفظه في تفاصيل الفاتورة
     final invoiceNotes = 'المستخدم: ${widget.currentUser.name}';
     
     if (_isReturnMode) {
@@ -1093,7 +1091,7 @@ class _PosScreenState extends State<PosScreen> {
           productId: item.product.id,
           productName: item.product.name,
           quantity: item.quantity,
-          price: item.price,
+          price: item.unitPrice,
           total: item.total,
           notes: item.preparationNotes,
         );
@@ -1137,7 +1135,6 @@ class _PosScreenState extends State<PosScreen> {
             else
               const Text('مرتجع مبيعات', style: TextStyle(fontWeight: FontWeight.bold)),
             const Spacer(),
-            // عرض اسم المستخدم في شريط العنوان العلوي
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(6)),
