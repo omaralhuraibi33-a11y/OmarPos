@@ -79,26 +79,61 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     List<ShiftSummary> summaries = [];
 
     for (var user in allUsers) {
-      // تعديل شرط التصفية لمنع التداخل ومضاعفة المبيعات بين المدير والكاشيرية
+      // تصفية دقيقة وحصرية تمنع تداخل الكاشيرية (مثل كاشير 1 و كاشير 2) وتعزل المدير تماماً
       final userInvoices = allUnclosedInvoices.where((inv) {
         if (inv.shiftId != currentShiftId) return false;
+
+        // التحقق الأساسي من وجود اسم المستخدم أو معرفه في ملاحظات الفاتورة
+        bool hasName = inv.notes.contains(user.name) || inv.notes.contains(user.id);
+        if (!hasName) return false;
+
         if (user.name == 'المدير العام') {
-          // المدير يحتسب فواتيره فقط إذا لم تكن تخص كاشير آخر مسجل صراحة في الملاحظات
+          // المدير لا يشمل فواتير الكاشيرية الآخرين
           bool belongsToCashier = allUsers.any((u) => u.name != 'المدير العام' && inv.notes.contains(u.name));
-          return !belongsToCashier && (inv.notes.contains(user.name) || inv.notes.contains(user.id) || inv.notes.isEmpty);
+          return !belongsToCashier;
         } else {
-          return inv.notes.contains(user.name) || inv.notes.contains(user.id);
+          // الكاشير: نتأكد أن الفاتورة لا تخص كاشير آخر باسم أطول أو متداخل
+          for (var other in allUsers) {
+            if (other.id != user.id && other.name != 'المدير العام' && inv.notes.contains(other.name)) {
+              // إذا كانت الملاحظات تحتوي على اسم كاشير آخر، نتحقق أيهما المطابق الحقيقي أو نتجنب التداخل
+              // بما أن كاشير 1 جزء من كاشير 2 أو العكس، نفصل بالاسم الدقيق
+              if (other.name.length > user.name.length) {
+                return false; // الفاتورة تخص الكاشير الآخر الأطول اسماً
+              }
+            }
+          }
+          // التحقق الإضافي المباشر: إذا كان اسم المستخدم هو "كاشير 1"، نتأكد أن الملاحظات لا تحتوي على "كاشير 2"
+          if (user.name == 'كاشير 1' && inv.notes.contains('كاشير 2')) {
+            return false;
+          }
         }
+
+        return true;
       }).toList();
 
       final userReturns = allReturnInvoices.where((inv) {
         if (inv.shiftId != currentShiftId) return false;
+
+        bool hasName = inv.notes.contains(user.name) || inv.notes.contains(user.id);
+        if (!hasName) return false;
+
         if (user.name == 'المدير العام') {
           bool belongsToCashier = allUsers.any((u) => u.name != 'المدير العام' && inv.notes.contains(u.name));
-          return !belongsToCashier && (inv.notes.contains(user.name) || inv.notes.contains(user.id) || inv.notes.isEmpty);
+          return !belongsToCashier;
         } else {
-          return inv.notes.contains(user.name) || inv.notes.contains(user.id);
+          for (var other in allUsers) {
+            if (other.id != user.id && other.name != 'المدير العام' && inv.notes.contains(other.name)) {
+              if (other.name.length > user.name.length) {
+                return false;
+              }
+            }
+          }
+          if (user.name == 'كاشير 1' && inv.notes.contains('كاشير 2')) {
+            return false;
+          }
         }
+
+        return true;
       }).toList();
 
       if (userInvoices.isNotEmpty || userReturns.isNotEmpty) {
