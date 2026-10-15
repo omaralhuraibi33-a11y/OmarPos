@@ -79,8 +79,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     List<ShiftSummary> summaries = [];
 
     for (var user in allUsers) {
-      final userInvoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId && inv.notes.contains(user.name)).toList();
-      final userReturns = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId && inv.notes.contains(user.name)).toList();
+      // تصفية فواتير المستخدم فقط
+      final userInvoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId && (inv.notes.contains(user.name) || inv.notes.contains(user.id))).toList();
+      final userReturns = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId && (inv.notes.contains(user.name) || inv.notes.contains(user.id))).toList();
 
       if (userInvoices.isNotEmpty || userReturns.isNotEmpty) {
         double cashSales = userInvoices.where((i) => i.paymentType == 'cash' || i.paymentType == 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
@@ -139,7 +140,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         orElse: () => ShiftSummary(
           shiftNumber: currentShiftId,
           userId: targetUserId,
-          userName: widget.currentUser.isAdmin ? 'مستخدم' : widget.currentUser.name,
+          userName: widget.currentUser.isAdmin 
+              ? (allUsers.firstWhere((u) => u.id == targetUserId, orElse: () => AppUser(id: targetUserId, name: 'مستخدم', pin: '', permissions: {})).name)
+              : widget.currentUser.name,
           salesCount: 0, cashSales: 0, creditSales: 0, totalSales: 0,
           returnsCount: 0, cashReturns: 0, creditReturns: 0, totalReturns: 0, netCashInDrawer: 0,
         ),
@@ -231,7 +234,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   ),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   
-                  // إذا كان تقرير شامل لجميع المستخدمين، اطبع تفاصيل كل مستخدم في التقرير
                   if (widget.currentUser.isAdmin && _selectedUserFilter == 'all') ...[
                     Align(
                       alignment: Alignment.centerRight,
@@ -386,9 +388,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('تأكيد إغلاق الوردية رقم (${_currentSummary!.shiftNumber}) - (${_currentSummary!.userName})'),
+        title: Text('تأكيد إغلاق وردية (${_currentSummary!.userName})'),
         content: Text(
-          'سيتم إغلاق الفواتير والمهام الخاصة بهذا المستخدم فقط، وترحيل مبالغه للصندوق.\n\n'
+          'سيتم إغلاق الفواتير والمهام الخاصة بهذا المستخدم فقط، وترحيل مبالغه للصندوق دون إغلاق فواتير بقية الكاشيرية أو المدير.\n\n'
           'المبلغ الفعلي: ${actualCash.toStringAsFixed(2)}',
         ),
         actions: [
@@ -412,20 +414,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     await _printShiftReportDirect(actualCash, _currentSummary!.userName);
 
     // إغلاق فواتير المستخدم المحدد فقط دون التأثير على بقية الكاشيرية
-    final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
-    final allReturnInvoices = await DBHelper.getUnclosedReturnInvoices();
-
-    List<String> targetInvoiceIds = [];
-    if (_currentSummary!.userId == 'all') {
-      targetInvoiceIds = allUnclosedInvoices.map((e) => e.id).toList();
-    } else {
-      targetInvoiceIds = allUnclosedInvoices
-          .where((inv) => inv.notes.contains(_currentSummary!.userName))
-          .map((e) => e.id)
-          .toList();
-    }
-
-    // إغلاق الفواتير في قاعدة البيانات لهذا المستخدم فقط
     await DBHelper.closeShiftForSpecificUser(
       shiftNumber: _currentSummary!.shiftNumber,
       userName: _currentSummary!.userName,
@@ -438,7 +426,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم إغلاق الوردية رقم (${_currentSummary!.shiftNumber}) وفواتير (${_currentSummary!.userName}) بنجاح!'), backgroundColor: Colors.green.shade700),
+        SnackBar(content: Text('تم إغلاق وردية وفواتير (${_currentSummary!.userName}) بنجاح!'), backgroundColor: Colors.green.shade700),
       );
       _loadShiftSummaries();
     }
