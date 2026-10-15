@@ -1202,7 +1202,6 @@ class DBHelper {
     await db.insert('users', user.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  // --- الدالة المضافة لتحديث بيانات المستخدم ---
   static Future<void> updateUser(AppUser user) async {
     final db = await database;
     await db.update(
@@ -1349,7 +1348,6 @@ class DBHelper {
     }
   }
 
-  // ==================== دوال تعديل وحذف السندات المضافة حديثاً ====================
   static Future<void> updateVoucher(Voucher newVoucher) async {
     final db = await database;
     final oldVoucherMaps = await db.query('vouchers', where: 'id = ?', whereArgs: [newVoucher.id]);
@@ -1819,5 +1817,65 @@ class DBHelper {
       "SELECT SUM(totalAmount) as total FROM purchase_return_invoices",
     );
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  // ==================== دالة إغلاق وردية وفواتير المستخدم الممرر ديناميكياً ====================
+  static Future<void> closeShiftForSpecificUser({
+    required int shiftNumber,
+    required String userName,
+    required double expectedCash,
+    required double actualCash,
+    required double difference,
+    required double totalSales,
+    required double totalReturns,
+  }) async {
+    final db = await database;
+
+    if (userName == 'جميع المستخدمين' || userName == 'all') {
+      await db.update(
+        'invoices',
+        {'isClosed': 1},
+        where: 'shiftId = ? AND isClosed = 0',
+        whereArgs: [shiftNumber],
+      );
+      try {
+        await db.update(
+          'return_invoices',
+          {'isClosed': 1},
+          where: 'shiftId = ? AND isClosed = 0',
+          whereArgs: [shiftNumber],
+        );
+      } catch (_) {}
+    } else {
+      await db.update(
+        'invoices',
+        {'isClosed': 1},
+        where: 'shiftId = ? AND notes LIKE ? AND isClosed = 0',
+        whereArgs: [shiftNumber, '%$userName%'],
+      );
+
+      try {
+        await db.update(
+          'return_invoices',
+          {'isClosed': 1},
+          where: 'shiftId = ? AND notes LIKE ? AND isClosed = 0',
+          whereArgs: [shiftNumber, '%$userName%'],
+        );
+      } catch (_) {}
+    }
+
+    await db.insert('vouchers', {
+      'id': 'shift_user_${DateTime.now().millisecondsSinceEpoch}',
+      'voucherType': 'receipt',
+      'targetType': 'general',
+      'targetId': null,
+      'targetName': 'إغلاق وردية المستخدم ($userName)',
+      'amount': actualCash,
+      'date': DateTime.now().toString().split('.')[0],
+      'paymentMethod': 'نقدي',
+      'notes': 'إغلاق وردية رقم $shiftNumber للمستخدم $userName - متوقع: $expectedCash - فعلي: $actualCash - فارق: $difference',
+      'shiftId': shiftNumber,
+      'isClosed': 1,
+    });
   }
 }
