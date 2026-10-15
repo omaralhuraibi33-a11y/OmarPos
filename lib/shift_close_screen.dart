@@ -9,6 +9,8 @@ import 'db_helper.dart';
 
 class ShiftSummary {
   final int shiftNumber;
+  final String userId;
+  final String userName;
   
   // تفاصيل المبيعات
   final int salesCount;
@@ -22,10 +24,12 @@ class ShiftSummary {
   final double creditReturns;
   final double totalReturns;
   
-  final double netCashInDrawer; // النقدية المتوقعة بالصندوق (المبيعات والمرتجعات النقدية للوردية الحالية فقط)
+  final double netCashInDrawer; // النقدية المتوقعة بالصندوق
 
   ShiftSummary({
     required this.shiftNumber,
+    required this.userId,
+    required this.userName,
     required this.salesCount,
     required this.cashSales,
     required this.creditSales,
@@ -39,7 +43,9 @@ class ShiftSummary {
 }
 
 class ShiftCloseScreen extends StatefulWidget {
-  const ShiftCloseScreen({Key? key}) : super(key: key);
+  final AppUser currentUser; // استقبال المستخدم الحالي للتحقق من الصلاحيات
+
+  const ShiftCloseScreen({Key? key, required this.currentUser}) : super(key: key);
 
   @override
   State<ShiftCloseScreen> createState() => _ShiftCloseScreenState();
@@ -47,74 +53,92 @@ class ShiftCloseScreen extends StatefulWidget {
 
 class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   bool _isLoading = true;
-  ShiftSummary? _summary;
+  List<ShiftSummary> _allUsersSummaries = [];
+  ShiftSummary? _currentSummary;
+  
+  // لمدير النظام: اختيار عرض ملخص مستخدم معين أو الكل ('all' أو userId)
+  String _selectedUserFilter = 'all'; 
+
   final TextEditingController _actualCashController = TextEditingController();
   double _cashDifference = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _calculateShiftSummary();
+    _loadShiftSummaries();
   }
 
-  Future<void> _calculateShiftSummary() async {
+  Future<void> _loadShiftSummaries() async {
     setState(() => _isLoading = true);
 
-    // 1. جلب معرف الوردية المفتوحة حالياً
     final int currentShiftId = await DBHelper.getCurrentShiftId();
-
-    // 2. جلب الفواتير غير المغلقة الخاصة بهذه الوردية فقط عبر الـ shiftId
     final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
-    final invoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId).toList();
-
-    // جلب مرتجعات المبيعات غير المغلقة الخاصة بهذه الوردية
     final allReturnInvoices = await DBHelper.getUnclosedReturnInvoices();
-    final returnInvoices = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId).toList();
+    final allUsers = await DBHelper.getAllUsers();
 
-    int salesCount = invoices.length;
-    double cashSales = 0.0;
-    double creditSales = 0.0;
+    List<ShiftSummary> summaries = [];
 
-    for (var inv in invoices) {
-      if (inv.paymentType == 'cash') {
-        cashSales += inv.totalAmount;
-      } else {
-        creditSales += inv.totalAmount;
+    // إذا كان المستخدم الحالي مديراً، نقوم بتسخين حسابات المبيعات والمرتجعات لكل كاشير/مستخدم على حدة
+    if (widget.currentUser.isAdmin) {
+      for (var user in allUsers) {
+        // فواتير المستخدم عبر ملاحظات الفاتورة التي تحتوي على اسم المستخدم
+        final userInvoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId && inv.notes.contains(user.name)).toList();
+        final userReturns = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId && inv.notes.contains(user.name)).toList();
+
+        if (userInvoices.isNotEmpty || userReturns.isNotEmpty || user.id == widget.currentUser.id) {
+          double cashSales = userInvoices.where((i) => i.paymentType == 'cash' || i.paymentType == 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
+          double creditSales = userInvoices.where((i) => i.paymentType != 'cash' && i.paymentType != 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
+          double cashReturns = userReturns.where((i) => i.paymentType == 'cash' || i.paymentType == 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
+          double creditReturns = userReturns.where((i) => i.paymentType != 'cash' && i.paymentType != 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
+
+          double netCash = cashSales - cashReturns;
+
+          summaries.add(ShiftSummary(
+            shiftNumber: currentShiftId,
+            userId: user.id,
+            userName: user.name,
+            salesCount: userInvoices.length,
+            cashSales: cashSales,
+            creditSales: creditSales,
+            totalSales: cashSales + creditSales,
+            returnsCount: userReturns.length,
+            cashReturns: cashReturns,
+            creditReturns: creditReturns,
+            totalReturns: cashReturns + creditReturns,
+            netCashInDrawer: netCash < 0 ? 0.0 : netCash,
+          ));
+        }
       }
     }
 
-    int returnsCount = returnInvoices.length;
-    double cashReturns = 0.0;
-    double creditReturns = 0.0;
+    // حساب ملخص المستخدم الحالي فقط (أو إجمالي الوردية للكاشير العادي)
+    final currentUserInvoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId && (widget.currentUser.isAdmin || inv.notes.contains(widget.currentUser.name))).toList();
+    final currentUserReturns = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId && (widget.currentUser.isAdmin || inv.notes.contains(widget.currentUser.name))).toList();
 
-    for (var ret in returnInvoices) {
-      if (ret.paymentType == 'cash') {
-        cashReturns += ret.totalAmount;
-      } else {
-        creditReturns += ret.totalAmount;
-      }
-    }
+    double curCashSales = currentUserInvoices.where((i) => i.paymentType == 'cash' || i.paymentType == 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
+    double curCreditSales = currentUserInvoices.where((i) => i.paymentType != 'cash' && i.paymentType != 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
+    double curCashReturns = currentUserReturns.where((i) => i.paymentType == 'cash' || i.paymentType == 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
+    double curCreditReturns = currentUserReturns.where((i) => i.paymentType != 'cash' && i.paymentType != 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
+    double curNetCash = curCashSales - curCashReturns;
 
-    double totalSales = cashSales + creditSales;
-    double totalReturns = cashReturns + creditReturns;
-    
-    // صافي النقد المفروض توفره في الدرج للوردية الحالية فقط
-    double netCashInDrawer = cashSales - cashReturns;
+    _currentSummary = ShiftSummary(
+      shiftNumber: currentShiftId,
+      userId: widget.currentUser.id,
+      userName: widget.currentUser.name,
+      salesCount: currentUserInvoices.length,
+      cashSales: curCashSales,
+      creditSales: curCreditSales,
+      totalSales: curCashSales + curCreditSales,
+      returnsCount: currentUserReturns.length,
+      cashReturns: curCashReturns,
+      creditReturns: curCreditReturns,
+      totalReturns: curCashReturns + curCreditReturns,
+      netCashInDrawer: curNetCash < 0 ? 0.0 : curNetCash,
+    );
 
     setState(() {
-      _summary = ShiftSummary(
-        shiftNumber: currentShiftId,
-        salesCount: salesCount,
-        cashSales: cashSales,
-        creditSales: creditSales,
-        totalSales: totalSales,
-        returnsCount: returnsCount,
-        cashReturns: cashReturns,
-        creditReturns: creditReturns,
-        totalReturns: totalReturns,
-        netCashInDrawer: netCashInDrawer < 0 ? 0.0 : netCashInDrawer,
-      );
-      _actualCashController.text = _summary!.netCashInDrawer.toStringAsFixed(2);
+      _allUsersSummaries = summaries;
+      _actualCashController.text = _currentSummary!.netCashInDrawer.toStringAsFixed(2);
       _cashDifference = 0.0;
       _isLoading = false;
     });
@@ -122,8 +146,12 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
   void _updateDifference(String val) {
     final actual = double.tryParse(val) ?? 0.0;
+    final targetNet = _selectedUserFilter == 'all' 
+        ? _allUsersSummaries.fold(0.0, (sum, s) => sum + s.netCashInDrawer)
+        : (_currentSummary?.netCashInDrawer ?? 0.0);
+
     setState(() {
-      _cashDifference = actual - (_summary?.netCashInDrawer ?? 0.0);
+      _cashDifference = actual - targetNet;
     });
   }
 
@@ -131,29 +159,23 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     return number % 1 == 0 ? number.toInt().toString() : number.toStringAsFixed(2);
   }
 
-  // ==================== دالة طباعة تقرير إغلاق الصندوق كصورة (نفس أسلوب شاشة المبيعات) ====================
-  Future<void> _printShiftReportDirect(double actualCash) async {
-    if (_summary == null) return;
+  Future<void> _printShiftReportDirect(double actualCash, String targetUserName) async {
+    if (_currentSummary == null) return;
 
     try {
       final savedPrintersJson = await DBHelper.getSetting('printers_list');
-      if (savedPrintersJson == null || savedPrintersJson.isEmpty) {
-        return; // لا توجد طابعات مسجلة، تخطي الطباعة بصمت
-      }
+      if (savedPrintersJson == null || savedPrintersJson.isEmpty) return;
 
       final List<dynamic> decoded = jsonDecode(savedPrintersJson);
       List<Map<String, dynamic>> printers = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
       
-      // البحث أولاً عن طابعة مخصصة للتقارير أو للزبائن ومفعلة للطباعة التلقائية
       final reportPrinters = printers.where((p) {
         final usage = p['usage'] ?? 'زبون';
         final bool isAutoPrint = p['autoPrint'] ?? true;
         return isAutoPrint && (usage == 'تقرير' || usage == 'زبون');
       }).toList();
 
-      if (reportPrinters.isEmpty) {
-        return; // إذا لم توجد طابعة تقارير مناسبة، لا تطبع شيئاً
-      }
+      if (reportPrinters.isEmpty) return;
 
       final storeName = await DBHelper.getSetting('store_name') ?? 'مذاق سبأ';
       final ScreenshotController screenshotController = ScreenshotController();
@@ -177,7 +199,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         final now = DateTime.now();
         final formattedDateTime = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}  ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
-        // تصميم قالب تقرير الإغلاق كـ Widget ليتم التقاطه كصورة
         final reportWidget = Directionality(
           textDirection: TextDirection.rtl,
           child: Material(
@@ -196,13 +217,12 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('رقم الوردية: #${_summary!.shiftNumber}', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('رقم الوردية: #${_currentSummary!.shiftNumber}', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                       Text('التاريخ: $formattedDateTime', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                     ],
                   ),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   
-                  // قسم المبيعات
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text('--- تفاصيل المبيعات ---', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
@@ -210,23 +230,22 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   SizedBox(height: 2 * fontScale),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('عدد فواتير المبيعات:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
-                    Text('${_summary!.salesCount}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('${_currentSummary!.salesCount}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('مبيعات كاش:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
-                    Text(_formatNum(_summary!.cashSales), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_currentSummary!.cashSales), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('مبيعات آجل:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
-                    Text(_formatNum(_summary!.creditSales), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_currentSummary!.creditSales), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('إجمالي المبيعات:', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
-                    Text(_formatNum(_summary!.totalSales), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(_formatNum(_currentSummary!.totalSales), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ]),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
 
-                  // قسم المرتجعات
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text('--- تفاصيل المرتجعات ---', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
@@ -234,26 +253,25 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   SizedBox(height: 2 * fontScale),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('عدد فواتير المرتجعات:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
-                    Text('${_summary!.returnsCount}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('${_currentSummary!.returnsCount}', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('مرتجعات كاش:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
-                    Text(_formatNum(_summary!.cashReturns), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_currentSummary!.cashReturns), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('مرتجعات آجل:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
-                    Text(_formatNum(_summary!.creditReturns), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_currentSummary!.creditReturns), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('إجمالي المرتجعات:', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
-                    Text(_formatNum(_summary!.totalReturns), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(_formatNum(_currentSummary!.totalReturns), style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   ]),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
 
-                  // قسم النتائج والأرصدة
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('النقدية المتوقعة:', style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
-                    Text(_formatNum(_summary!.netCashInDrawer), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
+                    Text(_formatNum(_currentSummary!.netCashInDrawer), style: TextStyle(fontSize: 11 * fontScale, color: Colors.black)),
                   ]),
                   Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text('النقدية الفعلية:', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
@@ -265,6 +283,16 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                   ]),
                   Text('------------------------------------------------------------------------', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                   SizedBox(height: 4 * fontScale),
+                  
+                  // اسم المستخدم وطابع الطباعة في أسفل الفاتورة
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('المستخدم: $targetUserName', style: TextStyle(fontSize: 11 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('الطابع: $formattedDateTime', style: TextStyle(fontSize: 9 * fontScale, color: Colors.black54)),
+                    ],
+                  ),
+                  SizedBox(height: 6 * fontScale),
                   Text('تم إغلاق الوردية والصندوق بنجاح', textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   SizedBox(height: 10 * fontScale),
                 ],
@@ -273,7 +301,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
           ),
         );
 
-        // التقاط الـ Widget كصورة وتحويلها بالأبيض والأسود تماماً مثل المبيعات
         final pngBytes = await screenshotController.captureFromWidget(reportWidget, delay: const Duration(milliseconds: 50));
         final img.Image? rawImage = img.decodeImage(pngBytes);
         if (rawImage == null) continue;
@@ -298,21 +325,18 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         bytes += generator.cut();
 
         final String connectionType = (printer['connection'] ?? 'بلوتوث').toString();
-
         if (connectionType == 'واي فاي') {
-          final String ip = (printer['ip'] ?? printer['ipAddress'] ?? '').toString().trim();
+          final String ip = (printer['ip'] ?? '').toString().trim();
           if (ip.isNotEmpty) {
             try {
               final socket = await Socket.connect(ip, 9100, timeout: const Duration(seconds: 4));
               socket.add(bytes);
               await socket.flush();
               await socket.close();
-            } catch (e) {
-              debugPrint('فشل طباعة تقرير الإغلاق عبر الواي فاي: $e');
-            }
+            } catch (_) {}
           }
         } else if (connectionType == 'بلوتوث') {
-          final String mac = (printer['macAddress'] ?? printer['address'] ?? '').toString().trim();
+          final String mac = (printer['macAddress'] ?? '').toString().trim();
           if (mac.isNotEmpty) {
             try {
               bool connected = await PrintBluetoothThermal.connect(macPrinterAddress: mac);
@@ -320,44 +344,36 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                 await PrintBluetoothThermal.writeBytes(bytes);
                 await PrintBluetoothThermal.disconnect;
               }
-            } catch (e) {
-              debugPrint('فشل طباعة تقرير الإغلاق عبر البلوتوث: $e');
-            }
+            } catch (_) {}
           }
         }
       }
-    } catch (e) {
-      debugPrint('خطأ استثنائي في طباعة تقرير إغلاق الوردية: $e');
-    }
+    } catch (_) {}
   }
 
   Future<void> _confirmCloseShift() async {
-    if (_summary == null) return;
+    if (_currentSummary == null) return;
 
-    final actualCash = double.tryParse(_actualCashController.text.trim()) ?? _summary!.netCashInDrawer;
+    final actualCash = double.tryParse(_actualCashController.text.trim()) ?? _currentSummary!.netCashInDrawer;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('تأكيد إغلاق الوردية رقم (${_summary!.shiftNumber})'),
+        title: Text('تأكيد إغلاق الصندوق والوردية رقم (${_currentSummary!.shiftNumber})'),
         content: Text(
-          'سيتم إغلاق الوردية الحالية، طباعة التقرير (إن وجدت طابعة مفعلة)، ترحيل المبيعات والمرتجعات النقدية إلى الصندوق، وبدء وردية جديدة برقم جديد وتصفير العدادات.\n\n'
-          'النقدية المتوقعة بالدرج: ${_summary!.netCashInDrawer.toStringAsFixed(2)}\n'
-          'النقدية الفعلية: ${actualCash.toStringAsFixed(2)}\n'
-          'الفارق: ${_cashDifference.toStringAsFixed(2)}',
+          'سيتم إغلاق الوردية، طباعة التقرير، وتصفير المبيعات.\n\n'
+          'المستخدم المسئول: ${widget.currentUser.name}\n'
+          'النقدية الفعلية: ${actualCash.toStringAsFixed(2)}',
         ),
         actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء'),
-          ),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade800, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
               await _processShiftClosure(actualCash);
             },
-            child: const Text('تأكيد وإغلاق الوردية', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('تأكيد وإغلاق', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -367,29 +383,23 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Future<void> _processShiftClosure(double actualCash) async {
     setState(() => _isLoading = true);
 
-    // 1. محاولة طباعة التقرير كصورة (إذا توفرت طابعة تقارير/زبائن مفعلة في النظام)
-    await _printShiftReportDirect(actualCash);
+    await _printShiftReportDirect(actualCash, widget.currentUser.name);
 
-    // 2. إغلاق الوردية الحالية وتغيير حالة الفواتير إلى مغلقة وتوريد المبالغ للصندوق
     await DBHelper.closeShift(
-      shiftNumber: _summary!.shiftNumber,
-      expectedCash: _summary!.netCashInDrawer,
+      shiftNumber: _currentSummary!.shiftNumber,
+      expectedCash: _currentSummary!.netCashInDrawer,
       actualCash: actualCash,
       difference: _cashDifference,
-      totalSales: _summary!.totalSales,
-      totalReturns: _summary!.totalReturns,
-      transferredToMainVault: actualCash, 
+      totalSales: _currentSummary!.totalSales,
+      totalReturns: _currentSummary!.totalReturns,
+      transferredToMainVault: actualCash,
     );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('تم إغلاق الوردية رقم (${_summary!.shiftNumber}) بنجاح وتصفير مبيعاتها للصندوق!'),
-          backgroundColor: Colors.green.shade700,
-        ),
+        SnackBar(content: Text('تم إغلاق الوردية بواسطة ${widget.currentUser.name} بنجاح!'), backgroundColor: Colors.green.shade700),
       );
-      // تحديث الشاشة لجلب الوردية الجديدة (التي تبدأ بصفر مبيعات)
-      _calculateShiftSummary();
+      _loadShiftSummaries();
     }
   }
 
@@ -399,21 +409,8 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: isBold ? 15 : 14,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: isBold ? 16 : 14,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-              color: color,
-            ),
-          ),
+          Text(title, style: TextStyle(fontSize: isBold ? 15 : 14, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(value, style: TextStyle(fontSize: isBold ? 16 : 14, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color)),
         ],
       ),
     );
@@ -423,45 +420,54 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _summary != null ? 'إغلاق الوردية (رقم: ${_summary!.shiftNumber})' : 'إغلاق الصندوق / الوردية',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(widget.currentUser.isAdmin ? 'إغلاق الصندوق (صلاحية المدير)' : 'إغلاق الصندوق (كاشير: ${widget.currentUser.name})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         centerTitle: true,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _summary == null
-              ? const Center(child: Text('حدث خطأ أثناء احتساب بيانات الوردية'))
+          : _currentSummary == null
+              ? const Center(child: Text('لا توجد بيانات للوردية'))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      // كارت رقم الوردية
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Theme.of(context).primaryColor.withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('رقم الوردية الحالية:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                            Chip(
-                              backgroundColor: Theme.of(context).primaryColor,
-                              label: Text(
-                                '# ${_summary!.shiftNumber}',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      // إذا كان المستخدم مديراً، تظهر له قائمة لاختيار عرض مستخدم معين أو جميع المستخدمين
+                      if (widget.currentUser.isAdmin) ...[
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('لوحة المدير: اختيار حساب المستخدم أو عرض الكل', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                              const SizedBox(height: 6),
+                              DropdownButtonFormField<String>(
+                                value: _selectedUserFilter,
+                                decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 0)),
+                                items: [
+                                  const DropdownMenuItem(value: 'all', child: Text('جميع المستخدمين (إجمالي الصندوق)')),
+                                  ..._allUsersSummaries.map((s) => DropdownMenuItem(value: s.userId, child: Text('المستخدم: ${s.userName} (مبيعات: ${_formatNum(s.totalSales)})'))),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _selectedUserFilter = val;
+                                      if (val != 'all') {
+                                        final found = _allUsersSummaries.firstWhere((s) => s.userId == val);
+                                        // تحديث عرض الملخص للمستخدم المحدد
+                                        _actualCashController.text = found.netCashInDrawer.toStringAsFixed(2);
+                                      }
+                                    });
+                                  }
+                                },
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
 
-                      // تفاصيل المبيعات
+                      // كارت ملخص المبيعات بناءً على الفلتر أو المستخدم
                       Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -470,44 +476,20 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('تفاصيل المبيعات (الوردية الحالية)',
+                              Text(widget.currentUser.isAdmin && _selectedUserFilter == 'all' ? 'إجمالي المبيعات (لكافة المستخدمين)' : 'تفاصيل المبيعات (${widget.currentUser.name})',
                                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Theme.of(context).primaryColor)),
                               const Divider(),
-                              _buildItemRow('عدد فواتير المبيعات:', '${_summary!.salesCount} فاتورة'),
-                              _buildItemRow('المبيعات نقداً (كاش):', '${_summary!.cashSales.toStringAsFixed(2)}'),
-                              _buildItemRow('المبيعات الآجلة:', '${_summary!.creditSales.toStringAsFixed(2)}', color: Colors.orange.shade800),
+                              _buildItemRow('عدد الفواتير:', '${_currentSummary!.salesCount}'),
+                              _buildItemRow('مبيعات كاش:', '${_currentSummary!.cashSales.toStringAsFixed(2)}'),
+                              _buildItemRow('مبيعات آجل:', '${_currentSummary!.creditSales.toStringAsFixed(2)}', color: Colors.orange.shade800),
                               const Divider(),
-                              _buildItemRow('إجمالي المبيعات:', '${_summary!.totalSales.toStringAsFixed(2)}', isBold: true),
+                              _buildItemRow('إجمالي المبيعات:', '${_currentSummary!.totalSales.toStringAsFixed(2)}', isBold: true),
                             ],
                           ),
                         ),
                       ),
                       const SizedBox(height: 10),
 
-                      // تفاصيل المرتجعات
-                      Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('تفاصيل مرتجعات المبيعات (الوردية الحالية)',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
-                              const Divider(),
-                              _buildItemRow('عدد فواتير المرتجعات:', '${_summary!.returnsCount} فاتورة'),
-                              _buildItemRow('المرتجعات نقداً (كاش):', '${_summary!.cashReturns.toStringAsFixed(2)}', color: Colors.red),
-                              _buildItemRow('المرتجعات الآجلة:', '${_summary!.creditReturns.toStringAsFixed(2)}', color: Colors.orange.shade800),
-                              const Divider(),
-                              _buildItemRow('إجمالي المرتجعات:', '${_summary!.totalReturns.toStringAsFixed(2)}', isBold: true, color: Colors.red),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-
-                      // صافي النقدية المتوقعة للترحيل للصندوق
                       Card(
                         color: Colors.green.shade50,
                         elevation: 3,
@@ -517,15 +499,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('النقدية المتوقعة بالصندوق عند الإغلاق (مبيعات - مرتجعات كاش)',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
+                              const Text('النقدية المتوقعة بالصندوق', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green)),
                               const Divider(),
-                              _buildItemRow(
-                                'الصافي القابل للترحيل للصندوق:',
-                                '${_summary!.netCashInDrawer.toStringAsFixed(2)}',
-                                isBold: true,
-                                color: Colors.green.shade900,
-                              ),
+                              _buildItemRow('الصافي النقدي:', '${_currentSummary!.netCashInDrawer.toStringAsFixed(2)}', isBold: true, color: Colors.green.shade900),
                             ],
                           ),
                         ),
@@ -543,20 +519,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           filled: true,
                         ),
                       ),
-                      if (_cashDifference != 0) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          _cashDifference > 0
-                              ? 'فائض بمقدار: +${_cashDifference.toStringAsFixed(2)}'
-                              : 'عجز بمقدار: ${_cashDifference.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: _cashDifference > 0 ? Colors.green.shade800 : Colors.red.shade800,
-                          ),
-                        ),
-                      ],
-
                       const SizedBox(height: 25),
 
                       SizedBox(
@@ -566,19 +528,16 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.red.shade800,
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           icon: const Icon(Icons.lock),
-                          label: const Text(
-                            'تأكيد إغلاق الوردية وتوريد المبالغ للصندوق',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          label: Text(
+                            widget.currentUser.isAdmin ? 'إغلاق وترحيل الصندوق (بصفتك مدير)' : 'تأكيد إغلاق الوردية',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           ),
                           onPressed: _confirmCloseShift,
                         ),
                       ),
-                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
