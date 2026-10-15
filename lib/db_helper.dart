@@ -1402,7 +1402,7 @@ class DBHelper {
         if (voucher.voucherType == 'payment') {
           await addSupplierTransaction(supplierId: voucher.targetId!, type: 'حذف سند صرف', credit: voucher.amount, debit: 0.0, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
         } else if (voucher.voucherType == 'receipt') {
-          await addSupplierTransaction(supplierId: voucher.targetId!, type: 'سند قبض', credit: 0.0, debit: voucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
+          await addSupplierTransaction(supplierId: voucher.targetId!, type: 'حذف سند قبض', credit: 0.0, debit: voucher.amount, date: DateTime.now().toString().split('.')[0], notes: 'حذف السند');
         }
       }
 
@@ -1773,7 +1773,7 @@ class DBHelper {
     final result = await db.rawQuery(
       "SELECT SUM(amount) as total FROM vouchers WHERE voucherType = 'expense'",
     );
-    return (result.first['total'] as num?)?.toDouble() -> toDouble() ?? 0.0;
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
   static Future<double> getSuppliersTotalBalance() async {
@@ -1819,7 +1819,7 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  // ==================== دالة إغلاق وردية وفواتير المستخدم الممرر ديناميكياً (محدثة لفتح وردية جديدة تلقائياً) ====================
+  // ==================== دالة إغلاق وردية وفواتير المستخدم الممرر ديناميكياً ====================
   static Future<void> closeShiftForSpecificUser({
     required int shiftNumber,
     required String userName,
@@ -1831,7 +1831,6 @@ class DBHelper {
   }) async {
     final db = await database;
 
-    // 1. إغلاق الفواتير بناءً على الاختيار (الكل أو مستخدم معين)
     if (userName == 'جميع المستخدمين' || userName == 'all') {
       await db.update(
         'invoices',
@@ -1865,7 +1864,6 @@ class DBHelper {
       } catch (_) {}
     }
 
-    // 2. تسجيل سند التوريد الخاص بإغلاق الوردية
     await db.insert('vouchers', {
       'id': 'shift_user_${DateTime.now().millisecondsSinceEpoch}',
       'voucherType': 'receipt',
@@ -1880,7 +1878,6 @@ class DBHelper {
       'isClosed': 1,
     });
 
-    // 3. تحديث حالة الوردية الحالية في جدول shifts إلى closed
     await db.update(
       'shifts',
       {
@@ -1892,7 +1889,6 @@ class DBHelper {
       whereArgs: [shiftNumber],
     );
 
-    // 4. فتح وردية جديدة تلقائياً لكي يرتفع رقم الوردية ويصبح متغيراً وتلقائياً مع كل عملية إغلاق جديدة
     await db.insert('shifts', {
       'startTime': DateTime.now().toString(),
       'userId': '1',
