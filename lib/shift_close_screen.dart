@@ -72,7 +72,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     setState(() => _isLoading = true);
 
     final int currentShiftId = await DBHelper.getCurrentShiftId();
-    // ربط رقم الوردية المعروض بالتسلسل الصحيح لعمليات الإغلاق المتتالية
+    // ربط رقم الإغلاق بالتسلسل المتصاعد مع كل عملية إغلاق سواء لفرد أو للجميع
     final int dynamicShiftNumber = await DBHelper.getNextShiftNumber();
     
     final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
@@ -82,28 +82,24 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     List<ShiftSummary> summaries = [];
 
     for (var user in allUsers) {
-      // تصفية دقيقة وحصرية تمنع تداخل الكاشيرية (مثل كاشير 1 و كاشير 2) وتعزل المدير تماماً
+      // تصفية دقيقة وحصرية تمنع تداخل الكاشيرية وتعزل المدير تماماً (نفس الكود الأصلي الصحيح تماماً)
       final userInvoices = allUnclosedInvoices.where((inv) {
         if (inv.shiftId != currentShiftId) return false;
 
-        // التحقق الأساسي من وجود اسم المستخدم أو معرفه في ملاحظات الفاتورة
         bool hasName = inv.notes.contains(user.name) || inv.notes.contains(user.id);
         if (!hasName) return false;
 
         if (user.name == 'المدير العام') {
-          // المدير لا يشمل فواتير الكاشيرية الآخرين
           bool belongsToCashier = allUsers.any((u) => u.name != 'المدير العام' && inv.notes.contains(u.name));
           return !belongsToCashier;
         } else {
-          // الكاشير: نتأكد أن الفاتورة لا تخص كاشير آخر باسم أطول أو متداخل
           for (var other in allUsers) {
             if (other.id != user.id && other.name != 'المدير العام' && inv.notes.contains(other.name)) {
               if (other.name.length > user.name.length) {
-                return false; // الفاتورة تخص الكاشير الآخر الأطول اسماً
+                return false;
               }
             }
           }
-          // التحقق الإضافي المباشر: إذا كان اسم المستخدم هو "كاشير 1"، نتأكد أن الملاحظات لا تحتوي على "كاشير 2"
           if (user.name == 'كاشير 1' && inv.notes.contains('كاشير 2')) {
             return false;
           }
@@ -146,7 +142,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         double netCash = (cashSales - cashReturns);
 
         summaries.add(ShiftSummary(
-          shiftNumber: dynamicShiftNumber, // استخدام الرقم المتسلسل الجديد ليتغير مع كل إغلاق
+          shiftNumber: dynamicShiftNumber, // الرقم يتحدث ديناميكياً مع كل إغلاق
           userId: user.id,
           userName: user.name,
           salesCount: userInvoices.length,
