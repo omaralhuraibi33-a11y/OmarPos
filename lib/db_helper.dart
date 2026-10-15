@@ -872,28 +872,24 @@ class DBHelper {
     );
   }
 
-  static Future<int> getCurrentShiftId() async {
+  // ==================== دوال عداد رقم الإغلاق التتابعي ====================
+  static Future<int> getNextClosureNumber() async {
     final db = await database;
-    final res = await db.query('shifts', where: "status = 'open'", orderBy: 'id DESC', limit: 1);
+    final res = await db.query('settings', where: 'key = ?', whereArgs: ['last_closure_number']);
     if (res.isNotEmpty) {
-      return res.first['id'] as int;
+      return (int.tryParse(res.first['value'].toString()) ?? 0) + 1;
+    } else {
+      await db.insert('settings', {'key': 'last_closure_number', 'value': '0'});
+      return 1;
     }
-    return await db.insert('shifts', {
-      'startTime': DateTime.now().toString(),
-      'userId': '1',
-      'userName': 'المدير العام',
-      'totalSales': 0.0,
-      'totalExpenses': 0.0,
-      'transferredToMainVault': 0.0,
-      'status': 'open'
-    });
+  }
+
+  static Future<int> getCurrentShiftId() async {
+    return await getNextClosureNumber();
   }
 
   static Future<int> getNextShiftNumber() async {
-    final db = await database;
-    final res = await db.rawQuery('SELECT MAX(id) as maxId FROM shifts');
-    int maxId = (res.first['maxId'] as int?) ?? 0;
-    return maxId + 1;
+    return await getNextClosureNumber();
   }
 
   static Future<void> closeShift({
@@ -910,55 +906,7 @@ class DBHelper {
     double? difference,
     int? shiftNumber,
   }) async {
-    final db = await database;
-    int currentShiftId = shiftNumber ?? await getCurrentShiftId();
-
-    await db.update(
-      'shifts',
-      {
-        'endTime': DateTime.now().toString(),
-        'userId': userId ?? '1',
-        'userName': userName ?? 'المدير العام',
-        'totalSales': totalSales,
-        'totalExpenses': totalExpenses,
-        'transferredToMainVault': transferredToMainVault,
-        'status': 'closed',
-      },
-      where: 'id = ?',
-      whereArgs: [currentShiftId],
-    );
-
-    await db.update('invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
-    await db.update('purchase_invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
-    await db.update('return_invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
-    await db.update('purchase_return_invoices', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
-    await db.update('vouchers', {'isClosed': 1}, where: 'shiftId = ?', whereArgs: [currentShiftId]);
-
-    if (transferredToMainVault > 0) {
-      await db.insert('vouchers', {
-        'id': 'shift_trans_${currentShiftId}_${DateTime.now().millisecondsSinceEpoch}',
-        'voucherType': 'receipt',
-        'targetType': 'general',
-        'targetId': null,
-        'targetName': 'توريد نقدية الوردية رقم ($currentShiftId)',
-        'amount': transferredToMainVault,
-        'date': DateTime.now().toString().split('.')[0],
-        'paymentMethod': 'نقدي',
-        'notes': 'إغلاق الوردية رقم $currentShiftId وتوريد النقدية الفعلية للصندوق',
-        'shiftId': currentShiftId,
-        'isClosed': 1,
-      });
-    }
-
-    await db.insert('shifts', {
-      'startTime': DateTime.now().toString(),
-      'userId': userId ?? '1',
-      'userName': userName ?? 'المدير العام',
-      'totalSales': 0.0,
-      'totalExpenses': 0.0,
-      'transferredToMainVault': 0.0,
-      'status': 'open'
-    });
+    // هذه الدالة تم الاحتفاظ بها للتوافقية مع أي استدعاءات أخرى إذا وجدت
   }
 
   static Future<List<Invoice>> getUnclosedInvoices() async {
@@ -1019,9 +967,6 @@ class DBHelper {
 
   static Future<void> saveInvoice(Invoice invoice) async {
     final db = await database;
-    if (invoice.shiftId <= 0) {
-      invoice.shiftId = await getCurrentShiftId();
-    }
     await db.insert('invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
@@ -1064,9 +1009,6 @@ class DBHelper {
 
   static Future<void> savePurchaseInvoice(Invoice invoice) async {
     final db = await database;
-    if (invoice.shiftId <= 0) {
-      invoice.shiftId = await getCurrentShiftId();
-    }
     await db.insert('purchase_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
@@ -1107,9 +1049,6 @@ class DBHelper {
 
   static Future<void> saveReturnInvoice(Invoice invoice) async {
     final db = await database;
-    if (invoice.shiftId <= 0) {
-      invoice.shiftId = await getCurrentShiftId();
-    }
     await db.insert('return_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
@@ -1150,9 +1089,6 @@ class DBHelper {
 
   static Future<void> savePurchaseReturnInvoice(Invoice invoice) async {
     final db = await database;
-    if (invoice.shiftId <= 0) {
-      invoice.shiftId = await getCurrentShiftId();
-    }
     await db.insert('purchase_return_invoices', invoice.toMap(), conflictAlgorithm: ConflictAlgorithm.abort);
 
     if (invoice.paymentType == 'credit' && invoice.customerId != null) {
@@ -1299,10 +1235,6 @@ class DBHelper {
 
   static Future<void> addVoucher(Voucher voucher) async {
     final db = await database;
-    if (voucher.shiftId <= 0) {
-      voucher.shiftId = await getCurrentShiftId();
-    }
-
     await db.insert('vouchers', voucher.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
 
     if (voucher.targetType == 'customer' && voucher.targetId != null) {
@@ -1819,7 +1751,7 @@ class DBHelper {
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
 
-  // ==================== دالة إغلاق وردية وفواتير المستخدم الممرر ديناميكياً ====================
+  // ==================== دالة إغلاق وردية وفواتير المستخدم مع رقم إغلاق تتابعي مستقل ====================
   static Future<void> closeShiftForSpecificUser({
     required int shiftNumber,
     required String userName,
@@ -1834,75 +1766,82 @@ class DBHelper {
     bool isAll = (userName == 'جميع المستخدمين' || userName == 'all');
 
     if (isAll) {
-      // إذا اختار المدير إغلاق الجميع: تُغلق كل الفواتير المفتوحة للوردية
+      // إغلاق شامل: جلب رقم إغلاق تتابعي جديد للعملية الشاملة
+      int closureNum = await getNextClosureNumber();
+
       await db.update(
         'invoices',
-        {'isClosed': 1},
-        where: 'shiftId = ? AND isClosed = 0',
-        whereArgs: [shiftNumber],
+        {'isClosed': 1, 'shiftId': closureNum},
+        where: 'isClosed = 0',
       );
       try {
         await db.update(
           'return_invoices',
-          {'isClosed': 1},
-          where: 'shiftId = ? AND isClosed = 0',
-          whereArgs: [shiftNumber],
+          {'isClosed': 1, 'shiftId': closureNum},
+          where: 'isClosed = 0',
         );
       } catch (_) {}
 
-      // إغلاق الوردية الحالية بالكامل وفتح وردية جديدة
-      await db.update(
-        'shifts',
-        {
-          'endTime': DateTime.now().toString(),
-          'totalSales': totalSales,
-          'status': 'closed',
-        },
-        where: 'id = ?',
-        whereArgs: [shiftNumber],
+      // رفع العداد العام للإغلاق بمقدار 1
+      await db.rawUpdate(
+        'UPDATE settings SET value = CAST(value AS INTEGER) + 1 WHERE key = "last_closure_number"'
       );
 
-      await db.insert('shifts', {
-        'startTime': DateTime.now().toString(),
-        'userId': '1',
-        'userName': 'المدير العام',
-        'totalSales': 0.0,
-        'totalExpenses': 0.0,
-        'transferredToMainVault': 0.0,
-        'status': 'open'
+      // تسجيل سند الإغلاق الشامل للصندوق
+      await db.insert('vouchers', {
+        'id': 'shift_all_${DateTime.now().millisecondsSinceEpoch}',
+        'voucherType': 'receipt',
+        'targetType': 'general',
+        'targetId': null,
+        'targetName': 'إغلاق شامل للصندوق (رقم المحضر: $closureNum)',
+        'amount': actualCash,
+        'date': DateTime.now().toString().split('.')[0],
+        'paymentMethod': 'نقدي',
+        'notes': 'إغلاق عام شامل لجميع المستخدمين برقم محضر $closureNum - المبيعات: $totalSales - الفارق: $difference',
+        'shiftId': closureNum,
+        'isClosed': 1,
       });
+
     } else {
-      // إغلاق كاشير واحد فقط: تُغلق فواتير هذا الكاشير المحددة فقط دون إغلاق الوردية الشاملة
+      // إغلاق فردي لكاشير محدد: يأخذ رقم إغلاق تتابعي خاص به لحظة الضغط على زر الإغلاق
+      int closureNum = await getNextClosureNumber();
+
+      // إغلاق فواتير هذا المستخدم المفتوحة فقط وتحديث shiftId برقم الإغلاق الجديد
       await db.update(
         'invoices',
-        {'isClosed': 1},
-        where: 'shiftId = ? AND notes LIKE ? AND isClosed = 0',
-        whereArgs: [shiftNumber, '%$userName%'],
+        {'isClosed': 1, 'shiftId': closureNum},
+        where: 'notes LIKE ? AND isClosed = 0',
+        whereArgs: ['%$userName%'],
       );
 
       try {
         await db.update(
           'return_invoices',
-          {'isClosed': 1},
-          where: 'shiftId = ? AND notes LIKE ? AND isClosed = 0',
-          whereArgs: [shiftNumber, '%$userName%'],
+          {'isClosed': 1, 'shiftId': closureNum},
+          where: 'notes LIKE ? AND isClosed = 0',
+          whereArgs: ['%$userName%'],
         );
       } catch (_) {}
-    }
 
-    // تسجيل سند الإغلاق في الصندوق للمستخدم المغلق
-    await db.insert('vouchers', {
-      'id': 'shift_user_${DateTime.now().millisecondsSinceEpoch}',
-      'voucherType': 'receipt',
-      'targetType': 'general',
-      'targetId': null,
-      'targetName': 'إغلاق وردية المستخدم ($userName)',
-      'amount': actualCash,
-      'date': DateTime.now().toString().split('.')[0],
-      'paymentMethod': 'نقدي',
-      'notes': 'إغلاق وردية رقم $shiftNumber للمستخدم $userName - متوقع: $expectedCash - فعلي: $actualCash - فارق: $difference',
-      'shiftId': shiftNumber,
-      'isClosed': 1,
-    });
+      // رفع العداد الخاص برقم الإغلاق القادم (+1) في الإعدادات فوراً
+      await db.rawUpdate(
+        'UPDATE settings SET value = CAST(value AS INTEGER) + 1 WHERE key = "last_closure_number"'
+      );
+
+      // تسجيل سند الإغلاق في الصندوق للمستخدم المغلق برقم المحضر الخاص به
+      await db.insert('vouchers', {
+        'id': 'shift_user_${DateTime.now().millisecondsSinceEpoch}',
+        'voucherType': 'receipt',
+        'targetType': 'general',
+        'targetId': null,
+        'targetName': 'إغلاق وردية المستخدم ($userName) - محضر رقم ($closureNum)',
+        'amount': actualCash,
+        'date': DateTime.now().toString().split('.')[0],
+        'paymentMethod': 'نقدي',
+        'notes': 'إغلاق وردية رقم $closureNum للمستخدم $userName - متوقع: $expectedCash - فعلي: $actualCash - فارق: $difference',
+        'shiftId': closureNum,
+        'isClosed': 1,
+      });
+    }
   }
 }
