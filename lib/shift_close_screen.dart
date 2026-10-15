@@ -79,9 +79,27 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     List<ShiftSummary> summaries = [];
 
     for (var user in allUsers) {
-      // تصفية فواتير المستخدم فقط
-      final userInvoices = allUnclosedInvoices.where((inv) => inv.shiftId == currentShiftId && (inv.notes.contains(user.name) || inv.notes.contains(user.id))).toList();
-      final userReturns = allReturnInvoices.where((inv) => inv.shiftId == currentShiftId && (inv.notes.contains(user.name) || inv.notes.contains(user.id))).toList();
+      // تعديل شرط التصفية لمنع التداخل ومضاعفة المبيعات بين المدير والكاشيرية
+      final userInvoices = allUnclosedInvoices.where((inv) {
+        if (inv.shiftId != currentShiftId) return false;
+        if (user.name == 'المدير العام') {
+          // المدير يحتسب فواتيره فقط إذا لم تكن تخص كاشير آخر مسجل صراحة في الملاحظات
+          bool belongsToCashier = allUsers.any((u) => u.name != 'المدير العام' && inv.notes.contains(u.name));
+          return !belongsToCashier && (inv.notes.contains(user.name) || inv.notes.contains(user.id) || inv.notes.isEmpty);
+        } else {
+          return inv.notes.contains(user.name) || inv.notes.contains(user.id);
+        }
+      }).toList();
+
+      final userReturns = allReturnInvoices.where((inv) {
+        if (inv.shiftId != currentShiftId) return false;
+        if (user.name == 'المدير العام') {
+          bool belongsToCashier = allUsers.any((u) => u.name != 'المدير العام' && inv.notes.contains(u.name));
+          return !belongsToCashier && (inv.notes.contains(user.name) || inv.notes.contains(user.id) || inv.notes.isEmpty);
+        } else {
+          return inv.notes.contains(user.name) || inv.notes.contains(user.id);
+        }
+      }).toList();
 
       if (userInvoices.isNotEmpty || userReturns.isNotEmpty) {
         double cashSales = userInvoices.where((i) => i.paymentType == 'cash' || i.paymentType == 'نقدي').fold(0.0, (sum, i) => sum + i.totalAmount);
@@ -140,9 +158,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         orElse: () => ShiftSummary(
           shiftNumber: currentShiftId,
           userId: targetUserId,
-          userName: widget.currentUser.isAdmin 
-              ? (allUsers.firstWhere((u) => u.id == targetUserId, orElse: () => AppUser(id: targetUserId, name: 'مستخدم', pin: '', permissions: {})).name)
-              : widget.currentUser.name,
+          userName: widget.currentUser.isAdmin ? 'مستخدم' : widget.currentUser.name,
           salesCount: 0, cashSales: 0, creditSales: 0, totalSales: 0,
           returnsCount: 0, cashReturns: 0, creditReturns: 0, totalReturns: 0, netCashInDrawer: 0,
         ),
@@ -388,9 +404,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('تأكيد إغلاق وردية (${_currentSummary!.userName})'),
+        title: Text('تأكيد إغلاق الوردية رقم (${_currentSummary!.shiftNumber}) - (${_currentSummary!.userName})'),
         content: Text(
-          'سيتم إغلاق الفواتير والمهام الخاصة بهذا المستخدم فقط، وترحيل مبالغه للصندوق دون إغلاق فواتير بقية الكاشيرية أو المدير.\n\n'
+          'سيتم إغلاق الفواتير والمهام الخاصة بهذا المستخدم فقط، وترحيل مبالغه للصندوق.\n\n'
           'المبلغ الفعلي: ${actualCash.toStringAsFixed(2)}',
         ),
         actions: [
@@ -426,7 +442,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم إغلاق وردية وفواتير (${_currentSummary!.userName}) بنجاح!'), backgroundColor: Colors.green.shade700),
+        SnackBar(content: Text('تم إغلاق الوردية رقم (${_currentSummary!.shiftNumber}) وفواتير (${_currentSummary!.userName}) بنجاح!'), backgroundColor: Colors.green.shade700),
       );
       _loadShiftSummaries();
     }
