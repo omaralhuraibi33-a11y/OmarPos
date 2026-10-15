@@ -72,6 +72,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     setState(() => _isLoading = true);
 
     final int currentShiftId = await DBHelper.getCurrentShiftId();
+    // ربط رقم الوردية المعروض بالتسلسل الصحيح لعمليات الإغلاق المتتالية
+    final int dynamicShiftNumber = await DBHelper.getNextShiftNumber();
+    
     final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
     final allReturnInvoices = await DBHelper.getUnclosedReturnInvoices();
     final allUsers = await DBHelper.getAllUsers();
@@ -95,8 +98,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
           // الكاشير: نتأكد أن الفاتورة لا تخص كاشير آخر باسم أطول أو متداخل
           for (var other in allUsers) {
             if (other.id != user.id && other.name != 'المدير العام' && inv.notes.contains(other.name)) {
-              // إذا كانت الملاحظات تحتوي على اسم كاشير آخر، نتحقق أيهما المطابق الحقيقي أو نتجنب التداخل
-              // بما أن كاشير 1 جزء من كاشير 2 أو العكس، نفصل بالاسم الدقيق
               if (other.name.length > user.name.length) {
                 return false; // الفاتورة تخص الكاشير الآخر الأطول اسماً
               }
@@ -145,7 +146,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         double netCash = (cashSales - cashReturns);
 
         summaries.add(ShiftSummary(
-          shiftNumber: currentShiftId,
+          shiftNumber: dynamicShiftNumber, // استخدام الرقم المتسلسل الجديد ليتغير مع كل إغلاق
           userId: user.id,
           userName: user.name,
           salesCount: userInvoices.length,
@@ -173,7 +174,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       double totalNetCash = summaries.fold(0.0, (sum, s) => sum + s.netCashInDrawer);
 
       activeSummary = ShiftSummary(
-        shiftNumber: currentShiftId,
+        shiftNumber: dynamicShiftNumber,
         userId: 'all',
         userName: 'جميع المستخدمين',
         salesCount: totalSalesCount,
@@ -191,7 +192,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       final found = summaries.firstWhere(
         (s) => s.userId == targetUserId,
         orElse: () => ShiftSummary(
-          shiftNumber: currentShiftId,
+          shiftNumber: dynamicShiftNumber,
           userId: targetUserId,
           userName: widget.currentUser.isAdmin ? 'مستخدم' : widget.currentUser.name,
           salesCount: 0, cashSales: 0, creditSales: 0, totalSales: 0,
