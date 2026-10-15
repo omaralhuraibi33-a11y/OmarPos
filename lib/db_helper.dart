@@ -1831,7 +1831,10 @@ class DBHelper {
   }) async {
     final db = await database;
 
-    if (userName == 'جميع المستخدمين' || userName == 'all') {
+    bool isAll = (userName == 'جميع المستخدمين' || userName == 'all');
+
+    if (isAll) {
+      // إذا اختار المدير إغلاق الجميع: تُغلق كل الفواتير المفتوحة للوردية
       await db.update(
         'invoices',
         {'isClosed': 1},
@@ -1846,7 +1849,30 @@ class DBHelper {
           whereArgs: [shiftNumber],
         );
       } catch (_) {}
+
+      // إغلاق الوردية الحالية بالكامل وفتح وردية جديدة
+      await db.update(
+        'shifts',
+        {
+          'endTime': DateTime.now().toString(),
+          'totalSales': totalSales,
+          'status': 'closed',
+        },
+        where: 'id = ?',
+        whereArgs: [shiftNumber],
+      );
+
+      await db.insert('shifts', {
+        'startTime': DateTime.now().toString(),
+        'userId': '1',
+        'userName': 'المدير العام',
+        'totalSales': 0.0,
+        'totalExpenses': 0.0,
+        'transferredToMainVault': 0.0,
+        'status': 'open'
+      });
     } else {
+      // إغلاق كاشير واحد فقط: تُغلق فواتير هذا الكاشير المحددة فقط دون إغلاق الوردية الشاملة
       await db.update(
         'invoices',
         {'isClosed': 1},
@@ -1864,6 +1890,7 @@ class DBHelper {
       } catch (_) {}
     }
 
+    // تسجيل سند الإغلاق في الصندوق للمستخدم المغلق
     await db.insert('vouchers', {
       'id': 'shift_user_${DateTime.now().millisecondsSinceEpoch}',
       'voucherType': 'receipt',
@@ -1876,27 +1903,6 @@ class DBHelper {
       'notes': 'إغلاق وردية رقم $shiftNumber للمستخدم $userName - متوقع: $expectedCash - فعلي: $actualCash - فارق: $difference',
       'shiftId': shiftNumber,
       'isClosed': 1,
-    });
-
-    await db.update(
-      'shifts',
-      {
-        'endTime': DateTime.now().toString(),
-        'totalSales': totalSales,
-        'status': 'closed',
-      },
-      where: 'id = ?',
-      whereArgs: [shiftNumber],
-    );
-
-    await db.insert('shifts', {
-      'startTime': DateTime.now().toString(),
-      'userId': '1',
-      'userName': userName,
-      'totalSales': 0.0,
-      'totalExpenses': 0.0,
-      'transferredToMainVault': 0.0,
-      'status': 'open'
     });
   }
 }
