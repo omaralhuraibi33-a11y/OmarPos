@@ -72,9 +72,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     setState(() => _isLoading = true);
 
     final int currentShiftId = await DBHelper.getCurrentShiftId();
-    // ربط رقم الإغلاق بالتسلسل المتصاعد مع كل عملية إغلاق سواء لفرد أو للجميع
-    final int dynamicShiftNumber = await DBHelper.getNextShiftNumber();
-    
     final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
     final allReturnInvoices = await DBHelper.getUnclosedReturnInvoices();
     final allUsers = await DBHelper.getAllUsers();
@@ -82,24 +79,30 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     List<ShiftSummary> summaries = [];
 
     for (var user in allUsers) {
-      // تصفية دقيقة وحصرية تمنع تداخل الكاشيرية وتعزل المدير تماماً (نفس الكود الأصلي الصحيح تماماً)
+      // تصفية دقيقة وحصرية تمنع تداخل الكاشيرية (مثل كاشير 1 و كاشير 2) وتعزل المدير تماماً
       final userInvoices = allUnclosedInvoices.where((inv) {
         if (inv.shiftId != currentShiftId) return false;
 
+        // التحقق الأساسي من وجود اسم المستخدم أو معرفه في ملاحظات الفاتورة
         bool hasName = inv.notes.contains(user.name) || inv.notes.contains(user.id);
         if (!hasName) return false;
 
         if (user.name == 'المدير العام') {
+          // المدير لا يشمل فواتير الكاشيرية الآخرين
           bool belongsToCashier = allUsers.any((u) => u.name != 'المدير العام' && inv.notes.contains(u.name));
           return !belongsToCashier;
         } else {
+          // الكاشير: نتأكد أن الفاتورة لا تخص كاشير آخر باسم أطول أو متداخل
           for (var other in allUsers) {
             if (other.id != user.id && other.name != 'المدير العام' && inv.notes.contains(other.name)) {
+              // إذا كانت الملاحظات تحتوي على اسم كاشير آخر، نتحقق أيهما المطابق الحقيقي أو نتجنب التداخل
+              // بما أن كاشير 1 جزء من كاشير 2 أو العكس، نفصل بالاسم الدقيق
               if (other.name.length > user.name.length) {
-                return false;
+                return false; // الفاتورة تخص الكاشير الآخر الأطول اسماً
               }
             }
           }
+          // التحقق الإضافي المباشر: إذا كان اسم المستخدم هو "كاشير 1"، نتأكد أن الملاحظات لا تحتوي على "كاشير 2"
           if (user.name == 'كاشير 1' && inv.notes.contains('كاشير 2')) {
             return false;
           }
@@ -142,7 +145,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         double netCash = (cashSales - cashReturns);
 
         summaries.add(ShiftSummary(
-          shiftNumber: dynamicShiftNumber, // الرقم يتحدث ديناميكياً مع كل إغلاق
+          shiftNumber: currentShiftId,
           userId: user.id,
           userName: user.name,
           salesCount: userInvoices.length,
@@ -170,7 +173,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       double totalNetCash = summaries.fold(0.0, (sum, s) => sum + s.netCashInDrawer);
 
       activeSummary = ShiftSummary(
-        shiftNumber: dynamicShiftNumber,
+        shiftNumber: currentShiftId,
         userId: 'all',
         userName: 'جميع المستخدمين',
         salesCount: totalSalesCount,
@@ -188,7 +191,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       final found = summaries.firstWhere(
         (s) => s.userId == targetUserId,
         orElse: () => ShiftSummary(
-          shiftNumber: dynamicShiftNumber,
+          shiftNumber: currentShiftId,
           userId: targetUserId,
           userName: widget.currentUser.isAdmin ? 'مستخدم' : widget.currentUser.name,
           salesCount: 0, cashSales: 0, creditSales: 0, totalSales: 0,
