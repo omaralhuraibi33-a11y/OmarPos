@@ -235,7 +235,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
       if (reportPrinters.isEmpty) return;
 
-      final storeName = await DBHelper.getSetting('store_name') ?? 'مذاق سبأ';
       final ScreenshotController screenshotController = ScreenshotController();
       final profile = await CapabilityProfile.load();
 
@@ -268,8 +267,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(storeName, style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
-                  SizedBox(height: 4 * fontScale),
+                  // تم حذف اسم المحل هنا تماماً بناءً على طلبك
                   Text('*** تقرير إغلاق الصندوق ومحضر رقم ***', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   SizedBox(height: 6 * fontScale),
                   Row(
@@ -460,7 +458,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
     await _printShiftReportDirect(actualCash, _currentSummary!.userName);
 
-    // استدعاء دالة الإغلاق في قاعدة البيانات والتي ستعطي هذا الإغلاق رقماً تتابعياً مستقلًا وتحدث العداد
     await DBHelper.closeShiftForSpecificUser(
       shiftNumber: _currentSummary!.shiftNumber,
       userName: _currentSummary!.userName,
