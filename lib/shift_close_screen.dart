@@ -56,6 +56,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   List<ShiftSummary> _allUsersSummaries = [];
   ShiftSummary? _currentSummary;
   
+  // رقم الإغلاق القادم المعروض في الواجهة
+  int _nextClosureNum = 1;
+  
   // فلتر المدير: 'all' لجميع المستخدمين أو الـ userId الخاص بالمستخدم المحدد
   String _selectedUserFilter = 'all'; 
 
@@ -71,7 +74,10 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
   Future<void> _loadShiftSummaries() async {
     setState(() => _isLoading = true);
 
-    final int currentShiftId = await DBHelper.getCurrentShiftId();
+    // جلب رقم الإغلاق التتابعي القادم من قاعدة البيانات
+    _nextClosureNum = await DBHelper.getNextClosureNumber();
+    
+    // جلب جميع الفواتير والمرتجعات غير المغلقة مباشرة
     final allUnclosedInvoices = await DBHelper.getUnclosedInvoices();
     final allReturnInvoices = await DBHelper.getUnclosedReturnInvoices();
     final allUsers = await DBHelper.getAllUsers();
@@ -79,30 +85,22 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     List<ShiftSummary> summaries = [];
 
     for (var user in allUsers) {
-      // تصفية دقيقة وحصرية تمنع تداخل الكاشيرية (مثل كاشير 1 و كاشير 2) وتعزل المدير تماماً
+      // تصفية الفواتير المفتوحة الخاصة بالمستخدم بناءً على ملاحظاته أو اسمه
       final userInvoices = allUnclosedInvoices.where((inv) {
-        if (inv.shiftId != currentShiftId) return false;
-
-        // التحقق الأساسي من وجود اسم المستخدم أو معرفه في ملاحظات الفاتورة
         bool hasName = inv.notes.contains(user.name) || inv.notes.contains(user.id);
         if (!hasName) return false;
 
         if (user.name == 'المدير العام') {
-          // المدير لا يشمل فواتير الكاشيرية الآخرين
           bool belongsToCashier = allUsers.any((u) => u.name != 'المدير العام' && inv.notes.contains(u.name));
           return !belongsToCashier;
         } else {
-          // الكاشير: نتأكد أن الفاتورة لا تخص كاشير آخر باسم أطول أو متداخل
           for (var other in allUsers) {
             if (other.id != user.id && other.name != 'المدير العام' && inv.notes.contains(other.name)) {
-              // إذا كانت الملاحظات تحتوي على اسم كاشير آخر، نتحقق أيهما المطابق الحقيقي أو نتجنب التداخل
-              // بما أن كاشير 1 جزء من كاشير 2 أو العكس، نفصل بالاسم الدقيق
               if (other.name.length > user.name.length) {
-                return false; // الفاتورة تخص الكاشير الآخر الأطول اسماً
+                return false;
               }
             }
           }
-          // التحقق الإضافي المباشر: إذا كان اسم المستخدم هو "كاشير 1"، نتأكد أن الملاحظات لا تحتوي على "كاشير 2"
           if (user.name == 'كاشير 1' && inv.notes.contains('كاشير 2')) {
             return false;
           }
@@ -112,8 +110,6 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       }).toList();
 
       final userReturns = allReturnInvoices.where((inv) {
-        if (inv.shiftId != currentShiftId) return false;
-
         bool hasName = inv.notes.contains(user.name) || inv.notes.contains(user.id);
         if (!hasName) return false;
 
@@ -145,7 +141,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
         double netCash = (cashSales - cashReturns);
 
         summaries.add(ShiftSummary(
-          shiftNumber: currentShiftId,
+          shiftNumber: _nextClosureNum,
           userId: user.id,
           userName: user.name,
           salesCount: userInvoices.length,
@@ -173,7 +169,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       double totalNetCash = summaries.fold(0.0, (sum, s) => sum + s.netCashInDrawer);
 
       activeSummary = ShiftSummary(
-        shiftNumber: currentShiftId,
+        shiftNumber: _nextClosureNum,
         userId: 'all',
         userName: 'جميع المستخدمين',
         salesCount: totalSalesCount,
@@ -191,7 +187,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       final found = summaries.firstWhere(
         (s) => s.userId == targetUserId,
         orElse: () => ShiftSummary(
-          shiftNumber: currentShiftId,
+          shiftNumber: _nextClosureNum,
           userId: targetUserId,
           userName: widget.currentUser.isAdmin ? 'مستخدم' : widget.currentUser.name,
           salesCount: 0, cashSales: 0, creditSales: 0, totalSales: 0,
@@ -274,12 +270,12 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                 children: [
                   Text(storeName, style: TextStyle(fontSize: 16 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   SizedBox(height: 4 * fontScale),
-                  Text('*** تقرير إغلاق الوردية والصندوق ***', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text('*** تقرير إغلاق الصندوق ومحضر رقم ***', style: TextStyle(fontSize: 13 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   SizedBox(height: 6 * fontScale),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('رقم الوردية: #${_currentSummary!.shiftNumber}', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text('رقم المحضر: #${_currentSummary!.shiftNumber}', style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                       Text('التاريخ: $formattedDateTime', style: TextStyle(fontSize: 10 * fontScale, color: Colors.black)),
                     ],
                   ),
@@ -373,7 +369,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                     ],
                   ),
                   SizedBox(height: 6 * fontScale),
-                  Text('تم إغلاق الوردية والصندوق بنجاح', textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text('تم إغلاق الصندوق بنجاح', textAlign: TextAlign.center, style: TextStyle(fontSize: 12 * fontScale, fontWeight: FontWeight.bold, color: Colors.black)),
                   SizedBox(height: 10 * fontScale),
                 ],
               ),
@@ -439,9 +435,9 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('تأكيد إغلاق الوردية رقم (${_currentSummary!.shiftNumber}) - (${_currentSummary!.userName})'),
+        title: Text('تأكيد إغلاق الصندوق برقم محضر (${_currentSummary!.shiftNumber}) - (${_currentSummary!.userName})'),
         content: Text(
-          'سيتم إغلاق الفواتير والمهام الخاصة بهذا المستخدم فقط، وترحيل مبالغه للصندوق.\n\n'
+          'سيتم إغلاق الفواتير الخاصة بهذا المستخدم وترحيل مبالغه للصندوق.\n\n'
           'المبلغ الفعلي: ${actualCash.toStringAsFixed(2)}',
         ),
         actions: [
@@ -464,7 +460,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
     await _printShiftReportDirect(actualCash, _currentSummary!.userName);
 
-    // إغلاق فواتير المستخدم المحدد فقط دون التأثير على بقية الكاشيرية
+    // استدعاء دالة الإغلاق في قاعدة البيانات والتي ستعطي هذا الإغلاق رقماً تتابعياً مستقلًا وتحدث العداد
     await DBHelper.closeShiftForSpecificUser(
       shiftNumber: _currentSummary!.shiftNumber,
       userName: _currentSummary!.userName,
@@ -477,7 +473,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم إغلاق الوردية رقم (${_currentSummary!.shiftNumber}) وفواتير (${_currentSummary!.userName}) بنجاح!'), backgroundColor: Colors.green.shade700),
+        SnackBar(content: Text('تم إغلاق الصندوق بنجاح برقم محضر (${_currentSummary!.shiftNumber}) وفواتير (${_currentSummary!.userName})!'), backgroundColor: Colors.green.shade700),
       );
       _loadShiftSummaries();
     }
@@ -506,12 +502,12 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _currentSummary == null
-              ? const Center(child: Text('لا توجد بيانات للوردية'))
+              ? const Center(child: Text('لا توجد بيانات للإغلاق'))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      // كارت عرض رقم الوردية الحالية
+                      // كارت عرض رقم المحضر / الإغلاق التتابعي الحالي
                       Card(
                         color: Colors.blue.shade50,
                         elevation: 2,
@@ -524,7 +520,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                               const Icon(Icons.confirmation_number, color: Colors.blueAccent),
                               const SizedBox(width: 8),
                               Text(
-                                'رقم الوردية الحالية: #${_currentSummary?.shiftNumber ?? 1}',
+                                'رقم محضر الإغلاق القادم: #${_currentSummary?.shiftNumber ?? 1}',
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueAccent),
                               ),
                             ],
@@ -653,7 +649,7 @@ class _ShiftCloseScreenState extends State<ShiftCloseScreen> {
                           ),
                           icon: const Icon(Icons.lock),
                           label: Text(
-                            'إغلاق وردية وفواتير (${_currentSummary!.userName})',
+                            'إغلاق وفواتير (${_currentSummary!.userName})',
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                           onPressed: _confirmCloseShift,
